@@ -1,0 +1,5 @@
+all:
+  hosts:
+    cinema_pi:
+      ansible_host: YOUR_PI_HOST_OR_IP
+      ansible_user: YOUR_SSH_USER

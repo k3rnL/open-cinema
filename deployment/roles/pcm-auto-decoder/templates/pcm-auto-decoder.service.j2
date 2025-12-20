@@ -1,0 +1,13 @@
+[Unit]
+Description=Home Cinema Decoder
+After=network.target sound.target
+
+[Service]
+Type=simple
+ExecStart={{ pcm_auto_decoder.install_path }} --config {{ pcm_auto_decoder.config_path }}
+Restart=on-failure
+RestartSec=2
+WorkingDirectory={{ project_root }}
+
+[Install]
+WantedBy=multi-user.target

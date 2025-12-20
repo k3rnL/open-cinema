@@ -1,0 +1,16 @@
+project_root: "/opt/home-cinema"
+
+pcm_auto_decoder:
+  repo: "k3rnl/pcm-auto-decoder"
+  version: "v0.1.3"
+  target: "aarch64-unknown-linux-gnu"
+  bin_name: "pcm-auto-decoder"
+  install_path: "/usr/local/bin/pcm-auto-decoder"
+
+  # Release artifact naming must match your workflow output
+  tarball: "{{ pcm_auto_decoder.bin_name }}-{{ pcm_auto_decoder.version }}-{{ pcm_auto_decoder.target }}.tar.gz"
+
+  # For reproducibility: paste sha256 of the tarball from the release
+  sha256: "1bb42509b665aaa36e3c624f8ae80db0607cce2d44f5ec9af6d353f14307d541"
+
+  config_path: "{{ project_root }}/pcm-auto-decoder.yaml"

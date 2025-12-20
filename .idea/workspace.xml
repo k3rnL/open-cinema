@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="a3b200e8-4072-4e85-8278-2190548e1b44" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/.devcontainer/Dockerfile" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.devcontainer/README.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.devcontainer/camilladsp/default.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.devcontainer/devcontainer.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.devcontainer/entrypoint.sh" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/copilot.data.migration.agent.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/copilot.data.migration.edit.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/open-cinema.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/CHANGELOG.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/MANIFEST.in" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/VERSION" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/admin.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/apps.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/migrations/0001_initial.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/migrations/0002_audiodevice_delete_movie.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/migrations/0003_audiodevice_kind.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/migrations/0004_knownaudiodevice_pipeline_filter.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/migrations/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/models/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/models/audio_device.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/models/camilladsp_filter.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/models/camilladsp_pipeline.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/models/known_audio_device.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/tasks/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/tasks/audio_device_discovery.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/tasks/pulseaudio_discovery.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/tests.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/urls.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/views/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/views/audio_devices.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/views/camilladsp_pipelines.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/views/camilladsp_status.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/views/device_discovery.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api/views/version.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api_tests.http" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cliff.toml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/core/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/core/audio/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/core/audio/audio_backends.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/core/audio/audio_device.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/core/audio/sample_format_enum.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/core/camilladsp/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/core/camilladsp/client.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/core/camilladsp/config_builder.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/core/camilladsp/manager.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/README.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/ansible.cfg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/group_vars/all.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/inventories/example.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/inventories/single-env.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/playbooks/pcm-auto-decoder/main.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/common/tasks/main.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/pcm-auto-decoder/handlers/main.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/pcm-auto-decoder/tasks/main.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/pcm-auto-decoder/templates/pcm-auto-decoder.service.j2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/pcm-auto-decoder/templates/pcm-auto-decoder.yml.j2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/manage.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/opencinema/asgi.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/opencinema/settings.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/opencinema/urls.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/opencinema/wsgi.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/plugin/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/plugin/pulseaudio/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/plugin/pulseaudio/audio/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/plugin/pulseaudio/audio/backend.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/requirements-dev.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/version.py" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="59" />
+    <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Dockerfile" />
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="HighlightingSettingsPerFile">
+    <setting file="file://$PROJECT_DIR$/.venv/lib/python3.13/site-packages/django/db/models/fields/__init__.py" root0="SKIP_INSPECTION" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 6
+}</component>
+  <component name="ProjectId" id="36lVwF4LWoB9SNgnU67Fcy7vDZ7" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "HTTP Request.api_tests | ======================#1.executor": "Run",
+    "HTTP Request.api_tests | ======================#2.executor": "Run",
+    "HTTP Request.api_tests | ======================#4.executor": "Run",
+    "HTTP Request.api_tests | Discover currently connected devices (live hardware query).executor": "Run",
+    "HTTP Request.api_tests | Get only capture devices.executor": "Run",
+    "HTTP Request.api_tests | Get only playback devices.executor": "Run",
+    "HTTP Request.api_tests | Step 2: Get known devices from database.executor": "Run",
+    "HTTP Request.api_tests | Step 3: Create a pipeline with appropriate input/output devices.executor": "Run",
+    "HTTP Request.api_tests | Step 5: Check status.executor": "Run",
+    "HTTP Request.api_tests | Step 6: View the generated config.executor": "Run",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "OrchideMappingSettingsSimpleMapping.checked": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "dart.analysis.tool.window.visible": "false",
+    "git-widget-placeholder": "master",
+    "kotlin-language-version-configured": "true",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "preferences.pluginManager",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
+  <component name="RdControllerToolWindowsLayoutState" isNewUi="true">
+    <layout>
+      <window_info id="Bookmarks" side_tool="true" />
+      <window_info id="Merge Requests" />
+      <window_info id="AI Playground" side_tool="true" />
+      <window_info id="Backup and Sync History" />
+      <window_info id="Pull Requests" />
+      <window_info id="Learn" show_stripe_button="false" />
+      <window_info content_ui="combo" id="Project" order="0" weight="0.18916155" />
+      <window_info active="true" id="Commit" order="1" visible="true" weight="0.18916155" />
+      <window_info id="Structure" order="2" side_tool="true" weight="0.25" />
+      <window_info anchor="bottom" id="Database Changes" />
+      <window_info anchor="bottom" id="TypeScript" />
+      <window_info anchor="bottom" id="Profiler" />
+      <window_info anchor="bottom" id="TODO" />
+      <window_info anchor="bottom" id="File Transfer" />
+      <window_info anchor="bottom" id="HfCacheToolWindow" />
+      <window_info anchor="bottom" id="PythonProcessOutput" />
+      <window_info anchor="bottom" id="Version Control" order="0" />
+      <window_info anchor="bottom" id="Problems" order="1" />
+      <window_info anchor="bottom" id="Problems View" order="2" />
+      <window_info anchor="bottom" id="Terminal" order="3" weight="0.32999998" />
+      <window_info anchor="bottom" id="Services" order="4" visible="true" weight="0.32999998" />
+      <window_info anchor="bottom" id="Python Packages" order="5" weight="0.33033574" />
+      <window_info anchor="bottom" id="Python Console" order="6" weight="0.1" />
+      <window_info anchor="bottom" id="Find" order="7" weight="0.32999998" />
+      <window_info anchor="right" id="PR AI Assistant" />
+      <window_info anchor="right" id="Endpoints" />
+      <window_info anchor="right" id="Coverage" side_tool="true" />
+      <window_info anchor="right" id="SciView" />
+      <window_info anchor="right" id="Jupyter Variables" side_tool="true" />
+      <window_info anchor="right" content_ui="combo" id="Notifications" order="0" weight="0.25" />
+      <window_info active="true" anchor="right" id="AIAssistant" order="1" visible="true" weight="0.2807771" />
+      <window_info anchor="right" id="Database" order="2" weight="0.25" />
+      <window_info anchor="right" id="Gradle" order="3" weight="0.25" />
+      <window_info anchor="right" id="Maven" order="4" weight="0.25" />
+      <window_info anchor="right" id="Plots" order="5" weight="0.1" />
+    </layout>
+  </component>
+  <component name="RunDashboard">
+    <option name="configurationStatuses">
+      <map>
+        <entry key="HttpClient.HttpRequestRunConfigurationType">
+          <value>
+            <map>
+              <entry key="api_tests | ======================#4" value="STOPPED" />
+              <entry key="api_tests | Step 2: Get known devices from database" value="STOPPED" />
+              <entry key="api_tests | Step 3: Create a pipeline with appropriate input/output devices" value="STOPPED" />
+              <entry key="api_tests | Step 5: Check status" value="STOPPED" />
+              <entry key="api_tests | Step 6: View the generated config" value="STOPPED" />
+            </map>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="RunManager" selected="HTTP Request.api_tests | Step 6: View the generated config">
+    <configuration name="api_tests | Step 2: Get known devices from database" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/api_tests.http" executionIdentifier="Step 2: Get known devices from database" index="18" runType="Run single request">
+      <method v="2" />
+    </configuration>
+    <configuration name="api_tests | Step 3: Create a pipeline with appropriate input/output devices" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/api_tests.http" executionIdentifier="Step 3: Create a pipeline with appropriate input/output devices" index="20" runType="Run single request">
+      <method v="2" />
+    </configuration>
+    <configuration name="api_tests | Step 5: Check status" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/api_tests.http" executionIdentifier="Step 5: Check status" index="22" runType="Run single request">
+      <method v="2" />
+    </configuration>
+    <configuration name="api_tests | Step 6: View the generated config" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/api_tests.http" executionIdentifier="Step 6: View the generated config" index="23" runType="Run single request">
+      <method v="2" />
+    </configuration>
+    <configuration name="api_tests | ======================#4" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/api_tests.http" executionIdentifier="======================#4" index="17" runType="Run single request">
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="HTTP Request.api_tests | Step 6: View the generated config" />
+        <item itemvalue="HTTP Request.api_tests | Step 5: Check status" />
+        <item itemvalue="HTTP Request.api_tests | Step 3: Create a pipeline with appropriate input/output devices" />
+        <item itemvalue="HTTP Request.api_tests | ======================#4" />
+        <item itemvalue="HTTP Request.api_tests | Step 2: Get known devices from database" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-d6986cc7102b-c7e53b3be11b-JavaScript-PY-253.28294.336" />
+        <option value="bundled-python-sdk-0978a7220b69-9867c7d4c0a4-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-253.28294.336" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="StructureViewState">
+    <option name="selectedTab" value="Logical" />
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="a3b200e8-4072-4e85-8278-2190548e1b44" name="Changes" comment="" />
+      <created>1765581382110</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1765581382110</updated>
+      <workItem from="1765581383134" duration="2181000" />
+      <workItem from="1765585296378" duration="29000" />
+      <workItem from="1765585337768" duration="5406000" />
+      <workItem from="1765636436017" duration="5068000" />
+      <workItem from="1765824692616" duration="14301000" />
+      <workItem from="1766015712826" duration="398000" />
+      <workItem from="1766016869719" duration="1291000" />
+      <workItem from="1766096945143" duration="26546000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
+  </component>
+  <component name="github-copilot-workspace">
+    <instructionFileLocations>
+      <option value=".github/instructions" />
+    </instructionFileLocations>
+    <promptFileLocations>
+      <option value=".github/prompts" />
+    </promptFileLocations>
+  </component>
+</project>

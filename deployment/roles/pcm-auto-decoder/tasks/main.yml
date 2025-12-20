@@ -1,0 +1,52 @@
+- name: Install runtime deps for pcm-auto-decoder
+  ansible.builtin.apt:
+    update_cache: true
+    name:
+      - libpulse0
+      - libavutil
+      - libavformat58
+      - libavdevice58
+      - libavfilter7
+    state: present
+
+- name: Download decoder tarball from GitHub release (pinned + checksum)
+  ansible.builtin.get_url:
+    url: "https://github.com/{{ pcm_auto_decoder.repo }}/releases/download/{{ pcm_auto_decoder.version }}/{{ pcm_auto_decoder.tarball }}"
+    dest: "/tmp/{{ pcm_auto_decoder.tarball }}"
+    mode: "0644"
+    checksum: "sha256:{{ .sha256 }}"
+
+- name: Extract decoder
+  ansible.builtin.unarchive:
+    src: "/tmp/{{ pcm_auto_decoder.tarball }}"
+    dest: "/tmp/pcm-auto-decoder_extract"
+    remote_src: true
+
+- name: Install decoder binary
+  ansible.builtin.copy:
+    src: "/tmp/pcm-auto-decoder_extract/{{ pcm_auto_decoder.bin_name }}"
+    dest: "{{ pcm_auto_decoder.install_path }}"
+    remote_src: true
+    mode: "0755"
+  notify: Restart pcm-auto-decoder
+
+- name: Install pcm-auto-decoder config
+  ansible.builtin.template:
+    src: decoder.yaml.j2
+    dest: "{{ pcm_auto_decoder.config_path }}"
+    mode: "0644"
+  notify: Restart pcm-auto-decoder
+
+- name: Install systemd service
+  ansible.builtin.template:
+    src: pcm-auto-decoder.service.j2
+    dest: "/etc/systemd/system/{{ pcm_auto_decoder.bin_name }}.service"
+    mode: "0644"
+  notify: Restart decoder
+
+- name: Enable and start pcm-auto-decoder
+  ansible.builtin.systemd:
+    name: "{{ pcm_auto_decoder.bin_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true

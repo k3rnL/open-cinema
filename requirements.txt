@@ -1,0 +1,13 @@
+# Open Cinema Dependencies
+
+# Core framework
+Django==6.0
+
+# Audio backends
+pulsectl==24.12.0
+
+# CamillaDSP client
+git+https://github.com/HEnquist/pycamilladsp.git@v2.0.3
+
+# Configuration
+PyYAML>=6.0

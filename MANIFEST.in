@@ -1,0 +1,20 @@
+include README.md
+include LICENSE
+include VERSION
+include CHANGELOG.md
+include requirements.txt
+include pyproject.toml
+
+recursive-include api *.py
+recursive-include core *.py
+recursive-include opencinema *.py
+recursive-include plugin *.py
+
+exclude .devcontainer
+exclude .github
+exclude .ansible
+exclude .venv
+exclude .venv2
+exclude deployment
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]

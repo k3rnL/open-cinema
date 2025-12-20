@@ -1,0 +1,66 @@
+# Minimal CamillaDSP configuration for devcontainer
+# Upmixes 2-channel input to 6-channel output
+
+devices:
+  samplerate: 48000
+  chunksize: 1024
+
+  capture:
+    type: "Pulse"
+    channels: 2
+    device: "fifo_input"
+    format: "S16LE"
+
+  playback:
+    type: "Pulse"
+    channels: 6
+    device: "fifo_output"
+    format: "FLOAT32LE"
+
+# Mixer to upmix stereo input to 6 channels
+mixers:
+  stereo_to_6ch:
+    channels:
+      in: 2
+      out: 6
+    mapping:
+      - dest: 0  # Front Left
+        sources:
+          - channel: 0  # Input Left
+            gain: 0
+            inverted: false
+      - dest: 1  # Front Right
+        sources:
+          - channel: 1  # Input Right
+            gain: 0
+            inverted: false
+      - dest: 2  # Center (mix of L+R)
+        sources:
+          - channel: 0
+            gain: -6
+            inverted: false
+          - channel: 1
+            gain: -6
+            inverted: false
+      - dest: 3  # LFE (mix of L+R, attenuated)
+        sources:
+          - channel: 0
+            gain: -12
+            inverted: false
+          - channel: 1
+            gain: -12
+            inverted: false
+      - dest: 4  # Rear Left
+        sources:
+          - channel: 0
+            gain: -3
+            inverted: false
+      - dest: 5  # Rear Right
+        sources:
+          - channel: 1
+            gain: -3
+            inverted: false
+
+pipeline:
+  - type: Mixer
+    name: stereo_to_6ch

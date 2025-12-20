@@ -1,0 +1,131 @@
+### Open Cinema API Tests
+###
+### Use these requests to test the Open Cinema API
+### IntelliJ/PyCharm will show "Run" buttons next to each request
+###
+### Base URL
+@baseUrl = http://localhost:8000/api
+
+### ======================
+### Version & Info
+### ======================
+
+### Get API version
+GET {{baseUrl}}/version
+
+### ======================
+### Audio Devices
+### ======================
+###
+### Note: Use POST /devices/update to populate the KnownAudioDevice database
+### before creating pipelines. This discovers hardware and saves to DB.
+
+### Get all known audio devices
+GET {{baseUrl}}/devices
+
+### Get only active devices
+GET {{baseUrl}}/devices?active=true
+
+### Get only capture devices
+GET {{baseUrl}}/devices?device_type=CAPTURE
+
+### Get only playback devices
+GET {{baseUrl}}/devices?device_type=PLAYBACK
+
+### Discover currently connected devices (live hardware query)
+GET {{baseUrl}}/devices/discover
+
+### Update KnownAudioDevice table (populate database with discovered devices)
+POST {{baseUrl}}/devices/update
+
+
+### ======================
+### CamillaDSP Pipelines
+### ======================
+
+### List all pipelines
+GET {{baseUrl}}/camilladsp/pipelines
+
+### Create a new pipeline
+POST {{baseUrl}}/camilladsp/pipelines/create
+Content-Type: application/json
+
+{
+  "name": "My First Pipeline",
+  "description": "Test pipeline for development",
+  "input_device_id": 1,
+  "output_device_id": 2,
+  "enabled": true
+}
+
+### Get specific pipeline details (replace {id} with actual pipeline ID)
+GET {{baseUrl}}/camilladsp/pipelines/1
+
+### Update a pipeline
+PUT {{baseUrl}}/camilladsp/pipelines/1/update
+Content-Type: application/json
+
+{
+  "name": "Updated Pipeline Name",
+  "description": "Updated description",
+  "enabled": true
+}
+
+### Activate a pipeline
+POST {{baseUrl}}/camilladsp/pipelines/1/activate
+
+### Deactivate a pipeline
+POST {{baseUrl}}/camilladsp/pipelines/1/deactivate
+
+### Delete a pipeline (must be deactivated first)
+DELETE {{baseUrl}}/camilladsp/pipelines/1/delete
+
+
+### ======================
+### CamillaDSP Status & Control
+### ======================
+
+### Get CamillaDSP status and active pipeline
+GET {{baseUrl}}/camilladsp/status
+
+### Get current active CamillaDSP configuration (YAML)
+GET {{baseUrl}}/camilladsp/config
+
+### Reload CamillaDSP configuration
+POST {{baseUrl}}/camilladsp/reload
+
+
+### ======================
+### Example Workflow
+### ======================
+
+### Step 1: Update device database (discovers and populates KnownAudioDevice table)
+POST {{baseUrl}}/devices/update
+
+### Step 2: Get known devices from database
+GET {{baseUrl}}/devices
+
+### Step 2b: (Optional) Discover live devices without updating database
+GET {{baseUrl}}/devices/discover
+
+### Step 3: Create a pipeline with appropriate input/output devices
+# Note: Update device IDs based on your system
+POST {{baseUrl}}/camilladsp/pipelines/create
+Content-Type: application/json
+
+{
+  "name": "Living Room Audio",
+  "description": "PulseAudio input to DAC output",
+  "input_device_id": 1,
+  "output_device_id": 2,
+  "enabled": true
+}
+
+### Step 4: Activate the pipeline
+POST {{baseUrl}}/camilladsp/pipelines/1/activate
+
+### Step 5: Check status
+GET {{baseUrl}}/camilladsp/status
+
+### Step 6: View the generated config
+GET {{baseUrl}}/camilladsp/config

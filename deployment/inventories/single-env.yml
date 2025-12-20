@@ -1,0 +1,5 @@
+all:
+  hosts:
+    cinema_pi:
+      ansible_host: "{{ lookup('env','CINEMA_PI_HOST') }}"
+      ansible_user: "{{ lookup('env','CINEMA_PI_USER') | default('pi', true) }}"

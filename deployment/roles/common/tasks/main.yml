@@ -1,0 +1,14 @@
+- name: Update apt cache and install base packages
+  ansible.builtin.apt:
+    update_cache: true
+    name:
+      - ca-certificates
+      - curl
+      - tar
+    state: present
+
+- name: Ensure project root exists
+  ansible.builtin.file:
+    path: "{{ project_root }}"
+    state: directory
+    mode: "0755"
