@@ -1,0 +1,20 @@
+# PulseAudio daemon configuration
+# Managed by Ansible
+
+daemonize = no
+fail = yes
+high-priority = yes
+nice-level = -11
+realtime-scheduling = yes
+realtime-priority = 5
+
+resample-method = speex-float-5
+enable-remixing = yes
+enable-lfe-remixing = yes
+
+default-sample-format = s16le
+default-sample-rate = {{ pulseaudio.default_sample_rate }}
+alternate-sample-rate = 44100
+default-sample-channels = 2
+
+exit-idle-time = -1

@@ -1,0 +1,6 @@
+---
+- name: Restart open-cinema
+  ansible.builtin.systemd:
+    name: open-cinema
+    state: restarted
+    daemon_reload: true

@@ -1,0 +1,63 @@
+name: Build CamillaDSP ARM64
+
+# This workflow builds CamillaDSP with PulseAudio support for ARM64
+# Run manually or on release to create optimized binaries
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Build CamillaDSP for ARM64
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout CamillaDSP
+        uses: actions/checkout@v4
+        with:
+          repository: HEnquist/camilladsp
+          ref: v2.0.3
+
+      - name: Install cross-compilation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: aarch64-unknown-linux-gnu
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build CamillaDSP for ARM64 with PulseAudio
+        run: |
+          cross build --release --target aarch64-unknown-linux-gnu --features pulse-backend
+
+      - name: Create tarball
+        run: |
+          mkdir -p dist
+          cp target/aarch64-unknown-linux-gnu/release/camilladsp dist/
+          cd dist
+          tar -czf camilladsp-aarch64-pulse.tar.gz camilladsp
+          sha256sum camilladsp-aarch64-pulse.tar.gz > camilladsp-aarch64-pulse.tar.gz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: camilladsp-aarch64
+          path: |
+            dist/camilladsp-aarch64-pulse.tar.gz
+            dist/camilladsp-aarch64-pulse.tar.gz.sha256
+
+      - name: Upload to release (if triggered by release)
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/camilladsp-aarch64-pulse.tar.gz
+            dist/camilladsp-aarch64-pulse.tar.gz.sha256

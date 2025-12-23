@@ -4,82 +4,30 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="a3b200e8-4072-4e85-8278-2190548e1b44" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.devcontainer/Dockerfile" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.devcontainer/README.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.devcontainer/camilladsp/default.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.devcontainer/devcontainer.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.devcontainer/entrypoint.sh" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/copilot.data.migration.agent.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/copilot.data.migration.edit.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/open-cinema.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/CHANGELOG.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/MANIFEST.in" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/VERSION" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/admin.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/apps.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/migrations/0001_initial.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/migrations/0002_audiodevice_delete_movie.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/migrations/0003_audiodevice_kind.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/migrations/0004_knownaudiodevice_pipeline_filter.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/migrations/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/models/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/models/audio_device.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/models/camilladsp_filter.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/models/camilladsp_pipeline.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/models/known_audio_device.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/tasks/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/tasks/audio_device_discovery.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/tasks/pulseaudio_discovery.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/tests.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/urls.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/views/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/views/audio_devices.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/views/camilladsp_pipelines.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/views/camilladsp_status.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/views/device_discovery.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api/views/version.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api_tests.http" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cliff.toml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/core/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/core/audio/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/core/audio/audio_backends.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/core/audio/audio_device.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/core/audio/sample_format_enum.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/core/camilladsp/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/core/camilladsp/client.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/core/camilladsp/config_builder.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/core/camilladsp/manager.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/deployment/README.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/deployment/ansible.cfg" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/deployment/group_vars/all.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/deployment/inventories/example.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/deployment/inventories/single-env.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/deployment/playbooks/pcm-auto-decoder/main.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/deployment/roles/common/tasks/main.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/deployment/roles/pcm-auto-decoder/handlers/main.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/deployment/roles/pcm-auto-decoder/tasks/main.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/deployment/roles/pcm-auto-decoder/templates/pcm-auto-decoder.service.j2" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/deployment/roles/pcm-auto-decoder/templates/pcm-auto-decoder.yml.j2" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/manage.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/opencinema/asgi.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/opencinema/settings.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/opencinema/urls.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/opencinema/wsgi.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugin/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugin/pulseaudio/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugin/pulseaudio/audio/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugin/pulseaudio/audio/backend.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/requirements-dev.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/version.py" afterDir="false" />
+    <list default="true" id="a3b200e8-4072-4e85-8278-2190548e1b44" name="Changes" comment="ci: add GitHub Actions workflow for release process">
+      <change afterPath="$PROJECT_DIR$/.github/workflows/build-camilladsp-arm64.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/playbooks/site.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/camilladsp/handlers/main.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/camilladsp/tasks/main.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/camilladsp/templates/camilladsp.service.j2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/camilladsp/templates/default.yml.j2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/pulseaudio/handlers/main.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/pulseaudio/tasks/main.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/pulseaudio/templates/daemon.conf.j2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/pulseaudio/templates/pulseaudio.service.j2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/pulseaudio/templates/system.pa.j2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/python-app/handlers/main.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/python-app/tasks/main.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/python-app/templates/env.j2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/deployment/roles/python-app/templates/gunicorn.service.j2" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/apps.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/apps.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/urls.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api_tests.http" beforeDir="false" afterPath="$PROJECT_DIR$/api_tests.http" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/deployment/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/deployment/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/deployment/group_vars/all.yml" beforeDir="false" afterPath="$PROJECT_DIR$/deployment/group_vars/all.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/opencinema/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/opencinema/settings.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -99,8 +47,26 @@
     </option>
   </component>
   <component name="Git.Settings">
+    <option name="PUSH_TAGS">
+      <GitPushTagMode>
+        <option name="argument" value="--tags" />
+        <option name="title" value="All" />
+      </GitPushTagMode>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "k3rnL"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/k3rnL/open-cinema.git&quot;,
+    &quot;accountId&quot;: &quot;46696ac2-7aa1-4a2f-8811-e48e7d38f817&quot;
+  }
+}</component>
   <component name="HighlightingSettingsPerFile">
     <setting file="file://$PROJECT_DIR$/.venv/lib/python3.13/site-packages/django/db/models/fields/__init__.py" root0="SKIP_INSPECTION" />
   </component>
@@ -112,36 +78,36 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "HTTP Request.api_tests | ======================#1.executor": "Run",
-    "HTTP Request.api_tests | ======================#2.executor": "Run",
-    "HTTP Request.api_tests | ======================#4.executor": "Run",
-    "HTTP Request.api_tests | Discover currently connected devices (live hardware query).executor": "Run",
-    "HTTP Request.api_tests | Get only capture devices.executor": "Run",
-    "HTTP Request.api_tests | Get only playback devices.executor": "Run",
-    "HTTP Request.api_tests | Step 2: Get known devices from database.executor": "Run",
-    "HTTP Request.api_tests | Step 3: Create a pipeline with appropriate input/output devices.executor": "Run",
-    "HTTP Request.api_tests | Step 5: Check status.executor": "Run",
-    "HTTP Request.api_tests | Step 6: View the generated config.executor": "Run",
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "OrchideMappingSettingsSimpleMapping.checked": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "dart.analysis.tool.window.visible": "false",
-    "git-widget-placeholder": "master",
-    "kotlin-language-version-configured": "true",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "preferences.pluginManager",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;HTTP Request.api_tests | ======================#1.executor&quot;: &quot;Run&quot;,
+    &quot;HTTP Request.api_tests | ======================#2.executor&quot;: &quot;Run&quot;,
+    &quot;HTTP Request.api_tests | ======================#4.executor&quot;: &quot;Run&quot;,
+    &quot;HTTP Request.api_tests | Discover currently connected devices (live hardware query).executor&quot;: &quot;Run&quot;,
+    &quot;HTTP Request.api_tests | Get only capture devices.executor&quot;: &quot;Run&quot;,
+    &quot;HTTP Request.api_tests | Get only playback devices.executor&quot;: &quot;Run&quot;,
+    &quot;HTTP Request.api_tests | Step 2: Get known devices from database.executor&quot;: &quot;Run&quot;,
+    &quot;HTTP Request.api_tests | Step 3: Create a pipeline with appropriate input/output devices.executor&quot;: &quot;Run&quot;,
+    &quot;HTTP Request.api_tests | Step 5: Check status.executor&quot;: &quot;Run&quot;,
+    &quot;HTTP Request.api_tests | Step 6: View the generated config.executor&quot;: &quot;Run&quot;,
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;OrchideMappingSettingsSimpleMapping.checked&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;dart.analysis.tool.window.visible&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RdControllerToolWindowsLayoutState" isNewUi="true">
     <layout>
       <window_info id="Bookmarks" side_tool="true" />
@@ -150,8 +116,8 @@
       <window_info id="Backup and Sync History" />
       <window_info id="Pull Requests" />
       <window_info id="Learn" show_stripe_button="false" />
-      <window_info content_ui="combo" id="Project" order="0" weight="0.18916155" />
-      <window_info active="true" id="Commit" order="1" visible="true" weight="0.18916155" />
+      <window_info active="true" content_ui="combo" id="Project" order="0" visible="true" weight="0.30588624" />
+      <window_info id="Commit" order="1" weight="0.17933308" />
       <window_info id="Structure" order="2" side_tool="true" weight="0.25" />
       <window_info anchor="bottom" id="Database Changes" />
       <window_info anchor="bottom" id="TypeScript" />
@@ -160,11 +126,11 @@
       <window_info anchor="bottom" id="File Transfer" />
       <window_info anchor="bottom" id="HfCacheToolWindow" />
       <window_info anchor="bottom" id="PythonProcessOutput" />
-      <window_info anchor="bottom" id="Version Control" order="0" />
+      <window_info active="true" anchor="bottom" id="Version Control" order="0" visible="true" weight="0.35983983" />
       <window_info anchor="bottom" id="Problems" order="1" />
       <window_info anchor="bottom" id="Problems View" order="2" />
       <window_info anchor="bottom" id="Terminal" order="3" weight="0.32999998" />
-      <window_info anchor="bottom" id="Services" order="4" visible="true" weight="0.32999998" />
+      <window_info anchor="bottom" id="Services" order="4" weight="0.32999998" />
       <window_info anchor="bottom" id="Python Packages" order="5" weight="0.33033574" />
       <window_info anchor="bottom" id="Python Console" order="6" weight="0.1" />
       <window_info anchor="bottom" id="Find" order="7" weight="0.32999998" />
@@ -174,29 +140,12 @@
       <window_info anchor="right" id="SciView" />
       <window_info anchor="right" id="Jupyter Variables" side_tool="true" />
       <window_info anchor="right" content_ui="combo" id="Notifications" order="0" weight="0.25" />
-      <window_info active="true" anchor="right" id="AIAssistant" order="1" visible="true" weight="0.2807771" />
+      <window_info anchor="right" id="AIAssistant" order="1" weight="0.4540344" />
       <window_info anchor="right" id="Database" order="2" weight="0.25" />
       <window_info anchor="right" id="Gradle" order="3" weight="0.25" />
       <window_info anchor="right" id="Maven" order="4" weight="0.25" />
       <window_info anchor="right" id="Plots" order="5" weight="0.1" />
     </layout>
-  </component>
-  <component name="RunDashboard">
-    <option name="configurationStatuses">
-      <map>
-        <entry key="HttpClient.HttpRequestRunConfigurationType">
-          <value>
-            <map>
-              <entry key="api_tests | ======================#4" value="STOPPED" />
-              <entry key="api_tests | Step 2: Get known devices from database" value="STOPPED" />
-              <entry key="api_tests | Step 3: Create a pipeline with appropriate input/output devices" value="STOPPED" />
-              <entry key="api_tests | Step 5: Check status" value="STOPPED" />
-              <entry key="api_tests | Step 6: View the generated config" value="STOPPED" />
-            </map>
-          </value>
-        </entry>
-      </map>
-    </option>
   </component>
   <component name="RunManager" selected="HTTP Request.api_tests | Step 6: View the generated config">
     <configuration name="api_tests | Step 2: Get known devices from database" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/api_tests.http" executionIdentifier="Step 2: Get known devices from database" index="18" runType="Run single request">
@@ -249,12 +198,45 @@
       <workItem from="1765824692616" duration="14301000" />
       <workItem from="1766015712826" duration="398000" />
       <workItem from="1766016869719" duration="1291000" />
-      <workItem from="1766096945143" duration="26546000" />
+      <workItem from="1766096945143" duration="33055000" />
     </task>
+    <task id="LOCAL-00001" summary="chore: initial commit">
+      <option name="closed" value="true" />
+      <created>1766267528798</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1766267528799</updated>
+    </task>
+    <task id="LOCAL-00002" summary="ci: add GitHub Actions workflow for release process">
+      <option name="closed" value="true" />
+      <created>1766267836825</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1766267836825</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="chore: initial commit" />
+    <MESSAGE value="ci: add GitHub Actions workflow for release process" />
+    <option name="LAST_COMMIT_MESSAGE" value="ci: add GitHub Actions workflow for release process" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />

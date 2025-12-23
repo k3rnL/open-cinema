@@ -14,6 +14,41 @@
 GET {{baseUrl}}/version
 
 ### ======================
+### Plugin: Counter (Example)
+### ======================
+
+### Get current counter value
+GET {{baseUrl}}/plugins/counter/
+
+### Increment counter
+POST {{baseUrl}}/plugins/counter/increment
+Content-Type: application/json
+
+{
+  "comment": "Test increment"
+}
+
+### Decrement counter
+POST {{baseUrl}}/plugins/counter/decrement
+Content-Type: application/json
+
+{
+  "comment": "Test decrement"
+}
+
+### Reset counter to 0
+POST {{baseUrl}}/plugins/counter/reset
+
+### Get counter history
+GET {{baseUrl}}/plugins/counter/history
+
+### Get counter history (limit 10)
+GET {{baseUrl}}/plugins/counter/history?limit=10
+
+### Clear counter history
+DELETE {{baseUrl}}/plugins/counter/history/clear
+
+### ======================
 ### Audio Devices
 ### ======================
 ###

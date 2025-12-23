@@ -1,0 +1,19 @@
+# CamillaDSP default configuration
+# Managed by Ansible
+# This is a minimal passthrough config - actual configs will be managed via API
+
+devices:
+  samplerate: {{ pulseaudio.default_sample_rate }}
+  chunksize: 1024
+
+  capture:
+    type: "Pulse"
+    channels: 2
+    device: "default"
+    format: "S16LE"
+
+  playback:
+    type: "Pulse"
+    channels: 2
+    device: "default"
+    format: "S16LE"

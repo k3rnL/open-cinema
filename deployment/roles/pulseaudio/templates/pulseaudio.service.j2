@@ -1,0 +1,20 @@
+[Unit]
+Description=PulseAudio System Daemon
+Documentation=man:pulseaudio(1)
+After=sound.target network.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/pulseaudio --system --disallow-exit --disallow-module-loading --daemonize=no --log-target=journal --realtime
+Restart=on-failure
+RestartSec=5
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/pulse /var/lib/pulse
+
+[Install]
+WantedBy=multi-user.target

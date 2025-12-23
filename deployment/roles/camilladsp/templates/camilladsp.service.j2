@@ -1,0 +1,18 @@
+[Unit]
+Description=CamillaDSP Audio Processor
+Documentation=https://github.com/HEnquist/camilladsp
+After=network.target sound.target pulseaudio.service
+Requires=pulseaudio.service
+
+[Service]
+Type=simple
+ExecStart={{ camilladsp.install_path }} -p {{ camilladsp.websocket_port }} -a {{ camilladsp.websocket_address }} {{ camilladsp.config_path }}
+Restart=always
+RestartSec=5
+User=root
+
+# Allow access to audio devices
+SupplementaryGroups=audio pulse-access
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,30 @@
+[Unit]
+Description=Open Cinema Django Application
+Documentation=https://github.com/{{ open_cinema.repo }}
+After=network.target camilladsp.service
+Requires=camilladsp.service
+
+[Service]
+Type=notify
+User={{ open_cinema.user }}
+Group={{ open_cinema.group }}
+WorkingDirectory={{ open_cinema.app_path }}
+EnvironmentFile={{ open_cinema.app_path }}/.env
+
+ExecStart={{ open_cinema.venv_path }}/bin/gunicorn \
+    --workers {{ open_cinema.gunicorn_workers }} \
+    --bind 0.0.0.0:{{ open_cinema.gunicorn_port }} \
+    --timeout 120 \
+    --access-logfile - \
+    --error-logfile - \
+    opencinema.wsgi:application
+
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

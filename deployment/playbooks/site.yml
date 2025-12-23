@@ -1,0 +1,23 @@
+---
+# Main playbook for deploying the complete Open Cinema stack
+
+- name: Deploy Open Cinema to Raspberry Pi
+  hosts: all
+  become: true
+
+  roles:
+    - role: common
+      tags: [common]
+
+    - role: pulseaudio
+      tags: [pulseaudio, audio]
+
+    - role: camilladsp
+      tags: [camilladsp, audio]
+
+    - role: python-app
+      tags: [python, app, opencinema]
+
+    - role: pcm-auto-decoder
+      tags: [decoder]
+      when: pcm_auto_decoder is defined

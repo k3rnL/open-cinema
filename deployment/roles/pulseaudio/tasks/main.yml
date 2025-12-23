@@ -1,0 +1,43 @@
+---
+- name: Install PulseAudio packages
+  ansible.builtin.apt:
+    update_cache: true
+    name:
+      - pulseaudio
+      - pulseaudio-utils
+      - libpulse-dev
+    state: present
+
+- name: Create PulseAudio system configuration directory
+  ansible.builtin.file:
+    path: /etc/pulse
+    state: directory
+    mode: '0755'
+
+- name: Configure PulseAudio daemon
+  ansible.builtin.template:
+    src: daemon.conf.j2
+    dest: /etc/pulse/daemon.conf
+    mode: '0644'
+  notify: Restart pulseaudio
+
+- name: Configure PulseAudio system
+  ansible.builtin.template:
+    src: system.pa.j2
+    dest: /etc/pulse/system.pa
+    mode: '0644'
+  notify: Restart pulseaudio
+
+- name: Install PulseAudio systemd service
+  ansible.builtin.template:
+    src: pulseaudio.service.j2
+    dest: /etc/systemd/system/pulseaudio.service
+    mode: '0644'
+  notify: Restart pulseaudio
+
+- name: Enable and start PulseAudio
+  ansible.builtin.systemd:
+    name: pulseaudio
+    enabled: true
+    state: started
+    daemon_reload: true

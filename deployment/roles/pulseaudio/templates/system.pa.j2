@@ -1,0 +1,24 @@
+#!/usr/bin/pulseaudio -nF
+# PulseAudio system-wide configuration
+# Managed by Ansible
+
+# Load necessary modules
+load-module module-device-restore
+load-module module-stream-restore
+load-module module-card-restore
+
+# Detect hardware devices
+load-module module-udev-detect
+load-module module-detect
+
+# Native protocol for client connections
+load-module module-native-protocol-unix auth-anonymous=1
+
+{% if pulseaudio.enable_pipes %}
+# Pipe sources and sinks for testing
+load-module module-pipe-source source_name=fifo_input file={{ pulseaudio.pipes.input.file }} rate={{ pulseaudio.pipes.input.rate }} format={{ pulseaudio.pipes.input.format }} channels={{ pulseaudio.pipes.input.channels }}
+load-module module-pipe-sink sink_name=fifo_output file={{ pulseaudio.pipes.output.file }} rate={{ pulseaudio.pipes.output.rate }} format={{ pulseaudio.pipes.output.format }} channels={{ pulseaudio.pipes.output.channels }}
+{% endif %}
+
+# CLI protocol
+load-module module-cli-protocol-unix

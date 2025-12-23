@@ -32,6 +32,7 @@ ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
     'api.apps.ApiConfig',
+    'plugin.counter',  # Example plugin with models
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',

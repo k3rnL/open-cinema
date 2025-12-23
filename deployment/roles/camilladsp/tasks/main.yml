@@ -1,0 +1,92 @@
+---
+- name: Install CamillaDSP build dependencies
+  ansible.builtin.apt:
+    update_cache: true
+    name:
+      - curl
+      - git
+      - build-essential
+      - pkg-config
+      - libasound2-dev
+      - libpulse-dev
+    state: present
+  when: camilladsp.build_from_source
+
+- name: Check if Rust is installed
+  ansible.builtin.command: rustc --version
+  register: rust_check
+  failed_when: false
+  changed_when: false
+  when: camilladsp.build_from_source
+
+- name: Install Rust for root user
+  ansible.builtin.shell: |
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+  args:
+    creates: /root/.cargo/bin/rustc
+  when:
+    - camilladsp.build_from_source
+    - rust_check.rc != 0
+
+- name: Clone CamillaDSP repository
+  ansible.builtin.git:
+    repo: "https://github.com/{{ camilladsp.repo }}.git"
+    dest: /tmp/camilladsp
+    version: "{{ camilladsp.version }}"
+    depth: 1
+    force: yes
+  when: camilladsp.build_from_source
+
+- name: Build CamillaDSP with PulseAudio support
+  ansible.builtin.shell: |
+    source /root/.cargo/env
+    cargo build --release --features {{ camilladsp.features }}
+  args:
+    chdir: /tmp/camilladsp
+    creates: /tmp/camilladsp/target/release/camilladsp
+  environment:
+    PATH: "/root/.cargo/bin:{{ ansible_env.PATH }}"
+  when: camilladsp.build_from_source
+  register: build_result
+
+- name: Install CamillaDSP binary
+  ansible.builtin.copy:
+    src: /tmp/camilladsp/target/release/camilladsp
+    dest: "{{ camilladsp.install_path }}"
+    remote_src: true
+    mode: '0755'
+  when: camilladsp.build_from_source
+  notify: Restart camilladsp
+
+- name: Clean up build directory
+  ansible.builtin.file:
+    path: /tmp/camilladsp
+    state: absent
+  when: camilladsp.build_from_source and build_result.changed
+
+- name: Create CamillaDSP config directory
+  ansible.builtin.file:
+    path: /etc/camilladsp
+    state: directory
+    mode: '0755'
+
+- name: Install default CamillaDSP configuration
+  ansible.builtin.template:
+    src: default.yml.j2
+    dest: "{{ camilladsp.config_path }}"
+    mode: '0644'
+  notify: Restart camilladsp
+
+- name: Install CamillaDSP systemd service
+  ansible.builtin.template:
+    src: camilladsp.service.j2
+    dest: /etc/systemd/system/camilladsp.service
+    mode: '0644'
+  notify: Restart camilladsp
+
+- name: Enable and start CamillaDSP
+  ansible.builtin.systemd:
+    name: camilladsp
+    enabled: true
+    state: started
+    daemon_reload: true

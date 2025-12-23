@@ -1,0 +1,103 @@
+---
+- name: Install Python and system dependencies
+  ansible.builtin.apt:
+    update_cache: true
+    name:
+      - python3
+      - python3-pip
+      - python3-venv
+      - python3-dev
+      - git
+      - libpulse-dev
+    state: present
+
+- name: Create application user
+  ansible.builtin.user:
+    name: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    system: true
+    home: "{{ open_cinema.app_path }}"
+    create_home: false
+    shell: /bin/bash
+
+- name: Create application directory
+  ansible.builtin.file:
+    path: "{{ open_cinema.app_path }}"
+    state: directory
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: '0755'
+
+- name: Clone Open Cinema repository
+  ansible.builtin.git:
+    repo: "https://github.com/{{ open_cinema.repo }}.git"
+    dest: "{{ open_cinema.app_path }}"
+    version: "v{{ open_cinema.version }}"
+    force: yes
+  become_user: "{{ open_cinema.user }}"
+
+- name: Create Python virtual environment
+  ansible.builtin.command:
+    cmd: python3 -m venv {{ open_cinema.venv_path }}
+    creates: "{{ open_cinema.venv_path }}/bin/python"
+  become_user: "{{ open_cinema.user }}"
+
+- name: Upgrade pip in virtual environment
+  ansible.builtin.pip:
+    name: pip
+    state: latest
+    virtualenv: "{{ open_cinema.venv_path }}"
+  become_user: "{{ open_cinema.user }}"
+
+- name: Install Python dependencies
+  ansible.builtin.pip:
+    requirements: "{{ open_cinema.app_path }}/requirements.txt"
+    virtualenv: "{{ open_cinema.venv_path }}"
+  become_user: "{{ open_cinema.user }}"
+  notify: Restart open-cinema
+
+- name: Install Gunicorn
+  ansible.builtin.pip:
+    name: gunicorn
+    virtualenv: "{{ open_cinema.venv_path }}"
+  become_user: "{{ open_cinema.user }}"
+
+- name: Create Django environment file
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ open_cinema.app_path }}/.env"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: '0600'
+  notify: Restart open-cinema
+
+- name: Run Django migrations
+  ansible.builtin.command:
+    cmd: "{{ open_cinema.venv_path }}/bin/python manage.py migrate --noinput"
+    chdir: "{{ open_cinema.app_path }}"
+  become_user: "{{ open_cinema.user }}"
+  environment:
+    DJANGO_SETTINGS_MODULE: "opencinema.settings"
+
+- name: Collect static files
+  ansible.builtin.command:
+    cmd: "{{ open_cinema.venv_path }}/bin/python manage.py collectstatic --noinput"
+    chdir: "{{ open_cinema.app_path }}"
+  become_user: "{{ open_cinema.user }}"
+  environment:
+    DJANGO_SETTINGS_MODULE: "opencinema.settings"
+  failed_when: false
+
+- name: Install Gunicorn systemd service
+  ansible.builtin.template:
+    src: gunicorn.service.j2
+    dest: /etc/systemd/system/open-cinema.service
+    mode: '0644'
+  notify: Restart open-cinema
+
+- name: Enable and start Open Cinema service
+  ansible.builtin.systemd:
+    name: open-cinema
+    enabled: true
+    state: started
+    daemon_reload: true
