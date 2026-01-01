@@ -1,0 +1,32 @@
+#!/usr/bin/pulseaudio -nF
+# PulseAudio user configuration for opencinema
+# Managed by Ansible
+
+# Load necessary modules
+load-module module-device-restore
+load-module module-stream-restore
+load-module module-card-restore
+
+# Detect hardware devices
+load-module module-udev-detect
+load-module module-detect
+
+# Native protocol for local connections
+load-module module-native-protocol-unix
+
+{% if pulseaudio.enable_pipes %}
+# Pipe sources and sinks for testing/CamillaDSP
+load-module module-pipe-source source_name=fifo_input file={{ pulseaudio.pipes.input.file }} rate={{ pulseaudio.pipes.input.rate }} format={{ pulseaudio.pipes.input.format }} channels={{ pulseaudio.pipes.input.channels }}
+load-module module-pipe-sink sink_name=fifo_output file={{ pulseaudio.pipes.output.file }} rate={{ pulseaudio.pipes.output.rate }} format={{ pulseaudio.pipes.output.format }} channels={{ pulseaudio.pipes.output.channels }}
+{% endif %}
+
+# CLI protocol for debugging
+load-module module-cli-protocol-unix
+
+# Automatically restore device volume/mute state
+load-module module-default-device-restore
+load-module module-rescue-streams
+load-module module-always-sink
+load-module module-intended-roles
+load-module module-suspend-on-idle
+load-module module-position-event-sounds

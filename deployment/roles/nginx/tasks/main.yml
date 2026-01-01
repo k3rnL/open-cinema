@@ -1,0 +1,47 @@
+---
+- name: Install nginx
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+    update_cache: true
+
+- name: Create web root directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+  loop:
+    - "{{ open_cinema_ui.admin.web_root }}"
+    - "{{ open_cinema_ui.user_ui.web_root }}"
+
+- name: Remove default nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Restart nginx
+
+- name: Install Open Cinema nginx site configuration
+  ansible.builtin.template:
+    src: open-cinema.conf.j2
+    dest: /etc/nginx/sites-available/open-cinema
+    mode: '0644'
+  notify: Restart nginx
+
+- name: Enable Open Cinema nginx site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/open-cinema
+    dest: /etc/nginx/sites-enabled/open-cinema
+    state: link
+  notify: Restart nginx
+
+- name: Test nginx configuration
+  ansible.builtin.command: nginx -t
+  changed_when: false
+
+- name: Enable and start nginx service
+  ansible.builtin.systemd:
+    name: nginx
+    enabled: true
+    state: started

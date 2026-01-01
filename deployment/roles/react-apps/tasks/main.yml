@@ -1,0 +1,107 @@
+---
+- name: Ensure web root directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+  loop:
+    - "{{ open_cinema_ui.admin.web_root }}"
+    - "{{ open_cinema_ui.user_ui.web_root }}"
+
+- name: Download open-cinema-admin build from GitHub release
+  ansible.builtin.get_url:
+    url: "https://github.com/{{ open_cinema_ui.repo }}/releases/download/{{ open_cinema_ui.version }}/{{ open_cinema_ui.admin.asset_name }}"
+    dest: "/tmp/{{ open_cinema_ui.admin.asset_name }}"
+    mode: '0644'
+    force: yes
+  register: admin_download
+
+- name: Download open-cinema-ui build from GitHub release
+  ansible.builtin.get_url:
+    url: "https://github.com/{{ open_cinema_ui.repo }}/releases/download/{{ open_cinema_ui.version }}/{{ open_cinema_ui.user_ui.asset_name }}"
+    dest: "/tmp/{{ open_cinema_ui.user_ui.asset_name }}"
+    mode: '0644'
+    force: yes
+  register: ui_download
+
+- name: Clear admin web root before extraction
+  ansible.builtin.file:
+    path: "{{ open_cinema_ui.admin.web_root }}"
+    state: absent
+  when: admin_download.changed
+
+- name: Recreate admin web root
+  ansible.builtin.file:
+    path: "{{ open_cinema_ui.admin.web_root }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+  when: admin_download.changed
+
+- name: Extract open-cinema-admin build
+  ansible.builtin.unarchive:
+    src: "/tmp/{{ open_cinema_ui.admin.asset_name }}"
+    dest: "{{ open_cinema_ui.admin.web_root }}"
+    remote_src: yes
+    owner: www-data
+    group: www-data
+  when: admin_download.changed
+  notify: Reload nginx
+
+- name: Clear UI web root before extraction
+  ansible.builtin.file:
+    path: "{{ open_cinema_ui.user_ui.web_root }}"
+    state: absent
+  when: ui_download.changed
+
+- name: Recreate UI web root
+  ansible.builtin.file:
+    path: "{{ open_cinema_ui.user_ui.web_root }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+  when: ui_download.changed
+
+- name: Extract open-cinema-ui build
+  ansible.builtin.unarchive:
+    src: "/tmp/{{ open_cinema_ui.user_ui.asset_name }}"
+    dest: "{{ open_cinema_ui.user_ui.web_root }}"
+    remote_src: yes
+    owner: www-data
+    group: www-data
+  when: ui_download.changed
+  notify: Reload nginx
+
+- name: Verify admin build (check index.html exists)
+  ansible.builtin.stat:
+    path: "{{ open_cinema_ui.admin.web_root }}/index.html"
+  register: admin_index
+  failed_when: not admin_index.stat.exists
+
+- name: Verify UI build (check index.html exists)
+  ansible.builtin.stat:
+    path: "{{ open_cinema_ui.user_ui.web_root }}/index.html"
+  register: ui_index
+  failed_when: not ui_index.stat.exists
+
+- name: Set proper permissions on web directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    owner: www-data
+    group: www-data
+    recurse: yes
+  loop:
+    - "{{ open_cinema_ui.admin.web_root }}"
+    - "{{ open_cinema_ui.user_ui.web_root }}"
+
+- name: Clean up downloaded tarballs
+  ansible.builtin.file:
+    path: "/tmp/{{ item }}"
+    state: absent
+  loop:
+    - "{{ open_cinema_ui.admin.asset_name }}"
+    - "{{ open_cinema_ui.user_ui.asset_name }}"
