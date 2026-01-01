@@ -8,34 +8,45 @@
       - libpulse-dev
     state: present
 
-- name: Create PulseAudio system configuration directory
+- name: Create PulseAudio user configuration directory
   ansible.builtin.file:
-    path: /etc/pulse
+    path: "/home/{{ open_cinema.user }}/.config/pulse"
     state: directory
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
     mode: '0755'
 
-- name: Configure PulseAudio daemon
+- name: Configure PulseAudio daemon for user
   ansible.builtin.template:
     src: daemon.conf.j2
-    dest: /etc/pulse/daemon.conf
+    dest: "/home/{{ open_cinema.user }}/.config/pulse/daemon.conf"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
     mode: '0644'
   notify: Restart pulseaudio
 
-- name: Configure PulseAudio system
+- name: Configure PulseAudio default.pa for user
   ansible.builtin.template:
-    src: system.pa.j2
-    dest: /etc/pulse/system.pa
+    src: default.pa.j2
+    dest: "/home/{{ open_cinema.user }}/.config/pulse/default.pa"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
     mode: '0644'
   notify: Restart pulseaudio
 
-- name: Install PulseAudio systemd service
+- name: Install PulseAudio systemd user service
   ansible.builtin.template:
     src: pulseaudio.service.j2
     dest: /etc/systemd/system/pulseaudio.service
     mode: '0644'
   notify: Restart pulseaudio
 
-- name: Enable and start PulseAudio
+- name: Enable lingering for opencinema user (keeps user services running)
+  ansible.builtin.command:
+    cmd: "loginctl enable-linger {{ open_cinema.user }}"
+  changed_when: false
+
+- name: Enable and start PulseAudio service
   ansible.builtin.systemd:
     name: pulseaudio
     enabled: true

@@ -6,7 +6,10 @@ Ansible playbooks for deploying the complete Open Cinema stack to Raspberry Pi.
 
 - **PulseAudio** - System-wide audio server
 - **CamillaDSP** - Audio processing with PulseAudio support (built from source)
-- **Open Cinema** - Django application with Gunicorn
+- **Open Cinema API** - Django REST API with Gunicorn
+- **nginx** - Web server and reverse proxy
+- **Open Cinema UI** - React-based user interface (served at `/ui`)
+- **Open Cinema Admin** - React-based admin interface (served at `/admin`)
 - **PCM Auto Decoder** (optional) - Existing decoder service
 
 ## Prerequisites
@@ -47,9 +50,10 @@ all:
 
 Edit `group_vars/all.yml` to customize:
 
-- `open_cinema.repo`: Your GitHub repository
-- `open_cinema.version`: Version to deploy
+- `open_cinema.repo`: Your GitHub repository for the API
+- `open_cinema.version`: API version to deploy
 - `open_cinema.django.secret_key`: Generate a secure key
+- `open_cinema_ui.version`: UI release version (from k3rnL/open-cinema-ui)
 - `camilladsp.build_from_source`: Set to `true` (required for ARM64 with PulseAudio)
 
 ### 3. Deploy
@@ -99,22 +103,29 @@ sudo journalctl -u camilladsp -f
 
 ### Network Access
 
-The Django application will be available at:
-- `http://<raspberry-pi-ip>:8000`
+After deployment, Open Cinema will be available at:
+- **User Interface**: `http://<raspberry-pi-ip>/ui`
+- **Admin Interface**: `http://<raspberry-pi-ip>/admin`
+- **API**: `http://<raspberry-pi-ip>/api/`
+- **Health Check**: `http://<raspberry-pi-ip>/health`
 
-API endpoints:
-- `http://<raspberry-pi-ip>:8000/api/version`
-- `http://<raspberry-pi-ip>:8000/api/devices`
-- `http://<raspberry-pi-ip>:8000/api/camilladsp/status`
+API endpoints (examples):
+- `http://<raspberry-pi-ip>/api/version`
+- `http://<raspberry-pi-ip>/api/devices`
+- `http://<raspberry-pi-ip>/api/camilladsp/status`
+- `http://<raspberry-pi-ip>/api/camilladsp/pipelines`
+- `http://<raspberry-pi-ip>/api/camilladsp/mixers`
 
 CamillaDSP websocket:
 - `ws://<raspberry-pi-ip>:1234`
+
+**Note**: All web traffic goes through nginx on port 80. The Django API runs on port 8000 internally but is only accessible via `/api/` path.
 
 ## Directory Structure
 
 ```
 /opt/home-cinema/
-├── open-cinema/           # Application root
+├── open-cinema/           # Django API application root
 │   ├── venv/             # Python virtual environment
 │   ├── manage.py
 │   ├── opencinema/
@@ -122,8 +133,23 @@ CamillaDSP websocket:
 │   ├── core/
 │   ├── plugin/
 │   ├── db.sqlite3        # SQLite database
+│   ├── staticfiles/      # Django static files
 │   └── .env              # Environment configuration
 └── pcm-auto-decoder.yaml  # Optional decoder config
+
+/var/www/
+├── open-cinema-admin/     # React admin build
+│   ├── index.html
+│   ├── assets/
+│   └── ...
+└── open-cinema-ui/        # React user UI build
+    ├── index.html
+    ├── assets/
+    └── ...
+
+/etc/nginx/
+└── sites-available/
+    └── open-cinema        # nginx site configuration
 
 /etc/camilladsp/
 └── default.yml            # CamillaDSP configuration
@@ -203,9 +229,7 @@ The current configuration is suitable for development/testing. For production:
 
 4. **Use PostgreSQL** instead of SQLite (add postgres role)
 
-5. **Add nginx** reverse proxy (add nginx role)
-
-6. **Enable HTTPS** with Let's Encrypt
+5. **Enable HTTPS** with Let's Encrypt (configure nginx with SSL)
 
 ## Roles
 
@@ -231,10 +255,24 @@ The current configuration is suitable for development/testing. For production:
 - Creates Python virtual environment
 - Installs dependencies
 - Runs migrations
+- Collects static files
 - Sets up Gunicorn systemd service
 
+### nginx
+- Installs and configures nginx web server
+- Sets up reverse proxy for Django API
+- Serves React static files
+- Configures path-based routing (`/ui`, `/admin`, `/api`)
+- Enables gzip compression and security headers
+
+### react-apps
+- Downloads React builds from GitHub releases
+- Extracts admin and UI builds to web root
+- Configures proper permissions
+- Verifies deployment (checks index.html)
+
 ### pcm-auto-decoder (optional)
-- Downloads and installs decoder
+- Downloads and installs decoder from GitHub releases
 - Configures and starts service
 
 ## Tags
@@ -245,10 +283,32 @@ Use tags to run specific parts:
 - `pulseaudio` - Audio server
 - `audio` - Both PulseAudio and CamillaDSP
 - `camilladsp` - Audio processor
-- `opencinema` - Django application
+- `opencinema` - Django API application
 - `python` - Python app (alias for opencinema)
 - `app` - Application layer (alias for opencinema)
+- `nginx` - Web server and reverse proxy
+- `react` - React frontend applications
+- `frontend` - Both nginx and react-apps
+- `web` - Web layer (nginx + react-apps)
+- `ui` - React applications (alias for react)
 - `decoder` - PCM decoder
+
+### Examples
+
+Deploy only the frontend:
+```bash
+ansible-playbook -i inventories/local.yml playbooks/site.yml --tags frontend
+```
+
+Update only React apps:
+```bash
+ansible-playbook -i inventories/local.yml playbooks/site.yml --tags react
+```
+
+Deploy API and frontend without audio components:
+```bash
+ansible-playbook -i inventories/local.yml playbooks/site.yml --tags opencinema,frontend
+```
 
 ## Support
 

@@ -1,20 +1,28 @@
 [Unit]
-Description=PulseAudio System Daemon
+Description=PulseAudio Sound Server for Open Cinema
 Documentation=man:pulseaudio(1)
 After=sound.target network.target
 
 [Service]
 Type=notify
-ExecStart=/usr/bin/pulseaudio --system --disallow-exit --disallow-module-loading --daemonize=no --log-target=journal --realtime
+User={{ open_cinema.user }}
+Group={{ open_cinema.group }}
+SupplementaryGroups=audio video
+
+# Use user mode (not system mode)
+ExecStart=/usr/bin/pulseaudio --daemonize=no --log-target=journal --exit-idle-time=-1
 Restart=on-failure
 RestartSec=5
 
-# Security settings
+# Runtime directory for PulseAudio socket
+RuntimeDirectory=pulse
+RuntimeDirectoryMode=0700
+
+# Environment
+Environment="PULSE_RUNTIME_PATH=/run/pulse"
+
+# Security settings - more permissive for audio hardware access
 NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/run/pulse /var/lib/pulse
 
 [Install]
 WantedBy=multi-user.target

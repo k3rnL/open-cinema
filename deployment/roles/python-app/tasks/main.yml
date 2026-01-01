@@ -1,24 +1,35 @@
 ---
-- name: Install Python and system dependencies
+- name: Add deadsnakes PPA for Python {{ open_cinema.python_version }}
+  ansible.builtin.apt_repository:
+    repo: ppa:deadsnakes/ppa
+    state: present
+    update_cache: yes
+  when: ansible_facts["distribution"] == 'Ubuntu'
+
+- name: Install Python and system dependencies (Ubuntu)
   ansible.builtin.apt:
     update_cache: true
     name:
-      - python3
+      - python{{ open_cinema.python_version }}
+      - python{{ open_cinema.python_version }}-venv
+      - python{{ open_cinema.python_version }}-dev
       - python3-pip
-      - python3-venv
-      - python3-dev
       - git
       - libpulse-dev
     state: present
+  when: ansible_facts["distribution"] == 'Ubuntu'
 
-- name: Create application user
-  ansible.builtin.user:
-    name: "{{ open_cinema.user }}"
-    group: "{{ open_cinema.group }}"
-    system: true
-    home: "{{ open_cinema.app_path }}"
-    create_home: false
-    shell: /bin/bash
+- name: Install Python and system dependencies (Raspberry Pi)
+  ansible.builtin.apt:
+    update_cache: true
+    name:
+      - python{{ open_cinema.python_version }}
+      - python{{ open_cinema.python_version }}-venv
+      - python3-pip
+      - git
+      - libpulse-dev
+    state: present
+  when: ansible_facts["distribution"] in ['Debian', 'Raspbian']
 
 - name: Create application directory
   ansible.builtin.file:
@@ -38,7 +49,7 @@
 
 - name: Create Python virtual environment
   ansible.builtin.command:
-    cmd: python3 -m venv {{ open_cinema.venv_path }}
+    cmd: python{{ open_cinema.python_version }} -m venv {{ open_cinema.venv_path }}
     creates: "{{ open_cinema.venv_path }}/bin/python"
   become_user: "{{ open_cinema.user }}"
 

@@ -6,13 +6,23 @@ Requires=pulseaudio.service
 
 [Service]
 Type=simple
+User={{ open_cinema.user }}
+Group={{ open_cinema.group }}
+SupplementaryGroups=audio video
+
+# CamillaDSP command with websocket enabled
 ExecStart={{ camilladsp.install_path }} -p {{ camilladsp.websocket_port }} -a {{ camilladsp.websocket_address }} {{ camilladsp.config_path }}
+
+# Restart policy
 Restart=always
 RestartSec=5
-User=root
 
-# Allow access to audio devices
-SupplementaryGroups=audio pulse-access
+# Environment - PulseAudio socket
+Environment="PULSE_RUNTIME_PATH=/run/pulse"
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target

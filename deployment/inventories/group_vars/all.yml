@@ -2,9 +2,9 @@ project_root: "/opt/home-cinema"
 
 # Open Cinema Application
 open_cinema:
-  version: "0.0.1"
-  repo: "yourusername/open-cinema"  # Update with your GitHub username
-  python_version: "3.11"
+  version: "0.0.2"
+  repo: "k3rnL/open-cinema"  # Update with your GitHub username
+  python_version: "3.13"
   app_path: "{{ project_root }}/open-cinema"
   venv_path: "{{ project_root }}/open-cinema/venv"
   user: "opencinema"
@@ -62,3 +62,18 @@ pcm_auto_decoder:
   tarball: "{{ pcm_auto_decoder.bin_name }}-{{ pcm_auto_decoder.version }}-{{ pcm_auto_decoder.target }}.tar.gz"
   sha256: "1bb42509b665aaa36e3c624f8ae80db0607cce2d44f5ec9af6d353f14307d541"
   config_path: "{{ project_root }}/pcm-auto-decoder.yaml"
+
+# Open Cinema UI (React Applications)
+open_cinema_ui:
+  version: "v1.0.0"  # Update with latest release version
+  repo: "k3rnL/open-cinema-ui"
+
+  # Admin interface (for system configuration)
+  admin:
+    asset_name: "open-cinema-admin-build.tar.gz"
+    web_root: "/var/www/open-cinema-admin"
+
+  # User interface (for end users)
+  user_ui:
+    asset_name: "open-cinema-ui-build.tar.gz"
+    web_root: "/var/www/open-cinema-ui"

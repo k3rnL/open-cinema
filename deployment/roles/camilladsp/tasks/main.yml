@@ -28,6 +28,27 @@
     - camilladsp.build_from_source
     - rust_check.rc != 0
 
+- name: Check if CamillaDSP is already installed
+  ansible.builtin.stat:
+    path: "{{ camilladsp.install_path }}"
+  register: camilladsp_binary
+
+- name: Check installed CamillaDSP version
+  ansible.builtin.command: "{{ camilladsp.install_path }} --version"
+  register: camilladsp_installed_version
+  failed_when: false
+  changed_when: false
+  when: camilladsp_binary.stat.exists
+
+- name: Determine if rebuild is needed
+  ansible.builtin.set_fact:
+    camilladsp_needs_rebuild: >-
+      {{
+        not camilladsp_binary.stat.exists or
+        (camilladsp_installed_version.stdout is defined and
+         camilladsp.version | replace('v', '') not in camilladsp_installed_version.stdout)
+      }}
+
 - name: Clone CamillaDSP repository
   ansible.builtin.git:
     repo: "https://github.com/{{ camilladsp.repo }}.git"
@@ -35,7 +56,10 @@
     version: "{{ camilladsp.version }}"
     depth: 1
     force: yes
-  when: camilladsp.build_from_source
+  when:
+    - camilladsp.build_from_source
+    - camilladsp_needs_rebuild | bool
+  register: camilladsp_clone
 
 - name: Build CamillaDSP with PulseAudio support
   ansible.builtin.shell: |
@@ -43,10 +67,11 @@
     cargo build --release --features {{ camilladsp.features }}
   args:
     chdir: /tmp/camilladsp
-    creates: /tmp/camilladsp/target/release/camilladsp
   environment:
-    PATH: "/root/.cargo/bin:{{ ansible_env.PATH }}"
-  when: camilladsp.build_from_source
+    PATH: "/root/.cargo/bin:{{ ansible_facts['env']['PATH'] }}"
+  when:
+    - camilladsp.build_from_source
+    - camilladsp_clone.changed
   register: build_result
 
 - name: Install CamillaDSP binary
@@ -55,7 +80,9 @@
     dest: "{{ camilladsp.install_path }}"
     remote_src: true
     mode: '0755'
-  when: camilladsp.build_from_source
+  when:
+    - camilladsp.build_from_source
+    - build_result.changed
   notify: Restart camilladsp
 
 - name: Clean up build directory
@@ -68,12 +95,16 @@
   ansible.builtin.file:
     path: /etc/camilladsp
     state: directory
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
     mode: '0755'
 
 - name: Install default CamillaDSP configuration
   ansible.builtin.template:
     src: default.yml.j2
     dest: "{{ camilladsp.config_path }}"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
     mode: '0644'
   notify: Restart camilladsp
 

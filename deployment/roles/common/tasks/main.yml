@@ -7,8 +7,28 @@
       - tar
     state: present
 
+- name: Create opencinema group
+  ansible.builtin.group:
+    name: "{{ open_cinema.group }}"
+    system: true
+    state: present
+
+- name: Create opencinema user
+  ansible.builtin.user:
+    name: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    groups: audio,video  # Add to audio and video groups for hardware access
+    system: true
+    home: "/home/{{ open_cinema.user }}"
+    create_home: true  # Need home directory for PulseAudio config
+    shell: /bin/bash
+    comment: "Open Cinema service user"
+    state: present
+
 - name: Ensure project root exists
   ansible.builtin.file:
     path: "{{ project_root }}"
     state: directory
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
     mode: "0755"

@@ -18,6 +18,12 @@
     - role: python-app
       tags: [python, app, opencinema]
 
+    - role: nginx
+      tags: [nginx, web, frontend]
+
+    - role: react-apps
+      tags: [react, frontend, web, ui]
+
     - role: pcm-auto-decoder
       tags: [decoder]
       when: pcm_auto_decoder is defined
