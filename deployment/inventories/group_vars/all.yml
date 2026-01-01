@@ -2,7 +2,7 @@ project_root: "/opt/home-cinema"
 
 # Open Cinema Application
 open_cinema:
-  version: "0.0.4"
+  version: "0.0.5"
   repo: "k3rnL/open-cinema"  # Update with your GitHub username
   python_version: "3.13"
   app_path: "{{ project_root }}/open-cinema"
