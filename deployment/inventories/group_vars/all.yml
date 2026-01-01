@@ -65,7 +65,7 @@ pcm_auto_decoder:
 
 # Open Cinema UI (React Applications)
 open_cinema_ui:
-  version: "v1.0.3"  # Update with latest release version
+  version: "v1.0.5"  # Update with latest release version
   repo: "k3rnL/open-cinema-ui"
 
   # Admin interface (for system configuration)

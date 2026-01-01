@@ -2,10 +2,10 @@
 Description=Open Cinema Django Application
 Documentation=https://github.com/{{ open_cinema.repo }}
 After=network.target camilladsp.service
-Requires=camilladsp.service
+Wants=camilladsp.service
 
 [Service]
-Type=notify
+Type=exec
 User={{ open_cinema.user }}
 Group={{ open_cinema.group }}
 WorkingDirectory={{ open_cinema.app_path }}
@@ -17,11 +17,14 @@ ExecStart={{ open_cinema.venv_path }}/bin/gunicorn \
     --timeout 120 \
     --access-logfile /var/log/open-cinema/access.log \
     --error-logfile /var/log/open-cinema/error.log \
-    --log-level info \
+    --log-level debug \
+    --capture-output \
     opencinema.wsgi:application
 
-Restart=always
+Restart=on-failure
 RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
 
 # Security hardening
 NoNewPrivileges=true
