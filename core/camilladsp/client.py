@@ -141,54 +141,31 @@ class CamillaDSPClient:
             logger.error(f"Failed to send SIGHUP: {e}")
             return False
 
-    def validate_config(self, config_yaml: str, config_path: str = "/tmp/camilla_check.yml") -> tuple[bool, str]:
+    def validate_config(self, config_dict: Dict[str, str]) -> tuple[bool, str]:
         """
-        Validate configuration using camilladsp --check command.
+        Validate configuration using camilladsp.
 
         Args:
-            config_yaml: YAML configuration string
-            config_path: Temporary file path for validation
+            config_dict: YAML configuration string
 
         Returns:
             Tuple of (is_valid, error_message)
         """
         try:
-            # Write config to temporary file
-            with open(config_path, 'w') as f:
-                f.write(config_yaml)
-
             # Run camilladsp --check
-            result = subprocess.run(
-                ['camilladsp', '--check', config_path],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+            client = self._get_client()
+            result = client.config.validate(config_dict)
 
-            if result.returncode == 0:
+            if result is not None:
                 logger.info("Configuration validation passed")
                 return True, ""
             else:
-                error_msg = result.stderr or result.stdout
-                logger.error(f"Configuration validation failed: {error_msg}")
-                return False, error_msg
+                logger.error(f"Configuration validation failed for unknown reason")
+                return False, "Validation failed"
 
-        except subprocess.TimeoutExpired:
-            logger.error("Configuration validation timed out")
-            return False, "Validation timed out"
-        except FileNotFoundError:
-            logger.error("camilladsp binary not found in PATH")
-            return False, "camilladsp binary not found"
         except Exception as e:
             logger.error(f"Configuration validation error: {e}")
             return False, str(e)
-        finally:
-            # Clean up temporary file
-            try:
-                if os.path.exists(config_path):
-                    os.remove(config_path)
-            except Exception as e:
-                logger.warning(f"Failed to remove temporary config file: {e}")
 
     def disconnect(self):
         """Disconnect from CamillaDSP websocket."""

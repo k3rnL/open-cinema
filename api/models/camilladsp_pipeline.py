@@ -26,6 +26,24 @@ class Pipeline(models.Model):
         help_text="Audio output (playback) device"
     )
 
+    # CamillaDSP processing parameters
+    samplerate = models.IntegerField(
+        help_text="Processing sample rate in Hz (e.g., 44100, 48000, 96000)"
+    )
+    chunksize = models.IntegerField(
+        default=1024,
+        help_text="Number of samples per chunk (recommended: 1024 for 44.1/48kHz, 2048 for 88.2/96kHz, 4096 for 176.4/192kHz)"
+    )
+
+    mixer = models.ForeignKey(
+        'Mixer',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pipelines',
+        help_text="Optional mixer for channel mapping (auto-created if input/output channels differ)"
+    )
+
     enabled = models.BooleanField(default=False, help_text="Whether this pipeline is enabled")
     active = models.BooleanField(default=False, help_text="Whether this pipeline is currently active/running")
 
@@ -48,4 +66,4 @@ class Pipeline(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.name} ({self.input_device.name} → {self.output_device.name})"
+        return f"{self.name} ({self.input_device.name} → {self.output_device.name}) mixer: {self.mixer.name if self.mixer else 'None'}"

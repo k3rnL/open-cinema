@@ -1,4 +1,6 @@
 import logging
+
+import yaml
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -34,6 +36,25 @@ def get_config(request):
             )
 
         return JsonResponse(config)
+    except Exception as e:
+        logger.error(f"Error getting CamillaDSP config: {e}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def get_config_yaml(request):
+    """Get the current active CamillaDSP configuration in YAML."""
+    try:
+        manager = CamillaDSPManager()
+        config = manager.get_current_config()
+
+        if config is None:
+            return JsonResponse(
+                {'error': 'Could not retrieve current configuration'},
+                status=500
+            )
+
+        return JsonResponse({'yaml': yaml.dump(config, default_flow_style=False, sort_keys=False)})
     except Exception as e:
         logger.error(f"Error getting CamillaDSP config: {e}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)

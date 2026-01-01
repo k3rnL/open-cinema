@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 
+from api.models import Pipeline
 from .config_builder import CamillaDSPConfigBuilder
 from .client import CamillaDSPClient
 
@@ -55,15 +56,13 @@ class CamillaDSPManager:
                 logger.error(f"Config validation failed: {e}")
                 return False, f"Invalid configuration: {e}"
 
-            # Convert to YAML for CamillaDSP validation
-            config_yaml = self.config_builder.to_yaml(pipeline)
-
             # Validate with CamillaDSP binary
-            is_valid, error_msg = self.client.validate_config(config_yaml)
+            is_valid, error_msg = self.client.validate_config(config_dict)
             if not is_valid:
                 return False, f"CamillaDSP validation failed: {error_msg}"
 
             # Apply configuration
+            print(f"oui {config_dict}")
             success = self.client.apply_config(config_dict)
             if not success:
                 return False, "Failed to apply configuration to CamillaDSP"
@@ -168,3 +167,23 @@ class CamillaDSPManager:
         except Exception as e:
             logger.error(f"Error reloading config: {e}")
             return False, f"Error: {str(e)}"
+
+    def get_config_for_pipeline(self, pipeline: Pipeline) -> Optional[dict]:
+        """
+        Get the CamillaDSP configuration that would be generated for a pipeline.
+
+        Args:
+            pipeline: Pipeline model instance
+
+        Returns:
+            Configuration dictionary or None if validation fails
+        """
+        try:
+            config_dict = self.config_builder.build_config(pipeline)
+            self.config_builder.validate_config(config_dict)
+            config_yaml = self.config_builder.to_yaml(pipeline)
+            self.client.validate_config(config_yaml)
+            return config_dict
+        except Exception as e:
+            logger.error(f"Failed to generate config for pipeline: {e}", exc_info=True)
+            return None

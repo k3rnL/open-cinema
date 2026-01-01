@@ -82,14 +82,15 @@ POST {{baseUrl}}/devices/update
 GET {{baseUrl}}/camilladsp/pipelines
 
 ### Create a new pipeline
-POST {{baseUrl}}/camilladsp/pipelines/create
+POST {{baseUrl}}/camilladsp/pipelines
 Content-Type: application/json
 
 {
-  "name": "My First Pipeline",
+  "name": "My First Pipeline 2",
   "description": "Test pipeline for development",
   "input_device_id": 1,
-  "output_device_id": 2,
+  "output_device_id": 3,
+  "samplerate": 48000,
   "enabled": true
 }
 
