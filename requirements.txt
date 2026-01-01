@@ -3,6 +3,7 @@
 # Core framework
 Django==6.0
 django-cors-headers==4.9.0
+django-environ==0.11.2
 
 # Audio backends
 pulsectl==24.12.0
