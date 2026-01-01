@@ -39,6 +39,14 @@
     group: "{{ open_cinema.group }}"
     mode: '0755'
 
+- name: Create log directory
+  ansible.builtin.file:
+    path: /var/log/open-cinema
+    state: directory
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: '0755'
+
 - name: Clone Open Cinema repository
   ansible.builtin.git:
     repo: "https://github.com/{{ open_cinema.repo }}.git"

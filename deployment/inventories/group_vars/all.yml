@@ -65,15 +65,15 @@ pcm_auto_decoder:
 
 # Open Cinema UI (React Applications)
 open_cinema_ui:
-  version: "v1.0.0"  # Update with latest release version
+  version: "v1.0.3"  # Update with latest release version
   repo: "k3rnL/open-cinema-ui"
 
   # Admin interface (for system configuration)
   admin:
-    asset_name: "open-cinema-admin-build.tar.gz"
+    asset_name: "open-cinema-admin-{{ open_cinema_ui.version }}.tar.gz"
     web_root: "/var/www/open-cinema-admin"
 
   # User interface (for end users)
   user_ui:
-    asset_name: "open-cinema-ui-build.tar.gz"
+    asset_name: "open-cinema-ui-{{ open_cinema_ui.version }}.tar.gz"
     web_root: "/var/www/open-cinema-ui"

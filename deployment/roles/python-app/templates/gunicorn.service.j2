@@ -15,8 +15,9 @@ ExecStart={{ open_cinema.venv_path }}/bin/gunicorn \
     --workers {{ open_cinema.gunicorn_workers }} \
     --bind 0.0.0.0:{{ open_cinema.gunicorn_port }} \
     --timeout 120 \
-    --access-logfile - \
-    --error-logfile - \
+    --access-logfile /var/log/open-cinema/access.log \
+    --error-logfile /var/log/open-cinema/error.log \
+    --log-level info \
     opencinema.wsgi:application
 
 Restart=always

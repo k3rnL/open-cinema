@@ -3,10 +3,10 @@
     update_cache: true
     name:
       - libpulse0
-      - libavutil
-      - libavformat58
-      - libavdevice58
-      - libavfilter7
+      - libavutil59
+      - libavformat61
+      - libavdevice61
+      - libavfilter10
     state: present
 
 - name: Download decoder tarball from GitHub release (pinned + checksum)
@@ -14,7 +14,13 @@
     url: "https://github.com/{{ pcm_auto_decoder.repo }}/releases/download/{{ pcm_auto_decoder.version }}/{{ pcm_auto_decoder.tarball }}"
     dest: "/tmp/{{ pcm_auto_decoder.tarball }}"
     mode: "0644"
-    checksum: "sha256:{{ .sha256 }}"
+    checksum: "sha256:{{ pcm_auto_decoder.sha256 }}"
+
+- name: Create extraction directory
+  ansible.builtin.file:
+    path: "/tmp/pcm-auto-decoder_extract"
+    state: directory
+    mode: "0755"
 
 - name: Extract decoder
   ansible.builtin.unarchive:
@@ -30,23 +36,23 @@
     mode: "0755"
   notify: Restart pcm-auto-decoder
 
-- name: Install pcm-auto-decoder config
-  ansible.builtin.template:
-    src: decoder.yaml.j2
-    dest: "{{ pcm_auto_decoder.config_path }}"
-    mode: "0644"
-  notify: Restart pcm-auto-decoder
-
-- name: Install systemd service
-  ansible.builtin.template:
-    src: pcm-auto-decoder.service.j2
-    dest: "/etc/systemd/system/{{ pcm_auto_decoder.bin_name }}.service"
-    mode: "0644"
-  notify: Restart decoder
-
-- name: Enable and start pcm-auto-decoder
-  ansible.builtin.systemd:
-    name: "{{ pcm_auto_decoder.bin_name }}"
-    enabled: true
-    state: started
-    daemon_reload: true
+#- name: Install pcm-auto-decoder config
+#  ansible.builtin.template:
+#    src: decoder.yaml.j2
+#    dest: "{{ pcm_auto_decoder.config_path }}"
+#    mode: "0644"
+#  notify: Restart pcm-auto-decoder
+#
+#- name: Install systemd service
+#  ansible.builtin.template:
+#    src: pcm-auto-decoder.service.j2
+#    dest: "/etc/systemd/system/{{ pcm_auto_decoder.bin_name }}.service"
+#    mode: "0644"
+#  notify: Restart decoder
+#
+#- name: Enable and start pcm-auto-decoder
+#  ansible.builtin.systemd:
+#    name: "{{ pcm_auto_decoder.bin_name }}"
+#    enabled: true
+#    state: started
+#    daemon_reload: true

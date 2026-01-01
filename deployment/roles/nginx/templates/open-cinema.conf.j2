@@ -25,41 +25,31 @@ server {
     }
 
     # Admin UI - React app
-    location /admin {
-        alias {{ open_cinema_ui.admin.web_root }};
+    location /admin/ {
+        alias {{ open_cinema_ui.admin.web_root }}/;
         try_files $uri $uri/ /admin/index.html;
+        index index.html;
 
-        # React Router support - handle client-side routing
-        location ~ ^/admin/.+$ {
-            alias {{ open_cinema_ui.admin.web_root }};
-            try_files $uri /admin/index.html;
-        }
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
 
-        # Cache static assets
-        location ~* ^/admin/.*\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-            alias {{ open_cinema_ui.admin.web_root }};
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-        }
+    location = /admin {
+        return 301 /admin/;
     }
 
     # User UI - React app
-    location /ui {
-        alias {{ open_cinema_ui.user_ui.web_root }};
+    location /ui/ {
+        alias {{ open_cinema_ui.user_ui.web_root }}/;
         try_files $uri $uri/ /ui/index.html;
+        index index.html;
 
-        # React Router support - handle client-side routing
-        location ~ ^/ui/.+$ {
-            alias {{ open_cinema_ui.user_ui.web_root }};
-            try_files $uri /ui/index.html;
-        }
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
 
-        # Cache static assets
-        location ~* ^/ui/.*\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-            alias {{ open_cinema_ui.user_ui.web_root }};
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-        }
+    location = /ui {
+        return 301 /ui/;
     }
 
     # Root - redirect to user UI
