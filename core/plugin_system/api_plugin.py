@@ -58,3 +58,19 @@ class APIPlugin(ABC):
             List[URLPattern]: Django URL patterns
         """
         pass
+
+    registry = {}
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+        # Don't register the abstract base itself
+        if cls is APIPlugin:
+            return
+
+        # Derive the plugin key
+        key = getattr(cls, "__name__")
+        if key in APIPlugin.registry:
+            raise ValueError(f"Duplicate plugin name: {key}")
+
+        APIPlugin.registry[key] = cls

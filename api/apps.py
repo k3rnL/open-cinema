@@ -1,50 +1,59 @@
 import importlib
+import logging
 import pkgutil
 
 from django.apps import AppConfig
 
+# Prevent duplicate URL registration if Django calls ready() more than once
+_ALREADY_REGISTERED = False
+
+logger = logging.getLogger(__name__)
 
 class ApiConfig(AppConfig):
     name = 'api'
 
     def ready(self):
-        """Auto-discover all plugin modules to register AudioBackend and APIPlugin implementations."""
-        import plugin
+        """
+        Import all modules in the 'plugin' package so APIPlugin subclasses register
+        via __init_subclass__. Then register URLs from APIPlugin.registry.
+        """
+        global _ALREADY_REGISTERED
+        if _ALREADY_REGISTERED:
+            return
+
         from core.plugin_system.api_plugin import APIPlugin
 
-        print("Starting plugin auto-discovery...")
+        logger.info("Starting plugin auto-discovery...")
 
-        discovered_api_plugins = []
+        try:
+            import plugin # your user-installed plugin folder must be a Python package
+        except Exception as e:
+            logger.warning("No 'plugin' package found or failed to import: %s", e)
+            _ALREADY_REGISTERED = True
+            return
 
-        # Walk through all modules in the plugin package and import them
-        for importer, modname, ispkg in pkgutil.walk_packages(
+        # Import every module under plugin.* to trigger class registration
+        for _, modname, ispkg in pkgutil.walk_packages(
             path=plugin.__path__,
-            prefix=plugin.__name__ + '.'
+            prefix=plugin.__name__ + ".",
         ):
             try:
-                module_type = "package" if ispkg else "module"
-                print(f"Importing {module_type}: {modname}")
-                module = importlib.import_module(modname)
-                print(f"Successfully imported {module_type}: {modname}")
+                if 'migrations' not in modname:
+                    importlib.import_module(modname)
+                    print(f"Imported {"package" if ispkg else "module"}: {modname}")
+            except Exception:
+                # Don't crash if a plugin fails to load
+                logger.exception("Failed to load plugin module %s", modname)
+                print(f"Failed to load module {modname}")
 
-                # Check for API plugin classes in the module
-                for item_name in dir(module):
-                    item = getattr(module, item_name)
-                    if (isinstance(item, type) and
-                        issubclass(item, APIPlugin) and
-                        item is not APIPlugin):
-                        discovered_api_plugins.append(item)
-                        print(f"  → Found API plugin class: {item.__name__}")
+        # Pull plugin classes from registry (no module scanning needed)
+        plugin_classes = list(APIPlugin.registry.values())
+        print(f"Plugin auto-discovery completed. Found {len(plugin_classes)} API plugin(s).")
 
-            except Exception as e:
-                # Log but don't crash if a plugin fails to load
-                print(f"Warning: Failed to load plugin module {modname}: {e}")
+        if plugin_classes:
+            self._register_plugin_urls(plugin_classes)
 
-        print(f"Plugin auto-discovery completed. Found {len(discovered_api_plugins)} API plugin(s).")
-
-        # Register discovered API plugins
-        if discovered_api_plugins:
-            self._register_plugin_urls(discovered_api_plugins)
+        _ALREADY_REGISTERED = True
 
     def _register_plugin_urls(self, plugin_classes):
         """Register URLs from discovered API plugins."""
