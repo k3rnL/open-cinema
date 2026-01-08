@@ -56,6 +56,19 @@ Edit `group_vars/all.yml` to customize:
 - `open_cinema_ui.version`: UI release version (from k3rnL/open-cinema-ui)
 - `camilladsp.build_from_source`: Set to `true` (required for ARM64 with PulseAudio)
 
+#### Installing from Local Sources
+
+To deploy from local source files instead of git:
+
+```yaml
+open_cinema:
+  install_from_local: true
+  local_source_path: "../.."  # Path relative to deployment directory (default)
+  # other settings...
+```
+
+This will use `rsync` to sync your local source code to the target machine, excluding `.git`, `__pycache__`, virtual environments, and other development files.
+
 ### 3. Deploy
 
 Deploy the complete stack:

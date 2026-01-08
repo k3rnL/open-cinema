@@ -54,6 +54,35 @@
     version: "v{{ open_cinema.version }}"
     force: yes
   become_user: "{{ open_cinema.user }}"
+  when: open_cinema.install_from_local is not defined or not open_cinema.install_from_local
+
+- name: Synchronize local Open Cinema source
+  ansible.posix.synchronize:
+    src: "{{ open_cinema.local_source_path | default('../..') }}/"
+    dest: "{{ open_cinema.app_path }}"
+    delete: yes
+    rsync_opts:
+      - "--exclude=.git"
+      - "--exclude=__pycache__"
+      - "--exclude=*.pyc"
+      - "--exclude=.venv*"
+      - "--exclude=venv"
+      - "--exclude=db.sqlite3"
+      - "--exclude=.ansible"
+      - "--exclude=.idea"
+      - "--exclude=.vscode"
+      - "--exclude=node_modules"
+  become: false
+  delegate_to: localhost
+  when: open_cinema.install_from_local is defined and open_cinema.install_from_local
+
+- name: Set ownership of application directory
+  ansible.builtin.file:
+    path: "{{ open_cinema.app_path }}"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    recurse: yes
+  when: open_cinema.install_from_local is defined and open_cinema.install_from_local
 
 - name: Create Python virtual environment
   ansible.builtin.command:
