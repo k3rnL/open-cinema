@@ -28,8 +28,15 @@
       - python3-pip
       - git
       - libpulse-dev
+      - python3-dev
     state: present
   when: ansible_facts["distribution"] in ['Debian', 'Raspbian']
+
+- name: Install uv dependency manager
+  ansible.builtin.pip:
+    name:
+      - uv
+    state: present
 
 - name: Create application directory
   ansible.builtin.file:

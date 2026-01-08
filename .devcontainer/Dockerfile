@@ -5,7 +5,7 @@ RUN apt update && apt install -y \
     libpulse-dev libavutil-dev libavformat-dev \
     libavfilter-dev libavdevice-dev libclang-dev \
     ffmpeg wget pulseaudio sudo \
-    git curl build-essential pkg-config libasound2-dev \
+    git curl build-essential pkg-config libasound2-dev python3-dev \
     curl build-essential libalsaplayer-dev librust-alsa-sys-dev  # Should be in a build container
 
 RUN echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu \
@@ -30,6 +30,8 @@ RUN wget https://github.com/HEnquist/camillagui-backend/releases/download/v3.0.3
 RUN wget https://raw.githubusercontent.com/mdsimon2/RPi-CamillaDSP/main/camillagui.service -O /lib/systemd/system/camillagui.service && \
     sed -i "s|username|$(id -u -n)|g" /lib/systemd/system/camillagui.service && \
     systemctl enable camillagui
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 COPY entrypoint.sh /entrypoint.sh
 COPY camilladsp/default.yml /etc/camilladsp/default.yml

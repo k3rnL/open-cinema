@@ -7,7 +7,7 @@ name = "open-cinema"
 dynamic = ["version"]
 description = "Audio processing control system with CamillaDSP integration"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = {text = "MIT"}
 authors = [
     {name = "Erwan Daniel"},
@@ -27,6 +27,11 @@ dependencies = [
     "pulsectl>=24.12.0",
     "PyYAML>=6.0",
     "websocket-client>=1.9.0",
+    "django-cors-headers>=4.9.0",
+    "django-environ>=0.11.2",
+    "pulsectl>=24.12.0",
+    "pyalsaaudio>=0.11.0",
+    "camilladsp@git+https://github.com/HEnquist/pycamilladsp.git@v3.0.0"
 ]
 
 [project.optional-dependencies]
@@ -39,10 +44,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/open-cinema"
-Documentation = "https://github.com/yourusername/open-cinema#readme"
-Repository = "https://github.com/yourusername/open-cinema"
-Issues = "https://github.com/yourusername/open-cinema/issues"
+Homepage = "https://github.com/k3rnL/open-cinema"
+Documentation = "https://github.com/k3rnL/open-cinema#readme"
+Repository = "https://github.com/k3rnL/open-cinema"
+Issues = "https://github.com/k3rnL/open-cinema/issues"
 
 [tool.setuptools.dynamic]
 version = {attr = "version.__version__"}
@@ -54,7 +59,7 @@ exclude = ["tests*", ".venv*", "deployment*"]
 
 [tool.black]
 line-length = 100
-target-version = ['py310', 'py311', 'py312']
+target-version = ['py312']
 include = '\.pyi?$'
 exclude = '''
 /(
