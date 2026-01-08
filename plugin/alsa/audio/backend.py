@@ -54,7 +54,7 @@ class AlsaAudioBackend(AudioBackend):
                         ))
                         pcm.close()
                     except alsaaudio.ALSAAudioError as e:
-                        logger.error(f"Failed to process capture device {device_name}: {e}")
+                        logger.warning(f"Failed to process capture device {device_name}: {e}")
             except alsaaudio.ALSAAudioError as e:
                 logger.error(f"Failed to list ALSA capture devices: {e}")
 
@@ -76,7 +76,7 @@ class AlsaAudioBackend(AudioBackend):
                         ))
                         pcm.close()
                     except alsaaudio.ALSAAudioError as e:
-                        logger.error(f"Failed to process playback device {device_name}: {e}")
+                        logger.warning(f"Failed to process playback device {device_name}: {e}")
             except alsaaudio.ALSAAudioError as e:
                 logger.error(f"Failed to list ALSA playback devices: {e}")
 
