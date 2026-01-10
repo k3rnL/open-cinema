@@ -21,7 +21,7 @@ class ApiConfig(AppConfig):
         if _ALREADY_REGISTERED:
             return
 
-        from core.plugin_system.api_plugin import APIPlugin
+        from core.plugin_system.oc_plugin import OCPlugin
 
         logger.info("Starting plugin auto-discovery...")
 
@@ -47,7 +47,7 @@ class ApiConfig(AppConfig):
                 print(f"Failed to load module {modname}")
 
         # Pull plugin classes from registry (no module scanning needed)
-        plugin_classes = list(APIPlugin.registry.values())
+        plugin_classes = list(OCPlugin.registry.values())
         print(f"Plugin auto-discovery completed. Found {len(plugin_classes)} API plugin(s).")
 
         if plugin_classes:

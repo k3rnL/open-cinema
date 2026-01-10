@@ -2,7 +2,7 @@ import logging
 
 import alsaaudio
 
-from core.audio.audio_backends import AudioBackend
+from core.audio.audio_backend import AudioBackend
 from core.audio.audio_device import AudioDevice, AudioDeviceType
 from core.audio.sample_format_enum import SampleFormatEnum
 

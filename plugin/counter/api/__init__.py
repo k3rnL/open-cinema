@@ -1,5 +1,5 @@
 """Counter plugin API."""
 
-from .plugin import CounterAPIPlugin
+from .plugin import CounterOCPlugin
 
-__all__ = ["CounterAPIPlugin"]
+__all__ = ["CounterOCPlugin"]

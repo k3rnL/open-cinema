@@ -6,11 +6,11 @@ from django.urls import path
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from core.plugin_system.api_plugin import APIPlugin
+from core.plugin_system.oc_plugin import OCPlugin
 from plugin.counter.models import CounterLog
 
 
-class CounterAPIPlugin(APIPlugin):
+class CounterOCPlugin(OCPlugin):
     """
     Example plugin that provides counter functionality via API.
 

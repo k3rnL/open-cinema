@@ -1,5 +1,6 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.db.models.deletion import ProtectedError
 
 from api.models import KnownAudioDevice
 from core.audio.audio_backends import AudioBackends
@@ -45,6 +46,26 @@ def get_devices(request):
     ]
 
     return JsonResponse(devices_data, safe=False)
+
+@require_http_methods(["DELETE"])
+def forget_device(request, device_id):
+    """
+    Remove the device from known devices, this does not physically delete a device
+    """
+    try:
+        KnownAudioDevice.objects.filter(id=device_id).delete()
+        return JsonResponse({}, safe=False)
+    except ProtectedError as e:
+        protected_objects = e.protected_objects
+        references = [str(obj) for obj in protected_objects]
+        device_name = KnownAudioDevice.objects.filter(id=device_id).first().name
+        return JsonResponse(
+            {
+                'error': f'Cannot delete device "{device_name}" because it is referenced by other objects',
+                'references': references
+            },
+            status=409
+        )
 
 
 @require_http_methods(["GET"])

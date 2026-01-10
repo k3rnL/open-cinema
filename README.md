@@ -124,7 +124,7 @@ plugin/
 In `backend.py`:
 
 ```python
-from core.audio.audio_backends import AudioBackend
+from core.audio.audio_backend import AudioBackend
 from core.audio.audio_device import AudioDevice
 
 class MyAudioBackend(AudioBackend):
@@ -174,32 +174,35 @@ class MyModel(models.Model):
 **Step 2: Create API plugin class** in `api/plugin.py`:
 
 ```python
-from core.plugin_system.api_plugin import APIPlugin
+from core.plugin_system.oc_plugin import OCPlugin
 from django.urls import path
 from django.http import JsonResponse
 from ..models.mymodel import MyModel
 
+
 def my_view(request):
-    """Standard Django view function"""
-    return JsonResponse({'status': 'ok'})
+  """Standard Django view function"""
+  return JsonResponse({'status': 'ok'})
+
 
 def list_items(request):
-    """Example: Query your model and return JSON"""
-    items = MyModel.objects.all().values('id', 'name', 'created_at')
-    return JsonResponse({'items': list(items)})
+  """Example: Query your model and return JSON"""
+  items = MyModel.objects.all().values('id', 'name', 'created_at')
+  return JsonResponse({'items': list(items)})
 
-class MyAPIPlugin(APIPlugin):
-    @property
-    def plugin_name(self) -> str:
-        """URL namespace: routes will be /api/plugins/myplugin/*"""
-        return "myplugin"
 
-    def get_urls(self):
-        """Return list of Django URL patterns"""
-        return [
-            path('endpoint/', my_view, name='my-endpoint'),
-            path('items/', list_items, name='list-items'),
-        ]
+class MyAPIPlugin(OCPlugin):
+  @property
+  def plugin_name(self) -> str:
+    """URL namespace: routes will be /api/plugins/myplugin/*"""
+    return "myplugin"
+
+  def get_urls(self):
+    """Return list of Django URL patterns"""
+    return [
+      path('endpoint/', my_view, name='my-endpoint'),
+      path('items/', list_items, name='list-items'),
+    ]
 ```
 
 **Step 3: Register as Django app** in `opencinema/settings.py`:

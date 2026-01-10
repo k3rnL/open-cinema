@@ -1,6 +1,7 @@
 from django.urls import path, include
 
 import api.views.audio_devices
+import api.views.preferences_audio_backend
 import api.views.device_discovery
 import api.views.camilladsp_pipelines
 import api.views.camilladsp_mixers
@@ -14,8 +15,13 @@ urlpatterns = [
 
     # Audio devices
     path("devices", api.views.audio_devices.get_devices, name="get_devices"),
+    path("devices/<int:device_id>", api.views.audio_devices.forget_device, name="forget_device"),
     path("devices/discover", api.views.audio_devices.discover_devices, name="discover_devices"),
     path("devices/update", api.views.device_discovery.trigger_discovery, name="trigger_discovery"),
+
+    # Preferences
+    path("preferences/audio-backends", api.views.preferences_audio_backend.get_audio_backends_preferences, name="get_audio_backend_preferences"),
+    path("preferences/audio-backends/<str:backend_name>", api.views.preferences_audio_backend.update_audio_backend_preference, name="get_audio_backend_preferences"),
 
     # CamillaDSP pipelines
     path("camilladsp/pipelines/<int:pipeline_id>/yaml", api.views.camilladsp_pipelines.get_yaml_pipeline, name="get_yaml_pipeline"),
@@ -39,7 +45,7 @@ urlpatterns = [
 _plugin_urlpatterns = []
 
 
-def register_plugin_urls(plugin_classes):
+def register_plugin_urls(plugin_instances):
     """
     Called by ApiConfig.ready() to register plugin URLs.
 
@@ -47,9 +53,8 @@ def register_plugin_urls(plugin_classes):
     """
     global _plugin_urlpatterns
 
-    for plugin_class in plugin_classes:
+    for plugin_instance in plugin_instances:
         try:
-            plugin_instance = plugin_class()
             plugin_urls = plugin_instance.get_urls()
 
             # Add plugin routes under /api/plugins/{plugin_name}/
@@ -60,7 +65,7 @@ def register_plugin_urls(plugin_classes):
             print(f"  → Registered API routes for plugin: {plugin_instance.plugin_name}")
 
         except Exception as e:
-            print(f"  ✗ Failed to register plugin {plugin_class.__name__}: {e}")
+            print(f"  ✗ Failed to register plugin {plugin_instance.__class__.__name__}: {e}")
 
     # Append plugin URLs to main urlpatterns
     urlpatterns.extend(_plugin_urlpatterns)

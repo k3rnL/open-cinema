@@ -1,5 +1,5 @@
 """Plugin system for Open Cinema."""
 
-from .api_plugin import APIPlugin
+from .oc_plugin import OCPlugin
 
-__all__ = ["APIPlugin"]
+__all__ = ["OCPlugin"]

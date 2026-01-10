@@ -16,7 +16,7 @@ def discover_and_update_audio_devices():
     logger.info("Starting audio device discovery task")
 
     try:
-        # Discover all devices from backends
+        # Discover all devices from backend
         discovered_devices = AudioBackends.get_all_devices()
 
         # Track which devices we've seen
@@ -47,10 +47,8 @@ def discover_and_update_audio_devices():
 
         # Mark devices as inactive if they weren't discovered
         # (but only if they were seen recently - within last 5 minutes)
-        cutoff_time = timezone.now() - timedelta(minutes=5)
         inactive_devices = KnownAudioDevice.objects.filter(
             active=True,
-            last_seen__gte=cutoff_time
         ).exclude(
             backend__in=[key[0] for key in seen_device_keys],
             name__in=[key[1] for key in seen_device_keys]

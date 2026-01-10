@@ -1,6 +1,6 @@
 from enum import Enum
 
-from core.audio.audio_backends import AudioBackend
+from core.audio.audio_backend import AudioBackend
 from core.audio.sample_format_enum import SampleFormatEnum
 
 
