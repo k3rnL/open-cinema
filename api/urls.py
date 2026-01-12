@@ -1,6 +1,7 @@
 from django.urls import path, include
 
 import api.views.audio_devices
+import api.views.audio_pipelines
 import api.views.preferences_audio_backend
 import api.views.device_discovery
 import api.views.camilladsp_pipelines
@@ -18,6 +19,9 @@ urlpatterns = [
     path("devices/<int:device_id>", api.views.audio_devices.forget_device, name="forget_device"),
     path("devices/discover", api.views.audio_devices.discover_devices, name="discover_devices"),
     path("devices/update", api.views.device_discovery.trigger_discovery, name="trigger_discovery"),
+
+    path("pipelines", api.views.audio_pipelines.pipelines, name="pipelines"),
+    path("pipelines/<int:pipeline_id>", api.views.audio_pipelines.pipeline, name="pipeline"),
 
     # Preferences
     path("preferences/audio-backends", api.views.preferences_audio_backend.get_audio_backends_preferences, name="get_audio_backend_preferences"),
