@@ -4,9 +4,9 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from api.models.audio_pipeline import AudioPipeline
-from api.models.audio_pipeline_edge import AudioPipelineEdge
-from api.models.audio_pipeline_node import AudioPipelineNode
+from api.models.audio.audio_pipeline import AudioPipeline
+from api.models.audio.pipeline.audio_pipeline_edge import AudioPipelineEdge
+from api.models.audio.pipeline.audio_pipeline_node import AudioPipelineNode
 
 
 @csrf_exempt

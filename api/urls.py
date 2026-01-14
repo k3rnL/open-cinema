@@ -2,6 +2,7 @@ from django.urls import path, include
 
 import api.views.audio_devices
 import api.views.audio_pipelines
+import api.views.audio_pipelines_schematic
 import api.views.preferences_audio_backend
 import api.views.device_discovery
 import api.views.camilladsp_pipelines
@@ -22,6 +23,8 @@ urlpatterns = [
 
     path("pipelines", api.views.audio_pipelines.pipelines, name="pipelines"),
     path("pipelines/<int:pipeline_id>", api.views.audio_pipelines.pipeline, name="pipeline"),
+
+    path("pipelines/schematics", api.views.audio_pipelines_schematic.get_pipeline_schematics, name="pipeline_schematics"),
 
     # Preferences
     path("preferences/audio-backends", api.views.preferences_audio_backend.get_audio_backends_preferences, name="get_audio_backend_preferences"),

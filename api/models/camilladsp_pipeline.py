@@ -1,7 +1,7 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 
-from .known_audio_device import KnownAudioDevice
+from api.models.audio.pipeline.known_audio_device import KnownAudioDevice
 
 
 class Pipeline(models.Model):

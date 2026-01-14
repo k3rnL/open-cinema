@@ -1,6 +1,6 @@
 from django.db import models
 
-from api.models.audio_pipeline import AudioPipeline
+from api.models.audio.audio_pipeline import AudioPipeline
 
 
 class AudioPipelineNode(models.Model):
