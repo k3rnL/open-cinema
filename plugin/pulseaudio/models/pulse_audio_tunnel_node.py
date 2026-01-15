@@ -1,6 +1,7 @@
 from django.db import models
 
 from api.models.audio.pipeline.audio_pipeline_io_node import AudioPipelineIONode
+from api.models.audio.pipeline.audio_pipeline_node import Slot, SlotType, SlotDirection
 
 
 class PulseAudioTunnelNode(AudioPipelineIONode):
@@ -33,6 +34,13 @@ class PulseAudioTunnelNode(AudioPipelineIONode):
         null=True,
         help_text='The authentication cookie file to use'
     )
+
+    def get_dynamic_slots_schematics(self) -> list[Slot]:
+        if self.mode == 'SOURCE' or self.mode == 'source':
+            return [Slot(self.source, SlotType.AUDIO, SlotDirection.OUTPUT)]
+        elif self.mode == 'SINK' or self.mode == 'sink':
+            return [Slot(self.sink, SlotType.AUDIO, SlotDirection.INPUT)]
+        return []
 
     class Meta:
         app_label = 'api'

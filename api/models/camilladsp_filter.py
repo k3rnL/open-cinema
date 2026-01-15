@@ -1,6 +1,6 @@
 from django.db import models
 
-from .camilladsp_pipeline import Pipeline
+from .camilladsp_pipeline import CamillaDSPPipeline
 
 
 class Filter(models.Model):
@@ -20,7 +20,7 @@ class Filter(models.Model):
     ]
 
     pipeline = models.ForeignKey(
-        Pipeline,
+        CamillaDSPPipeline,
         on_delete=models.CASCADE,
         related_name='filters',
         help_text="Pipeline this filter belongs to"

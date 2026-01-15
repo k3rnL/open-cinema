@@ -3,6 +3,7 @@ from typing import Any
 
 from django.apps import apps
 from django.db import models
+from django.db.models import Model
 from django.db.models.fields import Field
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -58,6 +59,7 @@ def pipeline_to_json(pipeline: AudioPipeline) -> dict[str, Any]:
             {
                 'id': node.id,
                 'name': node.__class__.__name__,
+                'dynamic_slots_schematics': [slot.to_dict() for slot in node.get_dynamic_slots_schematics()],
                 'fields': get_fields_value(node, node._meta.local_fields)
             }
             for node in concrete_nodes
@@ -84,7 +86,7 @@ def find_model_by_name(name: str) -> type[models.Model] | None:
             return model
     return None
 
-def json_node_to_model(data_node) -> AudioPipelineNode:
+def json_node_to_model(data_node) -> Model:
     class_name = data_node['name']
 
     # Search through all registered models to find the matching class
@@ -158,7 +160,8 @@ def get_fields_value(node: AudioPipelineNode, fields: list[Field]) -> dict[str, 
             continue
         if field.is_relation:
             value = getattr(node, field.name)
-            result[field.name] = getattr(value, field.remote_field.field_name)
+            if value is not None:
+                result[field.name] = getattr(value, field.remote_field.field_name)
         else:
             result[field.name] = getattr(node, field.name)
 

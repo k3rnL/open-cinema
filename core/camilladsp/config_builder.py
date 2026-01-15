@@ -3,7 +3,7 @@ from typing import Dict, Any
 
 import yaml
 
-from api.models import Pipeline
+from api.models import CamillaDSPPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ class CamillaDSPConfigBuilder:
     def __init__(self):
         self.config = {}
 
-    def build_config(self, pipeline: Pipeline) -> Dict[str, Any]:
+    def build_config(self, pipeline: CamillaDSPPipeline) -> Dict[str, Any]:
         """
         Build a complete CamillaDSP configuration from a Pipeline object.
 
@@ -196,7 +196,7 @@ class CamillaDSPConfigBuilder:
 
         return steps
 
-    def to_yaml(self, pipeline: Pipeline) -> str:
+    def to_yaml(self, pipeline: CamillaDSPPipeline) -> str:
         """
         Generate YAML string from Pipeline model.
 

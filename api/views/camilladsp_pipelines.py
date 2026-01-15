@@ -6,7 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 import json
 
-from api.models import Pipeline, KnownAudioDevice
+from api.models import CamillaDSPPipeline, KnownAudioDevice
 from core.camilladsp import CamillaDSPManager
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ def pipelines(request):
 @require_http_methods(["GET"])
 def list_pipelines(request):
     """List all pipelines."""
-    pipelines = Pipeline.objects.all()
+    pipelines = CamillaDSPPipeline.objects.all()
 
     pipelines_data = [
         {
@@ -79,7 +79,7 @@ def pipeline_detail(request, pipeline_id):
 def get_pipeline(request, pipeline_id):
     """Get details of a specific pipeline."""
     try:
-        pipeline = Pipeline.objects.get(id=pipeline_id)
+        pipeline = CamillaDSPPipeline.objects.get(id=pipeline_id)
 
         pipeline_data = {
             'id': pipeline.id,
@@ -131,20 +131,20 @@ def get_pipeline(request, pipeline_id):
 
         return JsonResponse(pipeline_data)
 
-    except Pipeline.DoesNotExist:
+    except CamillaDSPPipeline.DoesNotExist:
         return JsonResponse({'error': 'Pipeline not found'}, status=404)
 
 @require_http_methods(["GET"])
 def get_yaml_pipeline(request, pipeline_id):
     try:
-        pipeline = Pipeline.objects.get(id=pipeline_id)
+        pipeline = CamillaDSPPipeline.objects.get(id=pipeline_id)
         manager = CamillaDSPManager()
         config_dict = manager.get_config_for_pipeline(pipeline)
         if config_dict is None:
             return JsonResponse({'error': 'Failed to generate config for pipeline'}, status=500)
         config_yaml = yaml.dump(config_dict, default_flow_style=False, sort_keys=False)
         return JsonResponse({'yaml': config_yaml})
-    except Pipeline.DoesNotExist:
+    except CamillaDSPPipeline.DoesNotExist:
         return JsonResponse({'error': 'Pipeline not found'}, status=404)
 
 @require_http_methods(["POST"])
@@ -186,7 +186,7 @@ def create_pipeline(request):
                 mixer.save()
 
         # Create pipeline
-        pipeline = Pipeline.objects.create(
+        pipeline = CamillaDSPPipeline.objects.create(
             name=data['name'],
             description=data.get('description', ''),
             input_device=input_device,
@@ -214,7 +214,7 @@ def create_pipeline(request):
 def update_pipeline(request, pipeline_id):
     """Update an existing pipeline."""
     try:
-        pipeline = Pipeline.objects.get(id=pipeline_id)
+        pipeline = CamillaDSPPipeline.objects.get(id=pipeline_id)
         data = json.loads(request.body)
 
         # Update fields if provided
@@ -269,7 +269,7 @@ def update_pipeline(request, pipeline_id):
             'message': 'Pipeline updated successfully'
         })
 
-    except Pipeline.DoesNotExist:
+    except CamillaDSPPipeline.DoesNotExist:
         return JsonResponse({'error': 'Pipeline not found'}, status=404)
     except KnownAudioDevice.DoesNotExist:
         return JsonResponse({'error': 'Invalid device ID'}, status=400)
@@ -284,7 +284,7 @@ def update_pipeline(request, pipeline_id):
 def delete_pipeline(request, pipeline_id):
     """Delete a pipeline."""
     try:
-        pipeline = Pipeline.objects.get(id=pipeline_id)
+        pipeline = CamillaDSPPipeline.objects.get(id=pipeline_id)
 
         if pipeline.active:
             return JsonResponse(
@@ -295,7 +295,7 @@ def delete_pipeline(request, pipeline_id):
         pipeline.delete()
         return JsonResponse({'message': 'Pipeline deleted successfully'})
 
-    except Pipeline.DoesNotExist:
+    except CamillaDSPPipeline.DoesNotExist:
         return JsonResponse({'error': 'Pipeline not found'}, status=404)
     except Exception as e:
         logger.error(f"Error deleting pipeline: {e}", exc_info=True)
@@ -307,7 +307,7 @@ def delete_pipeline(request, pipeline_id):
 def activate_pipeline(request, pipeline_id):
     """Activate a pipeline."""
     try:
-        pipeline = Pipeline.objects.get(id=pipeline_id)
+        pipeline = CamillaDSPPipeline.objects.get(id=pipeline_id)
 
         if not pipeline.enabled:
             return JsonResponse({'error': 'Pipeline is not enabled'}, status=400)
@@ -325,7 +325,7 @@ def activate_pipeline(request, pipeline_id):
         else:
             return JsonResponse({'error': message}, status=400)
 
-    except Pipeline.DoesNotExist:
+    except CamillaDSPPipeline.DoesNotExist:
         return JsonResponse({'error': 'Pipeline not found'}, status=404)
     except Exception as e:
         logger.error(f"Error activating pipeline: {e}", exc_info=True)
@@ -337,7 +337,7 @@ def activate_pipeline(request, pipeline_id):
 def deactivate_pipeline(request, pipeline_id):
     """Deactivate a pipeline."""
     try:
-        pipeline = Pipeline.objects.get(id=pipeline_id)
+        pipeline = CamillaDSPPipeline.objects.get(id=pipeline_id)
 
         manager = CamillaDSPManager()
         success, message = manager.deactivate_pipeline(pipeline)
@@ -347,7 +347,7 @@ def deactivate_pipeline(request, pipeline_id):
         else:
             return JsonResponse({'error': message}, status=400)
 
-    except Pipeline.DoesNotExist:
+    except CamillaDSPPipeline.DoesNotExist:
         return JsonResponse({'error': 'Pipeline not found'}, status=404)
     except Exception as e:
         logger.error(f"Error deactivating pipeline: {e}", exc_info=True)

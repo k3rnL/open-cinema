@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from api.models.audio.pipeline.known_audio_device import KnownAudioDevice
 
 
-class Pipeline(models.Model):
+class CamillaDSPPipeline(models.Model):
     """Represents a CamillaDSP audio processing pipeline configuration."""
 
     name = models.CharField(max_length=255, unique=True, help_text="User-friendly pipeline name")

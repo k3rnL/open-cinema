@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from api.models import Pipeline
+from api.models import CamillaDSPPipeline
 from .config_builder import CamillaDSPConfigBuilder
 from .client import CamillaDSPClient
 
@@ -72,8 +72,8 @@ class CamillaDSPManager:
             pipeline.save()
 
             # Deactivate other pipelines
-            from api.models import Pipeline
-            Pipeline.objects.exclude(id=pipeline.id).update(active=False)
+            from api.models import CamillaDSPPipeline
+            CamillaDSPPipeline.objects.exclude(id=pipeline.id).update(active=False)
 
             logger.info(f"Successfully activated pipeline: {pipeline.name}")
             return True, f"Pipeline '{pipeline.name}' activated successfully"
@@ -108,8 +108,8 @@ class CamillaDSPManager:
         Returns:
             Pipeline instance or None
         """
-        from api.models import Pipeline
-        return Pipeline.objects.filter(active=True).first()
+        from api.models import CamillaDSPPipeline
+        return CamillaDSPPipeline.objects.filter(active=True).first()
 
     def get_status(self) -> dict:
         """
@@ -168,7 +168,7 @@ class CamillaDSPManager:
             logger.error(f"Error reloading config: {e}")
             return False, f"Error: {str(e)}"
 
-    def get_config_for_pipeline(self, pipeline: Pipeline) -> Optional[dict]:
+    def get_config_for_pipeline(self, pipeline: CamillaDSPPipeline) -> Optional[dict]:
         """
         Get the CamillaDSP configuration that would be generated for a pipeline.
 
