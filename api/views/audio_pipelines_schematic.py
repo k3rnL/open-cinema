@@ -5,11 +5,16 @@ from api.models.audio.pipeline.audio_pipeline_io_node import AudioPipelineIONode
 
 
 def field_to_json(field: Field):
+    if hasattr(field, 'choices') and field.choices is not None:
+        choices = [{'label': choice[0], 'value': choice[1]} for choice in field.choices]
+    else:
+        choices = []
+
     return {
         'name': field.name,
         'type': field.__class__.__name__,
         'help_text': field.help_text if hasattr(field, 'help_text') else None,
-        'choices': field.choices if hasattr(field, 'choices') else None,
+        'choices': choices,
         'nullable': field.null
     }
 

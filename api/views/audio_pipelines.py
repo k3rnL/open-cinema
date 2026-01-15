@@ -1,5 +1,7 @@
 import json
+from typing import Any
 
+from django.db.models.fields import Field
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -36,6 +38,62 @@ def list_pipelines(request):
 
     return JsonResponse(data, safe=False)
 
+def pipeline_to_json(pipeline: AudioPipeline) -> dict[str, Any]:
+    nodes = pipeline.audiopipelinenode_set.all()
+    node_ids = [n.id for n in nodes]
+    edges = AudioPipelineEdge.objects.filter(node_a__in=node_ids, node_b__in=node_ids).distinct().all()
+
+    # Get concrete subclass instances
+    concrete_nodes = [get_concrete_node(node) for node in nodes]
+
+    return {
+        'id': pipeline.id,
+        'name': pipeline.name,
+        'created_at': pipeline.created_at,
+        'updated_at': pipeline.updated_at,
+        'active': pipeline.active,
+        'nodes': [
+            {
+                'id': node.id,
+                'name': node.__class__.__name__,
+                'fields': get_fields_value(node, node._meta.local_fields)
+            }
+            for node in concrete_nodes
+        ],
+        'edges': [
+            {
+                'id': edge.id,
+                'node_a': edge.node_a.id,
+                'node_b': edge.node_b.id,
+            }
+            for edge in edges
+        ]
+    }
+
+def recursive_subclasses[T](cls: type[T]) -> set[type[T]]:
+    """
+    Recursively finds all subclasses of a given class.
+    """
+    return set.union({cls}, *map(recursive_subclasses, cls.__subclasses__()))
+
+def json_node_to_model(data_node) -> AudioPipelineNode:
+    class_name = data_node['name']
+    cls = next((cls for cls in recursive_subclasses(AudioPipelineNode) if cls.__name__ == class_name), None)
+    if cls is None:
+        raise Exception(f'Class {class_name} not found')
+
+    print(data_node)
+    node = cls()
+    # Use DB fields to map from the JSON value
+    fields = cls._meta.local_fields
+    for field in fields:
+        if '_ptr' in field.name:
+            continue
+        print(f'process field {field.name}, value {data_node["fields"][field.name]}')
+        if field.name in data_node['fields']:
+            setattr(node, field.name, data_node['fields'][field.name])
+
+    return node
 
 @require_http_methods(['POST'])
 def create_pipeline(request):
@@ -47,13 +105,14 @@ def create_pipeline(request):
 
     nodes = []
     for data_node in data['nodes']:
-        node = AudioPipelineNode()
-        node.pipeline = pipeline
-        node.kind = data_node['kind']
-        node.plugin = data_node['plugin']
-        node.parameters = data_node['parameters']
-        node.save()
-        nodes.append(node)
+        try:
+            node = json_node_to_model(data_node)
+            node.pipeline = pipeline
+            node.save()
+            nodes.append(node)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
 
     edges = []
     for data_edge in data['edges']:
@@ -63,26 +122,7 @@ def create_pipeline(request):
         edge.save()
         edges.append(edge)
 
-    return_data = {
-        'name': pipeline.name,
-        'nodes': [
-            {
-                'id': node.id,
-                'kind': node.kind,
-                'plugin': node.plugin,
-                'parameters': node.parameters,
-            }
-            for node in nodes
-        ],
-        'edges': [
-            {
-                'id': edge.id,
-                'node_a': edge.node_a.id,
-                'node_b': edge.node_b.id,
-            }
-            for edge in edges
-        ]
-    }
+    return_data = pipeline_to_json(pipeline)
 
     return JsonResponse(return_data, safe=False)
 
@@ -97,39 +137,37 @@ def pipeline(request, pipeline_id):
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
 
+def get_fields_value(node: AudioPipelineNode, fields: list[Field]) -> dict[str, Any]:
+    result = {}
+
+    for field in fields:
+        if '_ptr' in field.name:
+            continue
+        if field.is_relation:
+            value = getattr(node, field.name)
+            result[field.name] = getattr(value, field.remote_field.field_name)
+        else:
+            result[field.name] = getattr(node, field.name)
+
+    return result
+
+def get_concrete_node(node: AudioPipelineNode) -> AudioPipelineNode:
+    """Get the concrete subclass instance from a base AudioPipelineNode."""
+    # Find all subclass names by checking for related objects
+    for subclass in recursive_subclasses(AudioPipelineNode):
+        if subclass == AudioPipelineNode:
+            continue
+        # Get the related name (lowercase class name + '_ptr')
+        related_name = subclass.__name__.lower()
+        if hasattr(node, related_name):
+            return getattr(node, related_name)
+    return node
+
 @require_http_methods(['GET'])
 def get_pipeline(request, pipeline_id):
     pipeline = AudioPipeline.objects.get(id=pipeline_id)
-    nodes = pipeline.audiopipelinenode_set.all()
-    node_ids = [n.id for n in nodes]
-    edges = AudioPipelineEdge.objects.filter(node_a__in=node_ids, node_b__in=node_ids).distinct().all()
 
-    data = {
-        'id': pipeline.id,
-        'name': pipeline.name,
-        'created_at': pipeline.created_at,
-        'updated_at': pipeline.updated_at,
-        'active': pipeline.active,
-        'nodes': [
-            {
-                'id': node.id,
-                'kind': node.kind,
-                'plugin': node.plugin,
-                'parameters': node.parameters,
-            }
-            for node in nodes
-        ],
-        'edges': [
-            {
-                'id': edge.id,
-                'node_a': edge.node_a.id,
-                'node_b': edge.node_b.id,
-            }
-            for edge in edges
-        ]
-    }
-
-    return JsonResponse(data, safe=False)
+    return JsonResponse(pipeline_to_json(pipeline), safe=False)
 
 
 @require_http_methods(['PATCH'])
@@ -143,13 +181,14 @@ def update_pipeline(request, pipeline_id):
     AudioPipelineNode.objects.filter(pipeline=pipeline).delete()
     nodes = []
     for data_node in data['nodes']:
-        node = AudioPipelineNode()
-        node.pipeline = pipeline
-        node.kind = data_node['kind']
-        node.plugin = data_node['plugin']
-        node.parameters = data_node['parameters']
-        node.save()
-        nodes.append(node)
+        try:
+            node = json_node_to_model(data_node)
+            node.pipeline = pipeline
+            node.save()
+            nodes.append(node)
+        except Exception as e:
+            print(e)
+            return JsonResponse({'error': str(e)}, status=400)
 
     edges = []
     for data_edge in data['edges']:
@@ -159,25 +198,4 @@ def update_pipeline(request, pipeline_id):
         edge.save()
         edges.append(edge)
 
-    return_data = {
-        'name': pipeline.name,
-        'nodes': [
-            {
-                'id': node.id,
-                'kind': node.kind,
-                'plugin': node.plugin,
-                'parameters': node.parameters,
-            }
-            for node in nodes
-        ],
-        'edges': [
-            {
-                'id': edge.id,
-                'node_a': edge.node_a.id,
-                'node_b': edge.node_b.id,
-            }
-            for edge in edges
-        ]
-    }
-
-    return JsonResponse(return_data, safe=False)
+    return JsonResponse(pipeline_to_json(pipeline), safe=False)
