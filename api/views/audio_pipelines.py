@@ -1,6 +1,8 @@
 import json
 from typing import Any
 
+from django.apps import apps
+from django.db import models
 from django.db.models.fields import Field
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -76,22 +78,33 @@ def recursive_subclasses[T](cls: type[T]) -> set[type[T]]:
     """
     return set.union({cls}, *map(recursive_subclasses, cls.__subclasses__()))
 
+def find_model_by_name(name: str) -> type[models.Model] | None:
+    for model in apps.get_models():
+        if model.__name__ == name:
+            return model
+    return None
+
 def json_node_to_model(data_node) -> AudioPipelineNode:
     class_name = data_node['name']
-    cls = next((cls for cls in recursive_subclasses(AudioPipelineNode) if cls.__name__ == class_name), None)
-    if cls is None:
-        raise Exception(f'Class {class_name} not found')
 
-    print(data_node)
+    # Search through all registered models to find the matching class
+    cls = find_model_by_name(class_name)
+
+    if cls is None:
+        raise Exception(f'Class {class_name} not found in registered Django models')
+
     node = cls()
     # Use DB fields to map from the JSON value
     fields = cls._meta.local_fields
     for field in fields:
         if '_ptr' in field.name:
             continue
-        print(f'process field {field.name}, value {data_node["fields"][field.name]}')
         if field.name in data_node['fields']:
-            setattr(node, field.name, data_node['fields'][field.name])
+            if field.is_relation:
+                relation_instance = field.remote_field.model.objects.get(id=data_node['fields'][field.name])
+                setattr(node, field.name, relation_instance)
+            else:
+                setattr(node, field.name, data_node['fields'][field.name])
 
     return node
 
@@ -187,7 +200,6 @@ def update_pipeline(request, pipeline_id):
             node.save()
             nodes.append(node)
         except Exception as e:
-            print(e)
             return JsonResponse({'error': str(e)}, status=400)
 
     edges = []
