@@ -9,12 +9,6 @@ from api.models.audio.pipeline.audio_pipeline_io_node import AudioPipelineIONode
 from api.models.audio.pipeline.audio_pipeline_processing_node import AudioPipelineProcessingNode
 from api.views.audio_pipelines import find_model_by_name
 
-def relation_to_json(field: Field):
-    return {
-        'name': field.name,
-        'type': field.__class__.__name__,
-        'to': field.related_model.__name__
-    }
 
 def field_to_json(field: Field):
     if hasattr(field, 'choices') and field.choices is not None:

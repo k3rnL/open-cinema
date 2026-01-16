@@ -68,12 +68,10 @@ def get_node(request, pipeline_id, node_id):
 @require_http_methods(["PATCH", "PUT"])
 def update_node(request, pipeline_id, node_id):
     node_json = json.loads(request.body)
-    cls = find_model_by_name(node_json['name'])
+    cls = find_model_by_name(node_json['type_name'])
     node_model = cls.objects.get(id=node_id)
 
-    print(node_json)
     fill_model_from_json(node_model, node_json)
-    print(node_model.server)
     node_model.save()
 
     data = node_to_json(node_model)
