@@ -29,6 +29,13 @@ class Slot:
 
 class AudioPipelineNode(models.Model):
 
+    type_name = models.CharField(
+        max_length=255,
+        default=None,
+        null=False,
+        help_text="The type of the node, e.g. 'AudioProcessor'"
+    )
+
     pipeline = models.ForeignKey(AudioPipeline, on_delete=models.CASCADE)
 
     created_at = models.DateTimeField(auto_now_add=True)
