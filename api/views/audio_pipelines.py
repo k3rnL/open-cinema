@@ -207,25 +207,40 @@ def update_pipeline(request, pipeline_id):
     if 'name' in data:
         pipeline.name = data['name']
 
-    AudioPipelineNode.objects.filter(pipeline=pipeline).delete()
-    nodes = []
+    nodes: list[AudioPipelineNode] = []
     for data_node in data['nodes']:
         try:
-            node = json_node_to_model(data_node)
-            node.pipeline = pipeline
-            node.save()
-            nodes.append(node)
+            if 'id' in data_node and data_node['id'] >= 0:
+                # update existing node
+                node_id = data_node['id']
+                cls = find_model_by_name(data_node['type_name'])
+                node = cls.objects.get(id=node_id)
+
+                fill_model_from_json(node, data_node)
+                node.save()
+                nodes.append(node)
+            else:
+                # create node
+                node = json_node_to_model(data_node)
+                node.pipeline = pipeline
+                node.save()
+                nodes.append(node)
         except ReferenceError as e:
             print(e)
             return JsonResponse({'error': str(e)}, status=400)
+        except models.ObjectDoesNotExist as e:
+            return JsonResponse({'error': f"Could not update node of type {data_node['type_name']}, id {data_node['id']} not found"}, status=400)
         except Exception as e:
             return JsonResponse({'error': f'{e.__class__.__name__}: {e}'}, status=500)
 
+    # reset all edges and apply those from data
+    node_ids = [node.id for node in nodes]
+    AudioPipelineEdge.objects.filter(node_a_id__in=node_ids, node_b_id__in=node_ids).delete()
     edges = []
     for data_edge in data['edges']:
         edge = AudioPipelineEdge()
-        edge.node_a = nodes[data_edge['node_a']]
-        edge.node_b = nodes[data_edge['node_b']]
+        edge.node_a_id = data_edge['node_a']
+        edge.node_b_id = data_edge['node_b']
         edge.save()
         edges.append(edge)
 

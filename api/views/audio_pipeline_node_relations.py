@@ -28,5 +28,5 @@ def list_relations(request, type_name: str, field_name: str):
             field = f
             break
 
-    values = [model_to_dict(m)for m in field.remote_field.model.objects.all()]
+    values = [model_to_dict(m) for m in field.remote_field.model.objects.all()]
     return JsonResponse(data=values, safe=False)
