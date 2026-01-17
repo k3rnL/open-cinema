@@ -1,0 +1,26 @@
+from django.http import JsonResponse
+
+from api.models.audio.audio_pipeline import AudioPipeline
+from core.audio.pipeline.pipeline_graph import AudioPipelineGraph
+
+
+def validate_audio_pipeline(request, pipeline_id):
+    pipeline = AudioPipeline.objects.get(id=pipeline_id)
+    pipeline_graph = AudioPipelineGraph(pipeline)
+
+    validation = pipeline_graph.validate()
+
+    data = {
+        'valid': validation.valid(),
+        'nodes': [
+            {
+                'id': node.node,
+                'error': node.error,
+                'fields': node.fields,
+                'slots': node.slots,
+                'valid': node.valid()
+            } for node in validation.nodes
+        ]
+    }
+
+    return JsonResponse(data, status=200)

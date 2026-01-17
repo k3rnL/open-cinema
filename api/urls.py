@@ -2,6 +2,7 @@ from django.urls import path, include
 
 import api.views.audio_devices
 import api.views.audio_pipelines
+import api.views.audio_pipeline_validation
 import api.views.audio_pipeline_nodes
 import api.views.audio_pipeline_node_relations
 import api.views.audio_pipelines_schematic
@@ -25,6 +26,7 @@ urlpatterns = [
 
     path("pipelines", api.views.audio_pipelines.AudioPipelineList.as_view(), name="pipelines"),
     path("pipelines/<int:pipeline_id>", api.views.audio_pipelines.AudioPipelineDetail.as_view(), name="pipeline"),
+    path("pipelines/<int:pipeline_id>/validate", api.views.audio_pipeline_validation.validate_audio_pipeline, name="pipeline"),
     path("pipelines/<int:pipeline_id>/nodes", api.views.audio_pipeline_nodes.AudioPipelineNodeList.as_view(), name="pipeline_nodes"),
     path("pipelines/<int:pipeline_id>/nodes/<int:node_id>", api.views.audio_pipeline_nodes.AudioPipelineNodeDetail.as_view(), name="pipeline_node"),
 

@@ -153,7 +153,6 @@ class AudioPipelineDetail(APIView):
 
     def patch(self, request, pipeline_id):
         data = json.loads(request.body)
-
         serializer = PipelineSerializer(data=data, partial=True)
         if not serializer.is_valid():
             return JsonResponse({'errors': serializer.errors}, status=400)

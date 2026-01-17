@@ -14,7 +14,7 @@ from api.models import AudioPipelineNode
 
 
 class NodeSerializer(serializers.Serializer):
-    id = serializers.IntegerField(required=False, read_only=True)
+    id = serializers.IntegerField(required=False)
     type_name = serializers.CharField(required=True, max_length=255)
     fields = serializers.DictField(
         child=serializers.JSONField(allow_null=True),
@@ -32,23 +32,75 @@ class NodeSerializer(serializers.Serializer):
         return value
 
     def validate(self, data):
-        """Validate that required fields for the specific node type are present."""
+        """Validate field types if present for the specific node type."""
         type_name = data.get('type_name')
         fields_data = data.get('fields', {})
 
-        if type_name:
+        if type_name and fields_data:
             cls = find_model_by_name(type_name)
             if cls:
-                # Get required fields for this model (only for new nodes)
-                if 'id' not in data:
-                    for field in cls._meta.local_fields:
-                        if '_ptr' in field.name:
-                            continue
-                        if not field.null and not field.blank and field.default == models.NOT_PROVIDED:
-                            if field.name not in fields_data and field.name not in ['id', 'type_name']:
+                # Validate fields presence
+                for field in cls._meta.local_fields:
+                    if '_ptr' in field.name:
+                        continue
+                    if not field.null and not field.blank and field.default == models.NOT_PROVIDED:
+                        if field.name not in fields_data and field.name not in ['id', 'type_name']:
+                            raise serializers.ValidationError(
+                                f'Field "{field.name}" is required for type {type_name}'
+                            )
+                # Validate types of provided fields
+                for field_name, field_value in fields_data.items():
+                    try:
+                        field = cls._meta.get_field(field_name)
+
+                        # Skip validation if value is None and field allows null
+                        if field_value is None:
+                            if not field.null:
                                 raise serializers.ValidationError(
-                                    f'Field "{field.name}" is required for type {type_name}'
+                                    f'Field "{field_name}" does not allow null values'
                                 )
+                            continue
+
+                        # Type validation based on field type
+                        if isinstance(field, models.IntegerField):
+                            if not isinstance(field_value, int):
+                                raise serializers.ValidationError(
+                                    f'Field "{field_name}" must be an integer, got {type(field_value).__name__}'
+                                )
+                        elif isinstance(field, models.FloatField):
+                            if not isinstance(field_value, (int, float)):
+                                raise serializers.ValidationError(
+                                    f'Field "{field_name}" must be a number, got {type(field_value).__name__}'
+                                )
+                        elif isinstance(field, models.BooleanField):
+                            if not isinstance(field_value, bool):
+                                raise serializers.ValidationError(
+                                    f'Field "{field_name}" must be a boolean, got {type(field_value).__name__}'
+                                )
+                        elif isinstance(field, (models.CharField, models.TextField)):
+                            if not isinstance(field_value, str):
+                                raise serializers.ValidationError(
+                                    f'Field "{field_name}" must be a string, got {type(field_value).__name__}'
+                                )
+                            # Check max_length for CharField
+                            if isinstance(field, models.CharField) and field.max_length:
+                                if len(field_value) > field.max_length:
+                                    raise serializers.ValidationError(
+                                        f'Field "{field_name}" max length is {field.max_length}, got {len(field_value)}'
+                                    )
+                        elif field.is_relation:
+                            # For foreign keys, check if the ID is an integer
+                            if not isinstance(field_value, int):
+                                raise serializers.ValidationError(
+                                    f'Field "{field_name}" (foreign key) must be an integer ID, got {type(field_value).__name__}'
+                                )
+
+                    except Exception as e:
+                        if isinstance(e, serializers.ValidationError):
+                            raise
+                        raise serializers.ValidationError(
+                            f'Field "{field_name}" does not exist for type {type_name}'
+                        )
 
         return data
 
