@@ -12,10 +12,11 @@ def validate_audio_pipeline(request, pipeline_id):
 
     data = {
         'valid': validation.valid(),
+        'errors': validation.graph_errors,
         'nodes': [
             {
                 'id': node.node,
-                'error': node.error,
+                'errors': node.errors,
                 'fields': node.fields,
                 'slots': node.slots,
                 'valid': node.valid()

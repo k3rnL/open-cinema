@@ -1,6 +1,6 @@
 from typing import NamedTuple, TYPE_CHECKING
 
-from core.audio.pipeline.validation_result import ValidationResult
+from core.audio.pipeline.validation_result import ValidationResult, ValidationResultNode
 from core.utils.graph import GraphEdge, Graph, GraphNode
 
 if TYPE_CHECKING:
@@ -66,11 +66,22 @@ class AudioPipelineGraph(Graph['AudioPipelineNode', EdgeSlots]):
                 edge.to_node.incoming.append(edge)
 
     def validate(self) -> ValidationResult:
-        node_validations = []
+        node_validations: dict[int, ValidationResultNode] = {}
         for node in self.nodes:
             real_node = node.data
             validation_result = real_node.validate(node, self)
             if validation_result is not None:
-                node_validations.append(validation_result)
+                node_validations[validation_result.node] = validation_result
 
-        return ValidationResult(node_validations)
+        graph_errors: list[str] = []
+        if len(self.get_roots()) > 1:
+            graph_errors.append("Pipeline must have exactly one root node")
+            for root in self.get_roots():
+                node_validation = node_validations[root.data.id] if root.data.id in node_validations else ValidationResultNode(root.data.id, [], {}, {})
+                if len(root.incoming) == 0 and len(root.outgoing) == 0:
+                    node_validation.errors.append("This node is orphaned")
+                else:
+                    node_validation.errors.append("Pipeline must have exactly one root node")
+                node_validations[root.data.id] = node_validation
+
+        return ValidationResult(list(node_validations.values()), graph_errors)

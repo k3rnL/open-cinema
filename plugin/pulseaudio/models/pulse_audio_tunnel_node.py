@@ -63,6 +63,4 @@ class PulseAudioTunnelNode(AudioPipelineIONode):
         if self.mode == 'SINK' or self.mode == 'sink' and self.sink is None:
             field_errors['sink'] = 'Sink must be specified when mode is sink'
 
-        return ValidationResultNode(self.id, None, field_errors, {}) if len(field_errors) > 0 else None
-
-
+        return ValidationResultNode(self.id, [], field_errors, {}) if len(field_errors) > 0 else None

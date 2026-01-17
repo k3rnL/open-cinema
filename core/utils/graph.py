@@ -65,3 +65,24 @@ class Graph(Generic[T, V]):
                 if edge not in seen_edges:
                     self.edges.append(edge)
                     seen_edges.add(edge)
+
+    def has_cycle(self) -> bool:
+        """
+        Checks if the graph contains a cycle by performing a depth-first search.
+        Returns True if a cycle is detected, False otherwise.
+        """
+        visited: set[GraphNode[T, V]] = set()
+        stack: list[GraphNode[T, V]] = [self.nodes[0]]
+        while stack:
+            node: GraphNode[T, V] = stack.pop()
+            if node in visited:
+                return True
+            visited.add(node)
+            stack.extend([e.to_node for e in node.outgoing])
+        return False
+
+    def get_roots(self) -> list[GraphNode[T, V]]:
+        """
+        Returns a list of root nodes in the graph, i.e., nodes with no incoming edges.
+        """
+        return [node for node in self.nodes if not node.incoming]
