@@ -23,10 +23,10 @@ urlpatterns = [
     path("devices/discover", api.views.audio_devices.discover_devices, name="discover_devices"),
     path("devices/update", api.views.device_discovery.trigger_discovery, name="trigger_discovery"),
 
-    path("pipelines", api.views.audio_pipelines.pipelines, name="pipelines"),
-    path("pipelines/<int:pipeline_id>", api.views.audio_pipelines.pipeline, name="pipeline"),
-    path("pipelines/<int:pipeline_id>/nodes", api.views.audio_pipeline_nodes.nodes, name="pipeline_nodes"),
-    path("pipelines/<int:pipeline_id>/nodes/<int:node_id>", api.views.audio_pipeline_nodes.node, name="pipeline_node"),
+    path("pipelines", api.views.audio_pipelines.AudioPipelineList.as_view(), name="pipelines"),
+    path("pipelines/<int:pipeline_id>", api.views.audio_pipelines.AudioPipelineDetail.as_view(), name="pipeline"),
+    path("pipelines/<int:pipeline_id>/nodes", api.views.audio_pipeline_nodes.AudioPipelineNodeList.as_view(), name="pipeline_nodes"),
+    path("pipelines/<int:pipeline_id>/nodes/<int:node_id>", api.views.audio_pipeline_nodes.AudioPipelineNodeDetail.as_view(), name="pipeline_node"),
 
     path("pipelines/schematics", api.views.audio_pipelines_schematic.get_pipeline_schematics, name="pipeline_schematics"),
     path("pipelines/schematics/<str:type_name>/<str:field_name>", api.views.audio_pipeline_node_relations.node_relations, name="pipeline_node_relations"),

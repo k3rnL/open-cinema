@@ -41,6 +41,7 @@ ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS')
 
 INSTALLED_APPS = [
     'corsheaders',
+    'rest_framework',
     'api.apps.ApiConfig',
     'plugin.counter',  # Example plugin with models
     'django.contrib.admin',

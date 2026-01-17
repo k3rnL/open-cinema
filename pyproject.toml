@@ -33,6 +33,7 @@ dependencies = [
     "pyalsaaudio>=0.11.0",
     "camilladsp@git+https://github.com/HEnquist/pycamilladsp.git@v3.0.0",
     "django-enum>=2.3.0",
+    "djangorestframework>=3.16.1",
 ]
 
 [project.optional-dependencies]

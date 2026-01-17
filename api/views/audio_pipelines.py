@@ -3,59 +3,93 @@ from typing import Any
 
 from django.apps import apps
 from django.db import models
-from django.db.models import Model
 from django.db.models.fields import Field
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
+from rest_framework import serializers
+from rest_framework.views import APIView
 
 from api.models.audio.audio_pipeline import AudioPipeline
 from api.models.audio.pipeline.audio_pipeline_edge import AudioPipelineEdge
 from api.models.audio.pipeline.audio_pipeline_node import AudioPipelineNode
 from api.models.audio.pipeline.audio_pipeline_node_slot import AudioPipelineNodeSlot
+from api.views.audio_pipeline_nodes import NodeSerializer, node_to_json, get_concrete_node, update_slots, \
+    json_node_to_model, find_model_by_name, fill_model_from_json
 
 
-@csrf_exempt
-def pipelines(request):
+# Serializers
+class SlotSerializer(serializers.Serializer):
+    name = serializers.CharField(required=True, max_length=255)
+    node = serializers.IntegerField(required=True)
+
+
+class EdgeSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=False, read_only=True)
+    slot_a = SlotSerializer(required=True)
+    slot_b = SlotSerializer(required=True)
+
+
+class PipelineSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=False, read_only=True)
+    name = serializers.CharField(required=True, max_length=255)
+    nodes = NodeSerializer(many=True, required=False, default=list)
+    edges = EdgeSerializer(many=True, required=False, default=list)
+    active = serializers.BooleanField(required=False)
+
+
+class AudioPipelineList(APIView):
     """Handle GET (list) and POST (create) for pipelines collection."""
-    if request.method == "GET":
-        return list_pipelines(request)
-    elif request.method == "POST":
-        return create_pipeline(request)
-    else:
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
 
+    def get(self, request):
+        pipelines = AudioPipeline.objects.all()
 
-@require_http_methods(['GET'])
-def list_pipelines(request):
-    pipelines = AudioPipeline.objects.all()
+        data = [
+            {
+                'id': pipeline.id,
+                'name': pipeline.name,
+                'created_at': pipeline.created_at,
+                'updated_at': pipeline.updated_at,
+                'active': pipeline.active,
+            } for pipeline in pipelines
+        ]
 
-    data = [
-        {
-            'id': pipeline.id,
-            'name': pipeline.name,
-            'created_at': pipeline.created_at,
-            'updated_at': pipeline.updated_at,
-            'active': pipeline.active,
-        } for pipeline in pipelines
-    ]
+        return JsonResponse(data, safe=False)
 
-    return JsonResponse(data, safe=False)
+    def post(self, request):
+        data = json.loads(request.body)
 
+        serializer = PipelineSerializer(data=data)
+        if not serializer.is_valid():
+            return JsonResponse({'errors': serializer.errors}, status=400)
 
-def node_to_json(node: AudioPipelineNode) -> dict[str, Any]:
-    return {
-        'id': node.id,
-        'type_name': node.__class__.__name__,
-        'slots': [slot.to_dict() for slot in node.slots.all()],
-        'fields': get_fields_value(node, node._meta.local_fields)
-    }
+        validated = serializer.validated_data
+
+        pipeline = AudioPipeline()
+        pipeline.name = validated['name']
+        pipeline.save()
+
+        nodes = []
+        for data_node in validated.get('nodes', []):
+            try:
+                node = json_node_to_model(data_node)
+                node.pipeline = pipeline
+                node.save()
+                nodes.append(node)
+                update_slots(node)
+            except Exception as e:
+                return JsonResponse({'error': str(e)}, status=400)
+
+        update_edges(nodes, validated.get('edges', []))
+
+        return_data = pipeline_to_json(pipeline)
+
+        return JsonResponse(return_data, safe=False)
 
 
 def pipeline_to_json(pipeline: AudioPipeline) -> dict[str, Any]:
     nodes = pipeline.audiopipelinenode_set.all()
     node_ids = [n.id for n in nodes]
-    edges = AudioPipelineEdge.objects.filter(slot_a__node_id__in=node_ids, slot_b__node_id__in=node_ids).distinct().all()
+    edges = AudioPipelineEdge.objects.filter(slot_a__node_id__in=node_ids,
+                                             slot_b__node_id__in=node_ids).distinct().all()
 
     # Get concrete subclass instances
     concrete_nodes = [get_concrete_node(node) for node in nodes]
@@ -77,49 +111,6 @@ def pipeline_to_json(pipeline: AudioPipeline) -> dict[str, Any]:
         ]
     }
 
-
-def recursive_subclasses[T](cls: type[T]) -> set[type[T]]:
-    """
-    Recursively finds all subclasses of a given class.
-    """
-    return set.union({cls}, *map(recursive_subclasses, cls.__subclasses__()))
-
-
-def find_model_by_name(name: str) -> type[AudioPipelineNode] | None:
-    for model in apps.get_models():
-        if model.__name__ == name:
-            return model
-    return None
-
-def fill_model_from_json(node: AudioPipelineNode, data: dict[str, Any]) -> None:
-    fields = node._meta.local_fields
-    for field in fields:
-        if '_ptr' in field.name:
-            continue
-        if field.name in data['fields']:
-            if field.is_relation:
-                try:
-                    relation_instance = field.remote_field.model.objects.get(id=data['fields'][field.name])
-                    setattr(node, field.name, relation_instance)
-                except field.remote_field.model.DoesNotExist:
-                    raise ReferenceError(
-                        f'Relation {field.name} with ID {data["fields"][field.name]} does not exist')
-            else:
-                setattr(node, field.name, data['fields'][field.name])
-
-def update_slots(node: AudioPipelineNode) -> None:
-    slots = {s.name: s for s in node.get_dynamic_slots_schematics()}
-    existing_slots = {s.name: s for s in node.slots.all()}
-
-    # Delete slots that are not in the generated list
-    for slot in existing_slots.values():
-        if slot.name not in slots:
-            slot.delete()
-
-    # Add slots that are not in the database yet
-    for slot in slots.values():
-        if slot.name not in existing_slots:
-            slot.save()
 
 def update_edges(nodes: list[AudioPipelineNode], edges) -> None:
     node_ids = [node.id for node in nodes]
@@ -146,137 +137,65 @@ def update_edges(nodes: list[AudioPipelineNode], edges) -> None:
             slot_a_data = data_edge['slot_a']
             slot_b_data = data_edge['slot_b']
             if (slot_a_data['name'] == edge.slot_a.name and slot_b_data['name'] == edge.slot_b.name
-                         or slot_b_data['name'] == edge.slot_a.name and slot_a_data['name'] == edge.slot_b.name):
+                    or slot_b_data['name'] == edge.slot_a.name and slot_a_data['name'] == edge.slot_b.name):
                 found = True
                 break
         if not found:
             edge.delete()
 
-def json_node_to_model(data_node) -> AudioPipelineNode:
-    class_name = data_node['type_name']
 
-    # Search through all registered models to find the matching class
-    cls = find_model_by_name(class_name)
+class AudioPipelineDetail(APIView):
+    """Handle GET, PATCH for pipeline item."""
 
-    if cls is None:
-        raise ReferenceError(f'Class {class_name} not found in registered Django models')
+    def get(self, request, pipeline_id):
+        pipeline = AudioPipeline.objects.get(id=pipeline_id)
+        return JsonResponse(pipeline_to_json(pipeline), safe=False)
 
-    node = cls()
-    node.type_name = class_name
-    fill_model_from_json(node, data_node)
+    def patch(self, request, pipeline_id):
+        data = json.loads(request.body)
 
-    return node
+        serializer = PipelineSerializer(data=data, partial=True)
+        if not serializer.is_valid():
+            return JsonResponse({'errors': serializer.errors}, status=400)
 
+        validated = serializer.validated_data
 
-@require_http_methods(['POST'])
-def create_pipeline(request):
-    data = json.loads(request.body)
+        pipeline = AudioPipeline.objects.get(id=pipeline_id)
+        if 'name' in validated:
+            pipeline.name = validated['name']
 
-    pipeline = AudioPipeline()
-    pipeline.name = data['name']
-    pipeline.save()
+        nodes: list[AudioPipelineNode] = []
+        for data_node in validated.get('nodes', []):
+            try:
+                if 'id' in data_node and data_node['id'] >= 0:
+                    # update existing node
+                    node_id = data_node['id']
+                    cls = find_model_by_name(data_node['type_name'])
+                    node = cls.objects.get(id=node_id)
 
-    nodes = []
-    for data_node in data['nodes']:
-        try:
-            node = json_node_to_model(data_node)
-            node.pipeline = pipeline
-            node.save()
-            nodes.append(node)
-            update_slots(node)
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=400)
+                    fill_model_from_json(node, data_node)
+                    node.save()
+                    nodes.append(node)
+                else:
+                    # create node
+                    node = json_node_to_model(data_node)
+                    node.pipeline = pipeline
+                    node.save()
+                    nodes.append(node)
 
-    update_edges(nodes, data['edges'])
+                update_slots(node)
+            except ReferenceError as e:
+                print(e)
+                return JsonResponse({'error': str(e)}, status=400)
+            except models.ObjectDoesNotExist as e:
+                return JsonResponse(
+                    {'error': f"Could not update node of type {data_node['type_name']}, id {data_node['id']} not found"},
+                    status=400)
+            except Exception as e:
+                return JsonResponse({'error': f'{e.__class__.__name__}: {e}'}, status=500)
 
-    return_data = pipeline_to_json(pipeline)
+        # remove unused edges and apply those from data
+        update_edges(nodes, validated.get('edges', []))
 
-    return JsonResponse(return_data, safe=False)
+        return JsonResponse(pipeline_to_json(pipeline), safe=False)
 
-
-def pipeline(request, pipeline_id):
-    """Handle GET (list) and POST (create) for pipeline item."""
-    if request.method == "GET":
-        return get_pipeline(request, pipeline_id)
-    elif request.method == "PATCH":
-        return update_pipeline(request, pipeline_id)
-    else:
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
-
-
-def get_fields_value(node: AudioPipelineNode, fields: list[Field]) -> dict[str, Any]:
-    result = {}
-
-    for field in fields:
-        if '_ptr' in field.name:
-            continue
-        if field.is_relation:
-            value = getattr(node, field.name)
-            if value is not None:
-                result[field.name] = getattr(value, field.remote_field.field_name)
-        else:
-            result[field.name] = getattr(node, field.name)
-
-    return result
-
-
-def get_concrete_node(node: AudioPipelineNode) -> AudioPipelineNode:
-    """Get the concrete subclass instance from a base AudioPipelineNode."""
-    # Find all subclass names by checking for related objects
-    for subclass in recursive_subclasses(AudioPipelineNode):
-        if subclass == AudioPipelineNode:
-            continue
-        # Get the related name (lowercase class name + '_ptr')
-        related_name = subclass.__name__.lower()
-        if hasattr(node, related_name):
-            return getattr(node, related_name)
-    return node
-
-
-@require_http_methods(['GET'])
-def get_pipeline(request, pipeline_id):
-    pipeline = AudioPipeline.objects.get(id=pipeline_id)
-
-    return JsonResponse(pipeline_to_json(pipeline), safe=False)
-
-
-@require_http_methods(['PATCH'])
-def update_pipeline(request, pipeline_id):
-    data = json.loads(request.body)
-
-    pipeline = AudioPipeline.objects.get(id=pipeline_id)
-    if 'name' in data:
-        pipeline.name = data['name']
-
-    nodes: list[AudioPipelineNode] = []
-    for data_node in data['nodes']:
-        try:
-            if 'id' in data_node and data_node['id'] >= 0:
-                # update existing node
-                node_id = data_node['id']
-                cls = find_model_by_name(data_node['type_name'])
-                node = cls.objects.get(id=node_id)
-
-                fill_model_from_json(node, data_node)
-                node.save()
-                nodes.append(node)
-            else:
-                # create node
-                node = json_node_to_model(data_node)
-                node.pipeline = pipeline
-                node.save()
-                nodes.append(node)
-
-            update_slots(node)
-        except ReferenceError as e:
-            print(e)
-            return JsonResponse({'error': str(e)}, status=400)
-        except models.ObjectDoesNotExist as e:
-            return JsonResponse({'error': f"Could not update node of type {data_node['type_name']}, id {data_node['id']} not found"}, status=400)
-        except Exception as e:
-            return JsonResponse({'error': f'{e.__class__.__name__}: {e}'}, status=500)
-
-    # remove unused edges and apply those from data
-    update_edges(nodes, data['edges'])
-
-    return JsonResponse(pipeline_to_json(pipeline), safe=False)
