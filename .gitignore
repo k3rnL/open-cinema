@@ -1,0 +1,83 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+.venv2/
+venv/
+env/
+
+# Type checking
+.mypy_cache/
+
+# =========================
+# Django
+# =========================
+*.log
+local_settings.py
+
+# SQLite database (dev only)
+db.sqlite3
+
+# Django static & media (if collected locally)
+staticfiles/
+media/
+
+# Django migrations cache
+*/migrations/__pycache__/
+
+# =========================
+# Packaging / build
+# =========================
+build/
+dist/
+*.egg-info/
+open_cinema.egg-info/
+
+# =========================
+# Dependency tools
+# =========================
+.uv/
+
+# =========================
+# Editors / IDEs
+# =========================
+
+# JetBrains (PyCharm / IntelliJ)
+.idea/
+
+# VS Code
+.vscode/
+
+# =========================
+# OS junk
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Testing / coverage
+# =========================
+.coverage
+htmlcov/
+.pytest_cache/
+
+# =========================
+# Ansible
+# =========================
+*.retry
+
+# =========================
+# Git
+# =========================
+*.orig
+
+# =========================
+# Environment / secrets
+# =========================
+.env
+.env.*
