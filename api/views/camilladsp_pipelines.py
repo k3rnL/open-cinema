@@ -312,7 +312,6 @@ def activate_pipeline(request, pipeline_id):
         if not pipeline.enabled:
             return JsonResponse({'error': 'Pipeline is not enabled'}, status=400)
 
-        print(pipeline)
         manager = CamillaDSPManager()
         success, message = manager.activate_pipeline(pipeline)
 

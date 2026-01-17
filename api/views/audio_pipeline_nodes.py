@@ -4,7 +4,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from api.models import AudioPipelineNode
-from api.views.audio_pipelines import node_to_json, json_node_to_model, fill_model_from_json, find_model_by_name
+from api.views.audio_pipelines import node_to_json, json_node_to_model, fill_model_from_json, find_model_by_name, \
+    update_slots
 
 
 @csrf_exempt
@@ -46,6 +47,7 @@ def create_node(request, pipeline_id):
 
     node_model.pipeline_id = pipeline_id
     node_model.save()
+    update_slots(node_model)
 
     data = node_to_json(node_model)
 
@@ -72,7 +74,9 @@ def update_node(request, pipeline_id, node_id):
     node_model = cls.objects.get(id=node_id)
 
     fill_model_from_json(node_model, node_json)
+
     node_model.save()
+    update_slots(node_model)
 
     data = node_to_json(node_model)
 

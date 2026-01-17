@@ -12,6 +12,7 @@ from django.views.decorators.http import require_http_methods
 from api.models.audio.audio_pipeline import AudioPipeline
 from api.models.audio.pipeline.audio_pipeline_edge import AudioPipelineEdge
 from api.models.audio.pipeline.audio_pipeline_node import AudioPipelineNode
+from api.models.audio.pipeline.audio_pipeline_node_slot import AudioPipelineNodeSlot
 
 
 @csrf_exempt
@@ -46,7 +47,7 @@ def node_to_json(node: AudioPipelineNode) -> dict[str, Any]:
     return {
         'id': node.id,
         'type_name': node.__class__.__name__,
-        'dynamic_slots_schematics': [slot.to_dict() for slot in node.get_dynamic_slots_schematics()],
+        'slots': [slot.to_dict() for slot in node.slots.all()],
         'fields': get_fields_value(node, node._meta.local_fields)
     }
 
@@ -54,7 +55,7 @@ def node_to_json(node: AudioPipelineNode) -> dict[str, Any]:
 def pipeline_to_json(pipeline: AudioPipeline) -> dict[str, Any]:
     nodes = pipeline.audiopipelinenode_set.all()
     node_ids = [n.id for n in nodes]
-    edges = AudioPipelineEdge.objects.filter(node_a__in=node_ids, node_b__in=node_ids).distinct().all()
+    edges = AudioPipelineEdge.objects.filter(slot_a__node_id__in=node_ids, slot_b__node_id__in=node_ids).distinct().all()
 
     # Get concrete subclass instances
     concrete_nodes = [get_concrete_node(node) for node in nodes]
@@ -69,8 +70,8 @@ def pipeline_to_json(pipeline: AudioPipeline) -> dict[str, Any]:
         'edges': [
             {
                 'id': edge.id,
-                'node_a': edge.node_a.id,
-                'node_b': edge.node_b.id,
+                'slot_a': edge.slot_a.to_dict(),
+                'slot_b': edge.slot_b.to_dict(),
             }
             for edge in edges
         ]
@@ -106,6 +107,51 @@ def fill_model_from_json(node: AudioPipelineNode, data: dict[str, Any]) -> None:
             else:
                 setattr(node, field.name, data['fields'][field.name])
 
+def update_slots(node: AudioPipelineNode) -> None:
+    slots = {s.name: s for s in node.get_dynamic_slots_schematics()}
+    existing_slots = {s.name: s for s in node.slots.all()}
+
+    # Delete slots that are not in the generated list
+    for slot in existing_slots.values():
+        if slot.name not in slots:
+            slot.delete()
+
+    # Add slots that are not in the database yet
+    for slot in slots.values():
+        if slot.name not in existing_slots:
+            slot.save()
+
+def update_edges(nodes: list[AudioPipelineNode], edges) -> None:
+    node_ids = [node.id for node in nodes]
+    for data_edge in edges:
+        slot_a_data = data_edge['slot_a']
+        slot_b_data = data_edge['slot_b']
+        slot_a = AudioPipelineNodeSlot.objects.filter(name=slot_a_data['name'], node_id=slot_a_data['node']).first()
+        slot_b = AudioPipelineNodeSlot.objects.filter(name=slot_b_data['name'], node_id=slot_b_data['node']).first()
+        if slot_a is None or slot_b is None:
+            raise Exception(f'Slots not found for edge: {data_edge}')
+        existing_edge = AudioPipelineEdge.objects.filter(slot_a=slot_a, slot_b=slot_b).first()
+        if existing_edge is not None:
+            continue
+        edge = AudioPipelineEdge()
+
+        edge.slot_a = slot_a
+        edge.slot_b = slot_b
+        edge.save()
+
+    for edge in AudioPipelineEdge.objects.filter(slot_a__node__in=node_ids, slot_b__node__in=node_ids).distinct():
+        # look for edges that are not in the data anymore and delete them
+        found = False
+        for data_edge in edges:
+            slot_a_data = data_edge['slot_a']
+            slot_b_data = data_edge['slot_b']
+            if (slot_a_data['name'] == edge.slot_a.name and slot_b_data['name'] == edge.slot_b.name
+                         or slot_b_data['name'] == edge.slot_a.name and slot_a_data['name'] == edge.slot_b.name):
+                found = True
+                break
+        if not found:
+            edge.delete()
+
 def json_node_to_model(data_node) -> AudioPipelineNode:
     class_name = data_node['type_name']
 
@@ -137,16 +183,11 @@ def create_pipeline(request):
             node.pipeline = pipeline
             node.save()
             nodes.append(node)
+            update_slots(node)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
 
-    edges = []
-    for data_edge in data['edges']:
-        edge = AudioPipelineEdge()
-        edge.node_a = nodes[data_edge['node_a']]
-        edge.node_b = nodes[data_edge['node_b']]
-        edge.save()
-        edges.append(edge)
+    update_edges(nodes, data['edges'])
 
     return_data = pipeline_to_json(pipeline)
 
@@ -225,6 +266,8 @@ def update_pipeline(request, pipeline_id):
                 node.pipeline = pipeline
                 node.save()
                 nodes.append(node)
+
+            update_slots(node)
         except ReferenceError as e:
             print(e)
             return JsonResponse({'error': str(e)}, status=400)
@@ -233,15 +276,7 @@ def update_pipeline(request, pipeline_id):
         except Exception as e:
             return JsonResponse({'error': f'{e.__class__.__name__}: {e}'}, status=500)
 
-    # reset all edges and apply those from data
-    node_ids = [node.id for node in nodes]
-    AudioPipelineEdge.objects.filter(node_a_id__in=node_ids, node_b_id__in=node_ids).delete()
-    edges = []
-    for data_edge in data['edges']:
-        edge = AudioPipelineEdge()
-        edge.node_a_id = data_edge['node_a']
-        edge.node_b_id = data_edge['node_b']
-        edge.save()
-        edges.append(edge)
+    # remove unused edges and apply those from data
+    update_edges(nodes, data['edges'])
 
     return JsonResponse(pipeline_to_json(pipeline), safe=False)

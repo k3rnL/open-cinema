@@ -58,8 +58,6 @@ class CamillaDSPConfigBuilder:
         if pipeline_chain:
             config['pipeline'] = pipeline_chain
 
-        print(f'ouioui {pipeline_chain} {mixer_name}')
-
         logger.debug(f"Generated config: {config}")
         return config
 

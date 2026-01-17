@@ -62,7 +62,6 @@ class CamillaDSPManager:
                 return False, f"CamillaDSP validation failed: {error_msg}"
 
             # Apply configuration
-            print(f"oui {config_dict}")
             success = self.client.apply_config(config_dict)
             if not success:
                 return False, "Failed to apply configuration to CamillaDSP"

@@ -1,7 +1,7 @@
 from django.db import models
 
 from api.models import CamillaDSPPipeline, camilladsp_pipeline
-from api.models.audio.pipeline.audio_pipeline_node import Slot, SlotType, SlotDirection
+from api.models.audio.pipeline.audio_pipeline_node_slot import AudioPipelineNodeSlot, SlotType, SlotDirection
 from api.models.audio.pipeline.audio_pipeline_processing_node import AudioPipelineProcessingNode
 
 
@@ -16,15 +16,15 @@ class CamillaDSPAudioPipelineNode(AudioPipelineProcessingNode):
         help_text='The Camilla DSP pipeline associated with this node.'
     )
 
-    def get_dynamic_slots_schematics(self) -> list[Slot]:
+    def get_dynamic_slots_schematics(self) -> list[AudioPipelineNodeSlot]:
         if self.camilladsp_pipeline is None:
             return []
 
         input_device = self.camilladsp_pipeline.input_device
         output_device = self.camilladsp_pipeline.output_device
         return [
-            Slot(input_device.name, SlotType.AUDIO, SlotDirection.INPUT),
-            Slot(output_device.name, SlotType.AUDIO, SlotDirection.OUTPUT)
+            AudioPipelineNodeSlot(name=input_device.name, type=SlotType.AUDIO, direction=SlotDirection.INPUT, node=self),
+            AudioPipelineNodeSlot(name=output_device.name, type=SlotType.AUDIO, direction=SlotDirection.OUTPUT, node=self)
         ]
 
     class Meta:

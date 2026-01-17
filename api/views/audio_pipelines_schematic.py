@@ -57,5 +57,4 @@ def get_pipeline_schematics(request):
         'io': io
     }
 
-    print('Pipeline schematics generated successfully', data)
     return JsonResponse(data, safe=False)
