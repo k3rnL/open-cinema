@@ -147,6 +147,11 @@ def update_edges(nodes: list[AudioPipelineNode], edges) -> None:
 class AudioPipelineDetail(APIView):
     """Handle GET, PATCH for pipeline item."""
 
+    def delete(self, request, pipeline_id):
+        pipeline = AudioPipeline.objects.get(id=pipeline_id)
+        pipeline.delete()
+        return JsonResponse({}, status=204)
+
     def get(self, request, pipeline_id):
         pipeline = AudioPipeline.objects.get(id=pipeline_id)
         return JsonResponse(pipeline_to_json(pipeline), safe=False)
