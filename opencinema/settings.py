@@ -142,6 +142,15 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Celery Configuration
+# In devcontainer, app service uses network_mode: service:redis, so localhost works
+CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://172.17.0.1:6379/0')
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://172.17.0.1:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+
 # Logging configuration
 LOGGING = {
     'version': 1,

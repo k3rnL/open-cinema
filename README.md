@@ -84,6 +84,12 @@ The project includes a complete development environment with PulseAudio and Cami
 ```bash
 # Open in DevContainer (VS Code or compatible IDE)
 # Everything is pre-configured and will start automatically
+
+# Start the Django development server
+python manage.py runserver
+
+# Start the Celery worker (in a separate terminal)
+celery -A opencinema worker -l info
 ```
 
 ### Running Tests

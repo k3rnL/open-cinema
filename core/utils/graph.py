@@ -15,9 +15,9 @@ class GraphNode(Generic[T, V]):
         self.incoming: list[GraphEdge[T, V]] = []
         self.outgoing: list[GraphEdge[T, V]] = []
         if incoming is not None:
-            self.incoming = incoming
+            self.incoming.extend(incoming)
         if outgoing is not None:
-            self.outgoing = outgoing
+            self.outgoing.extend(outgoing)
 
 
 class Graph(Generic[T, V]):

@@ -1,6 +1,5 @@
 from django.db import models
 
-from api.models.audio.pipeline.audio_pipeline_node import AudioPipelineNode
 from api.models.audio.pipeline.audio_pipeline_node_slot import AudioPipelineNodeSlot
 
 
