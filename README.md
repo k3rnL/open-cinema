@@ -86,17 +86,42 @@ The project includes a complete development environment with PulseAudio and Cami
 # Everything is pre-configured and will start automatically
 
 # Start the Django development server
-python manage.py runserver
+uv run manage.py runserver
 
 # Start the Celery worker (in a separate terminal)
-celery -A opencinema worker -l info
+uv run celery -A opencinema worker -l info
+```
+
+If Celery fails to start, that's maybe because redis is not running.
+
+##### Redirect sound to your machine
+If you are on macOS or Linux with a pulseaudio backend installed, you can add the modules needed or run from scratch:
+```
+module-coreaudio-detect # Allow audio devices to be discovered on macOS
+module-native-protocol-tcp # Allow connections from your machine
+module-tunnel-sink server=<ip of rpi or container> sink_name=<remote tcp sink> # Send to receiver
+module-tunnel-source server=192.168.1.10 source_name=<remote source name> # To receive from sender
+```
+
+```bash
+pulseaudio -D -n \
+    -L module-coreaudio-detect \
+    -L "module-native-protocol-tcp auth-anonymous=true auth-cookie-enabled=false" \
+    -L module-native-protocol-unix \
+    --exit-idle-time=1000000
+```
+
+You can test the connection by running pulseaudio not daemonized, and use this to load the modules:
+```bash
+pactl load-module module-tunnel-source server=192.168.1.18 source=Channel_1__Channel_2.3
+pactl unload-module module-tunnel-source # Remove all tunnel sources
 ```
 
 ### Running Tests
 
 ```bash
 pip install -r requirements-dev.txt
-pytest
+uv run pytest
 ```
 
 ### API Testing

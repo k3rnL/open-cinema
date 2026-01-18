@@ -16,6 +16,7 @@ pulseaudio -D -n \
     -L "module-pipe-source source_name=fifo_input file=/tmp/pa.input rate=48000 format=S16LE channels=2" \
     -L "module-pipe-sink sink_name=fifo_output file=/tmp/pa.output rate=48000 format=float32LE channels=6" \
     -L module-native-protocol-unix \
+    -L module-native-protocol-tcp \
     --exit-idle-time=1000000
 
 # Wait for PulseAudio to start
