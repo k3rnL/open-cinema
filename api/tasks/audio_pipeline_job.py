@@ -32,8 +32,7 @@ def apply_audio_pipeline(self, pipeline_id: int, job_id: int):
         job_log_node_start_event(job, node.data)
         to_process.extend([edge.to_node for edge in node.outgoing])
         try:
-            node.data.get_manager().apply()
-            sleep(2)
+            node.data.get_manager().apply(node, graph)
             job_log_completed_node_event(job, node.data.id)
         except Exception as e:
             job_log_failure_node_event(job, node.data, PipelineJobEventData(node_errors=[str(e)]))
@@ -71,8 +70,7 @@ def unapply_audio_pipeline(self, pipeline_id: int, job_id: int):
         job_log_node_start_event(job, node.data)
         to_process.extend([edge.to_node for edge in node.outgoing])
         try:
-            node.data.get_manager().unapply()
-            sleep(2)
+            node.data.get_manager().unapply(node, graph)
             job_log_completed_node_event(job, node.data.id)
         except Exception as e:
             job_log_failure_node_event(job, node.data, PipelineJobEventData(node_errors=[f'Error unapplying node: {str(e)}']))

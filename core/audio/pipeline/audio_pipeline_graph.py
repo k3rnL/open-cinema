@@ -78,7 +78,7 @@ class AudioPipelineGraph(Graph['AudioPipelineNode', EdgeSlots]):
         for node in self.nodes:
             real_node = node.data
             validation_result = real_node.get_manager().validate(node, self)
-            if validation_result is not None:
+            if validation_result is not None and not validation_result.valid():
                 node_validations[validation_result.node] = validation_result
 
         graph_errors: list[str] = []
@@ -112,7 +112,7 @@ class AudioPipelineGraph(Graph['AudioPipelineNode', EdgeSlots]):
                         edge_errors.append(ValidationResultEdge(edge.data.id, [f"Input device cannot only send audio"]))
                     if slot_a.type == SlotType.DEVICE_AUDIO_INPUT and slot_b.type != SlotType.AUDIO_CONSUMER:
                         edge_errors.append(ValidationResultEdge(edge.data.id, [f"Input device must be connected to an audio consumer"]))
-                    if slot_a.type == SlotType.AUDIO_PRODUCER and slot_b.type == SlotType.DEVICE_AUDIO_OUTPUT:
+                    if slot_a.type == SlotType.AUDIO_PRODUCER and slot_b.type != SlotType.DEVICE_AUDIO_OUTPUT:
                         edge_errors.append(ValidationResultEdge(edge.data.id, [f"Producer cannot only send audio to an output device"]))
                     break
                 break

@@ -27,10 +27,12 @@ class CamillaDSPAudioPipelineNodeManager(AudioPipelineNodeManager):
                                   node=self.node)
         ]
 
-    def apply(self):
+    def apply(self, graph_node: AudioPipelineGraphNode, graph: AudioPipelineGraph):
+        # graph_node.incoming[0].data.incoming_slot.
+        # TODO Make
         pass
 
-    def unapply(self):
+    def unapply(self, graph_node: AudioPipelineGraphNode, graph: AudioPipelineGraph):
         pass
 
     def validate(self, graph_node: AudioPipelineGraphNode, graph: AudioPipelineGraph) -> ValidationResultNode | None:
@@ -40,4 +42,6 @@ class CamillaDSPAudioPipelineNodeManager(AudioPipelineNodeManager):
         except ObjectDoesNotExist:
             field_errors['camilladsp_pipeline'] = 'CamillaDSP Pipeline not set'
 
-        return ValidationResultNode(self.node.id, [], field_errors, {})
+        if field_errors:
+            return ValidationResultNode(self.node.id, [], field_errors, {})
+        return None

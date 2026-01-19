@@ -23,7 +23,7 @@ class PulseAudioTunnelNodeManager(AudioPipelineNodeManager):
             return [AudioPipelineNodeSlot(name=name, type=SlotType.DEVICE_AUDIO_OUTPUT, direction=SlotDirection.INPUT, node=self.node)]
         return []
 
-    def apply(self):
+    def apply(self, graph_node: AudioPipelineGraphNode, graph: AudioPipelineGraph):
         kind = f'module-tunnel-{self.node.mode.lower()}'
         args = [f'server={self.node.server}']
         if self.node.source is not None and self.node.source != '': args.append(f'source={self.node.source}')
@@ -33,13 +33,13 @@ class PulseAudioTunnelNodeManager(AudioPipelineNodeManager):
         module = PulseAudioBackend().add_module(kind, args)
         PulseAudioTunnelNodeState.objects.create(node=self.node, module=module)
 
-    def unapply(self):
+    def unapply(self, graph_node: AudioPipelineGraphNode, graph: AudioPipelineGraph):
         try:
-            self.node.state
+            self.node.pulseaudiotunnelnodestate
         except ObjectDoesNotExist:
             return
-        PulseAudioBackend().del_module(self.node.state.module)
-        self.node.state.delete()
+        PulseAudioBackend().del_module(self.node.pulseaudiotunnelnodestate.module)
+        self.node.pulseaudiotunnelnodestate.delete()
 
     def validate(self, graph_node: AudioPipelineGraphNode, graph: AudioPipelineGraph) -> ValidationResultNode | None:
         field_errors = {}

@@ -16,7 +16,7 @@ class AudioPipelineNodeManager(ABC):
         return []
 
     @abstractmethod
-    def apply(self):
+    def apply(self, graph_node: AudioPipelineGraphNode, graph: AudioPipelineGraph):
         """
         Must be implemented by subclasses.
         This function is never called twice on the same resource. Except if the resource is unapplied first.
@@ -24,7 +24,7 @@ class AudioPipelineNodeManager(ABC):
         pass
 
     @abstractmethod
-    def unapply(self):
+    def unapply(self, graph_node: AudioPipelineGraphNode, graph: AudioPipelineGraph):
         """
         Must be implemented by subclasses.
         The call to this function must not raise an error if the resource is already unapplied.
