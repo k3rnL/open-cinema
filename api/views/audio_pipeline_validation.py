@@ -13,6 +13,12 @@ def validate_audio_pipeline(request, pipeline_id):
     data = {
         'valid': validation.valid(),
         'errors': validation.graph_errors,
+        'edges': [
+            {
+                'id': edge.edge,
+                'valid': edge.valid(),
+                'errors': edge.errors,
+            } for edge in validation.edges],
         'nodes': [
             {
                 'id': node.node,
