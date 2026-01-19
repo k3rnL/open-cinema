@@ -4,7 +4,6 @@ from django.db import models
 from django.db.models import Field
 
 from api.models.audio.pipeline.audio_pipeline_io_node import AudioPipelineIONode
-from api.models.audio.pipeline.audio_pipeline_node_slot import AudioPipelineNodeSlot, SlotType, SlotDirection
 from core.audio.pipeline.audio_pipeline_node_manager import AudioPipelineNodeManager
 
 if TYPE_CHECKING:
