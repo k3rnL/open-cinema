@@ -14,6 +14,10 @@ class AudioPipelineApplyView(APIView):
 
     def post(self, request, pipeline_id):
         pipeline = AudioPipeline.objects.get(id=pipeline_id)
+        pipeline_graph = AudioPipelineGraph(pipeline)
+
+        if not pipeline_graph.validate().valid():
+            return JsonResponse(data={'error': 'Pipeline is not valid'}, status=400)
 
         job = AudioPipelineApplyJob.objects.create(pipeline=pipeline)
         AudioPipelineApplyEvent.objects.create(job=job, event_type=EventType.START)
