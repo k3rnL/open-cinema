@@ -29,7 +29,7 @@ def node_type_to_json(cls: type[AudioPipelineNode]) -> dict[str, Any]:
     return {
         'type_name': cls.__name__,
         'fields': [field_to_json(f)
-                   for f in cls._meta.get_fields(include_parents=False)
+                   for f in cls.get_exposed_fields()
                    if '_ptr' not in f.name],
         'slots': [slot.to_dict() for slot in cls.static_slots]
     }

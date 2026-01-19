@@ -31,6 +31,7 @@ urlpatterns = [
     path("pipelines/<int:pipeline_id>", api.views.audio_pipelines.AudioPipelineDetail.as_view(), name="pipeline"),
     path("pipelines/<int:pipeline_id>/validate", api.views.audio_pipeline_validation.validate_audio_pipeline, name="pipeline"),
     path("pipelines/<int:pipeline_id>/apply", api.views.audio_pipeline_apply.AudioPipelineApplyView.as_view(), name="pipeline_apply"),
+    path("pipelines/<int:pipeline_id>/unapply", api.views.audio_pipeline_apply.AudioPipelineApplyView.as_view(), name="pipeline_unapply"),
     path("pipelines/<int:pipeline_id>/job/<int:job_id>", api.views.audio_pipeline_events.AudioPipelineApplyEventList.as_view(), name="pipeline_events"),
     path("pipelines/<int:pipeline_id>/nodes", api.views.audio_pipeline_nodes.AudioPipelineNodeList.as_view(), name="pipeline_nodes"),
     path("pipelines/<int:pipeline_id>/nodes/<int:node_id>", api.views.audio_pipeline_nodes.AudioPipelineNodeDetail.as_view(), name="pipeline_node"),

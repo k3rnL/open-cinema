@@ -17,3 +17,5 @@ class AudioPipeline(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     active = models.BooleanField(default=False)
+
+    stale = models.BooleanField(default=False)

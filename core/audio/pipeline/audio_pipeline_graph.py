@@ -69,7 +69,7 @@ class AudioPipelineGraph(Graph['AudioPipelineNode', EdgeSlots]):
         node_validations: dict[int, ValidationResultNode] = {}
         for node in self.nodes:
             real_node = node.data
-            validation_result = real_node.validate(node, self)
+            validation_result = real_node.get_manager().validate(node, self)
             if validation_result is not None:
                 node_validations[validation_result.node] = validation_result
 

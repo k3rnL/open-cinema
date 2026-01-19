@@ -1,6 +1,6 @@
 from django.db import models
 
-from api.models import CamillaDSPPipeline, camilladsp_pipeline
+from api.models import CamillaDSPPipeline
 from api.models.audio.pipeline.audio_pipeline_node_slot import AudioPipelineNodeSlot, SlotType, SlotDirection
 from api.models.audio.pipeline.audio_pipeline_processing_node import AudioPipelineProcessingNode
 
@@ -23,8 +23,8 @@ class CamillaDSPAudioPipelineNode(AudioPipelineProcessingNode):
         input_device = self.camilladsp_pipeline.input_device
         output_device = self.camilladsp_pipeline.output_device
         return [
-            AudioPipelineNodeSlot(name=input_device.name, type=SlotType.AUDIO, direction=SlotDirection.INPUT, node=self),
-            AudioPipelineNodeSlot(name=output_device.name, type=SlotType.AUDIO, direction=SlotDirection.OUTPUT, node=self)
+            AudioPipelineNodeSlot(name=input_device.name, type=SlotType.AUDIO_CONSUMER, direction=SlotDirection.INPUT, node=self),
+            AudioPipelineNodeSlot(name=output_device.name, type=SlotType.AUDIO_PRODUCER, direction=SlotDirection.OUTPUT, node=self)
         ]
 
     class Meta:

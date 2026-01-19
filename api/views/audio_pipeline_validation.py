@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 
 from api.models.audio.audio_pipeline import AudioPipeline
-from core.audio.pipeline.pipeline_graph import AudioPipelineGraph
+from core.audio.pipeline.audio_pipeline_graph import AudioPipelineGraph
 
 
 def validate_audio_pipeline(request, pipeline_id):

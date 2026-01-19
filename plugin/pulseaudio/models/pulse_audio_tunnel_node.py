@@ -1,9 +1,14 @@
+from typing import TYPE_CHECKING
+
 from django.db import models
+from django.db.models import Field
 
 from api.models.audio.pipeline.audio_pipeline_io_node import AudioPipelineIONode
 from api.models.audio.pipeline.audio_pipeline_node_slot import AudioPipelineNodeSlot, SlotType, SlotDirection
-from core.audio.pipeline.pipeline_graph import AudioPipelineGraphNode, AudioPipelineGraph
-from core.audio.pipeline.validation_result import ValidationResultNode
+from core.audio.pipeline.audio_pipeline_node_manager import AudioPipelineNodeManager
+
+if TYPE_CHECKING:
+    from plugin.pulseaudio.audio.pulse_audio_tunnel_node_manager import PulseAudioTunnelNodeManager
 
 
 class PulseAudioTunnelNode(AudioPipelineIONode):
@@ -39,28 +44,19 @@ class PulseAudioTunnelNode(AudioPipelineIONode):
         help_text='The authentication cookie file to use'
     )
 
-    def get_dynamic_slots_schematics(self) -> list[AudioPipelineNodeSlot]:
-        if self.mode == 'SOURCE' or self.mode == 'source':
-            name = self.source if self.source is not None else 'Source Name'
-            return [AudioPipelineNodeSlot(name=name, type=SlotType.AUDIO, direction=SlotDirection.OUTPUT, node=self)]
-        elif self.mode == 'SINK' or self.mode == 'sink':
-            name = self.sink if self.sink is not None else 'Sink Name'
-            return [AudioPipelineNodeSlot(name=name, type=SlotType.AUDIO, direction=SlotDirection.INPUT, node=self)]
-        return []
-
     class Meta:
         app_label = 'api'
 
-    def validate(self, graph_node: AudioPipelineGraphNode, graph: AudioPipelineGraph) -> ValidationResultNode | None:
-        field_errors = {}
+    @classmethod
+    def get_exposed_fields(cls) -> list[Field]:
+        return [
+            cls._meta.get_field('server'),
+            cls._meta.get_field('mode'),
+            cls._meta.get_field('source'),
+            cls._meta.get_field('sink'),
+            cls._meta.get_field('cookie')
+        ]
 
-        if self.server is None or self.server == '':
-            field_errors['server'] = 'Server must be specified'
-        if self.mode is None or self.mode == '':
-            field_errors['mode'] = 'Mode must be specified'
-        if self.mode == 'SOURCE' or self.mode == 'source' and self.source is None:
-            field_errors['source'] = 'Source must be specified when mode is source'
-        if self.mode == 'SINK' or self.mode == 'sink' and self.sink is None:
-            field_errors['sink'] = 'Sink must be specified when mode is sink'
-
-        return ValidationResultNode(self.id, [], field_errors, {}) if len(field_errors) > 0 else None
+    def get_manager(self) -> 'AudioPipelineNodeManager':
+        from plugin.pulseaudio.audio.pulse_audio_tunnel_node_manager import PulseAudioTunnelNodeManager
+        return PulseAudioTunnelNodeManager(self)

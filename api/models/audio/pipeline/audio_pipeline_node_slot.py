@@ -8,8 +8,12 @@ class SlotDirection(models.IntegerChoices):
     ALL = 3, 'ALL'
 
 class SlotType(models.IntegerChoices):
-    AUDIO = 1, 'AUDIO'
-    CONTROL = 2, 'CONTROL'
+    DEVICE_AUDIO_OUTPUT = 1, 'DEVICE_AUDIO_OUTPUT'
+    DEVICE_AUDIO_INPUT = 2, 'DEVICE_AUDIO_INPUT'
+    AUDIO_CONSUMER = 3, 'AUDIO_CONSUMER'
+    AUDIO_PRODUCER = 4, 'AUDIO_PRODUCER'
+
+
 
 class AudioPipelineNodeSlot(models.Model):
 

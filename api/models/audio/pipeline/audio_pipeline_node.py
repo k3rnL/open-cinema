@@ -1,11 +1,11 @@
 from enum import Enum
 
 from django.db import models
+from django.db.models.fields import Field
 
 from api.models.audio.audio_pipeline import AudioPipeline
 from api.models.audio.pipeline.audio_pipeline_node_slot import AudioPipelineNodeSlot
-from core.audio.pipeline.pipeline_graph import AudioPipelineGraphNode, AudioPipelineGraph
-from core.audio.pipeline.validation_result import ValidationResultNode
+from core.audio.pipeline.audio_pipeline_node_manager import AudioPipelineNodeManager
 
 
 class AudioPipelineNode(models.Model):
@@ -24,16 +24,14 @@ class AudioPipelineNode(models.Model):
 
     static_slots: list[AudioPipelineNodeSlot] = []
 
-    def get_dynamic_slots_schematics(self) -> list[AudioPipelineNodeSlot]:
-        return []
+    def get_manager(self) -> 'AudioPipelineNodeManager':
+        raise NotImplementedError('Erroneous Call to get_manager() on AudioPipelineNode class, it must be called on '
+                                  'specialized call and be implemented by subclasses.')
 
-    def validate(self, graph_node: AudioPipelineGraphNode, graph: AudioPipelineGraph) -> ValidationResultNode | None:
+    @classmethod
+    def get_exposed_fields(cls) -> list[Field]:
         """
-        Validates the node's configuration within the given graph.
-
-        :param graph_node: The graph node representation of this pipeline node.
-        :param graph: The audio pipeline graph containing this node.
-        :return: A validation result node if the node is invalid, otherwise None.
+        Returns a list of Django model fields that are exposed for this node.
+        Can be overridden by subclasses to expose only a subset of the fields.
         """
-        return None
-
+        return cls._meta.local_fields

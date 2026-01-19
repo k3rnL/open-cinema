@@ -232,9 +232,9 @@ sudo -u opencinema /opt/home-cinema/open-cinema/venv/bin/python \
 The current configuration is suitable for development/testing. For production:
 
 1. **Generate a secure SECRET_KEY**:
-   ```python
+```bash
    python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'
-   ```
+```
 
 2. **Set DEBUG=false** in `group_vars/all.yml`
 

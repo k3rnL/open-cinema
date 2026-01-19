@@ -5,8 +5,6 @@ from django.apps import apps
 from django.db import models
 from django.db.models.fields import Field
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
 from rest_framework import serializers
 from rest_framework.views import APIView
 
@@ -40,7 +38,7 @@ class NodeSerializer(serializers.Serializer):
             cls = find_model_by_name(type_name)
             if cls:
                 # Validate fields presence
-                for field in cls._meta.local_fields:
+                for field in cls.get_exposed_fields():
                     if '_ptr' in field.name:
                         continue
                     if not field.null and not field.blank and field.default == models.NOT_PROVIDED:
@@ -120,7 +118,7 @@ def find_model_by_name(name: str) -> type[AudioPipelineNode] | None:
 
 
 def fill_model_from_json(node: AudioPipelineNode, data: dict[str, Any]) -> None:
-    fields = node._meta.local_fields
+    fields = node.get_exposed_fields()
     for field in fields:
         if '_ptr' in field.name:
             continue
@@ -141,7 +139,7 @@ def node_to_json(node: AudioPipelineNode) -> dict[str, Any]:
         'id': node.id,
         'type_name': node.__class__.__name__,
         'slots': [slot.to_dict() for slot in node.slots.all()],
-        'fields': get_fields_value(node, node._meta.local_fields)
+        'fields': get_fields_value(node, node.get_exposed_fields())
     }
 
 
@@ -191,7 +189,7 @@ def get_concrete_node(node: AudioPipelineNode) -> AudioPipelineNode:
 
 
 def update_slots(node: AudioPipelineNode) -> None:
-    slots = {s.name: s for s in node.get_dynamic_slots_schematics()}
+    slots = {s.name: s for s in node.get_manager().get_dynamic_slots_schematics()}
     existing_slots = {s.name: s for s in node.slots.all()}
 
     # Delete slots that are not in the generated list

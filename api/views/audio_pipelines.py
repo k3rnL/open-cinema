@@ -1,9 +1,7 @@
 import json
 from typing import Any
 
-from django.apps import apps
 from django.db import models
-from django.db.models.fields import Field
 from django.http import JsonResponse
 from rest_framework import serializers
 from rest_framework.views import APIView
@@ -100,6 +98,7 @@ def pipeline_to_json(pipeline: AudioPipeline) -> dict[str, Any]:
         'created_at': pipeline.created_at,
         'updated_at': pipeline.updated_at,
         'active': pipeline.active,
+        'stale': pipeline.stale,
         'nodes': [node_to_json(node) for node in concrete_nodes],
         'edges': [
             {
