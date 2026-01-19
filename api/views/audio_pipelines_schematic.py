@@ -31,7 +31,6 @@ def node_type_to_json(cls: type[AudioPipelineNode]) -> dict[str, Any]:
         'fields': [field_to_json(f)
                    for f in cls.get_exposed_fields()
                    if '_ptr' not in f.name],
-        'slots': [slot.to_dict() for slot in cls.static_slots]
     }
 
 @require_http_methods(['GET'])

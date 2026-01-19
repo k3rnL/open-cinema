@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 class EdgeSlots(NamedTuple):
     id: int
     data: AudioPipelineEdge
+    incoming_node: 'AudioPipelineNode'
+    outgoing_node: 'AudioPipelineNode'
     incoming_slot: 'AudioPipelineNodeSlot'
     outgoing_slot: 'AudioPipelineNodeSlot'
 
@@ -53,7 +55,7 @@ class AudioPipelineGraph(Graph['AudioPipelineNode', EdgeSlots]):
                         to_slot = db_edge.slot_b
 
                         graph_edge = GraphEdge['AudioPipelineNode', EdgeSlots](
-                            data=EdgeSlots(db_edge.id, db_edge, from_slot, to_slot),
+                            data=EdgeSlots(db_edge.id, db_edge, from_node, to_node, from_slot, to_slot),
                             from_node=from_node,
                             to_node=to_node
                         )

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Any
 
 from api.models.audio.pipeline.audio_pipeline_node_slot import AudioPipelineNodeSlot
 from core.audio.pipeline.audio_pipeline_graph import AudioPipelineGraph, AudioPipelineGraphNode
@@ -42,3 +43,14 @@ class AudioPipelineNodeManager(ABC):
         :return: A validation result node if the node is invalid, otherwise None.
         """
         return None
+
+    @abstractmethod
+    def get_slot_data(self, slot_name: str) -> Any:
+        """
+        Retrieves data associated with a specific slot on the node. For example, a slot of type DEVICE_AUDIO_OUTPUT
+        will return the KnownAudioDevice associated with that slot.
+
+        :param slot_name: The name of the slot to retrieve data for.
+        :return: The data associated with the slot, or None if the slot does not exist.
+        """
+        pass

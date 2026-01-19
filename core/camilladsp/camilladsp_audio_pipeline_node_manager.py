@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -45,3 +45,7 @@ class CamillaDSPAudioPipelineNodeManager(AudioPipelineNodeManager):
         if field_errors:
             return ValidationResultNode(self.node.id, [], field_errors, {})
         return None
+
+    def get_slot_data(self, slot_name: str) -> Any:
+        pass
+

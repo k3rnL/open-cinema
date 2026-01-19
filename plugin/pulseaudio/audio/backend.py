@@ -35,6 +35,34 @@ class PulseAudioBackend(AudioBackend):
     def name(self):
         return "pulseaudio"
 
+    def get_source(self, device_name: str) -> AudioDevice:
+        with pulsectl.Pulse("list-devices") as p:
+            source = p.get_source_by_name(device_name)
+            if source is None:
+                raise ValueError(f"Device '{device_name}' not found")
+            return AudioDevice(
+                self,
+                source.name,
+                AudioDeviceType.CAPTURE,
+                SampleFormatEnum(PaSampleFormat(source.sample_spec.format).name),
+                source.sample_spec.rate,
+                source.channel_count
+            )
+
+    def get_sink(self, device_name: str) -> AudioDevice:
+        with pulsectl.Pulse("list-devices") as p:
+            sink = p.get_sink_by_name(device_name)
+            if sink is None:
+                raise ValueError(f"Device '{device_name}' not found")
+            return AudioDevice(
+                self,
+                sink.name,
+                AudioDeviceType.PLAYBACK,
+                SampleFormatEnum(PaSampleFormat(sink.sample_spec.format).name),
+                sink.sample_spec.rate,
+                sink.channel_count
+            )
+
     def devices(self):
         devices = []
         try:
@@ -99,4 +127,3 @@ class PulseAudioBackend(AudioBackend):
         except PulseError as e:
             logger.error(f"Failed to unload PulseAudio module: {e}")
             raise e
-

@@ -22,8 +22,6 @@ class AudioPipelineNode(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    static_slots: list[AudioPipelineNodeSlot] = []
-
     def get_manager(self) -> 'AudioPipelineNodeManager':
         raise NotImplementedError('Erroneous Call to get_manager() on AudioPipelineNode class, it must be called on '
                                   'specialized call and be implemented by subclasses.')
@@ -35,3 +33,6 @@ class AudioPipelineNode(models.Model):
         Can be overridden by subclasses to expose only a subset of the fields.
         """
         return cls._meta.local_fields
+
+    def get_slot_by_name(self, slot_name: str) -> AudioPipelineNodeSlot:
+        return self.slots.get(name=slot_name)
