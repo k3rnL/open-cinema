@@ -14,7 +14,7 @@ class EdgeDeleteRequest(serializers.Serializer):
 class EdgeCreateRequest(EdgeDeleteRequest):
     pass
 
-class AudioPipelineEdges(APIView):
+class AudioPipelineEdgeList(APIView):
 
     def delete(self, request, pipeline_id):
         data = json.loads(request.body)
@@ -48,3 +48,14 @@ class AudioPipelineEdges(APIView):
             'slot_b': edge.slot_b.to_dict()
         }
         return JsonResponse(data, safe=False, status=201)
+
+
+class AudioPipelineEdgeDetail(APIView):
+
+    def delete(self, request, pipeline_id, edge_id):
+        try:
+            edge = AudioPipelineEdge.objects.get(id=edge_id)
+            edge.delete()
+            return JsonResponse({}, status=204)
+        except AudioPipelineEdge.DoesNotExist:
+            return JsonResponse({'error': 'Edge not found'}, status=404)

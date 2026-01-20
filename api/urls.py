@@ -35,7 +35,8 @@ urlpatterns = [
     path("pipelines/<int:pipeline_id>/job/<int:job_id>", api.views.audio_pipeline_events.AudioPipelineApplyEventList.as_view(), name="pipeline_events"),
     path("pipelines/<int:pipeline_id>/nodes", api.views.audio_pipeline_nodes.AudioPipelineNodeList.as_view(), name="pipeline_nodes"),
     path("pipelines/<int:pipeline_id>/nodes/<int:node_id>", api.views.audio_pipeline_nodes.AudioPipelineNodeDetail.as_view(), name="pipeline_node"),
-    path("pipelines/<int:pipeline_id>/edges", api.views.audio_pipeline_edges.AudioPipelineEdges.as_view(), name="pipeline_edges"),
+    path("pipelines/<int:pipeline_id>/edges", api.views.audio_pipeline_edges.AudioPipelineEdgeList.as_view(), name="pipeline_edges"),
+    path("pipelines/<int:pipeline_id>/edges/<int:edge_id>", api.views.audio_pipeline_edges.AudioPipelineEdgeDetail.as_view(), name="pipeline_edge"),
 
     path("pipelines/schematics", api.views.audio_pipelines_schematic.get_pipeline_schematics, name="pipeline_schematics"),
     path("pipelines/schematics/<str:type_name>/<str:field_name>", api.views.audio_pipeline_node_relations.node_relations, name="pipeline_node_relations"),
