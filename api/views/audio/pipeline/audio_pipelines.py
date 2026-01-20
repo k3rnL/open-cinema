@@ -10,7 +10,7 @@ from api.models.audio.audio_pipeline import AudioPipeline
 from api.models.audio.pipeline.audio_pipeline_edge import AudioPipelineEdge
 from api.models.audio.pipeline.audio_pipeline_node import AudioPipelineNode
 from api.models.audio.pipeline.audio_pipeline_node_slot import AudioPipelineNodeSlot
-from api.views.audio.pipeline.audio_pipeline_nodes import NodeSerializer, node_to_json, get_concrete_node, update_slots, \
+from api.views.audio.pipeline.node.audio_pipeline_nodes import NodeSerializer, node_to_json, get_concrete_node, update_slots, \
     json_node_to_model, find_model_by_name, fill_model_from_json
 from api.views.audio.pipeline.pipeline_guard_mixin import PipelineGuardMixin
 

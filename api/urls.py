@@ -6,8 +6,9 @@ import api.views.audio.pipeline.audio_pipeline_apply
 import api.views.audio.pipeline.audio_pipeline_events
 import api.views.audio.pipeline.audio_pipeline_validation
 import api.views.audio.pipeline.audio_pipeline_edges
-import api.views.audio.pipeline.audio_pipeline_nodes
-import api.views.audio.pipeline.audio_pipeline_node_relations
+import api.views.audio.pipeline.node.audio_pipeline_nodes
+import api.views.audio.pipeline.node.audio_pipeline_node_positions
+import api.views.audio.pipeline.node.audio_pipeline_node_relations
 import api.views.audio.pipeline.audio_pipelines_schematic
 import api.views.preferences_audio_backend
 import api.views.audio.device_discovery
@@ -33,13 +34,14 @@ urlpatterns = [
     path("pipelines/<int:pipeline_id>/apply", api.views.audio.pipeline.audio_pipeline_apply.AudioPipelineApplyView.as_view(), name="pipeline_apply"),
     path("pipelines/<int:pipeline_id>/unapply", api.views.audio.pipeline.audio_pipeline_apply.AudioPipelineApplyView.as_view(), name="pipeline_unapply"),
     path("pipelines/<int:pipeline_id>/job/<int:job_id>", api.views.audio.pipeline.audio_pipeline_events.AudioPipelineApplyEventList.as_view(), name="pipeline_events"),
-    path("pipelines/<int:pipeline_id>/nodes", api.views.audio.pipeline.audio_pipeline_nodes.AudioPipelineNodeList.as_view(), name="pipeline_nodes"),
-    path("pipelines/<int:pipeline_id>/nodes/<int:node_id>", api.views.audio.pipeline.audio_pipeline_nodes.AudioPipelineNodeDetail.as_view(), name="pipeline_node"),
+    path("pipelines/<int:pipeline_id>/nodes", api.views.audio.pipeline.node.audio_pipeline_nodes.AudioPipelineNodeList.as_view(), name="pipeline_nodes"),
+    path("pipelines/<int:pipeline_id>/nodes/positions", api.views.audio.pipeline.node.audio_pipeline_node_positions.AudioPipelineNodePositionList.as_view(), name="pipeline_node_positions"),
+    path("pipelines/<int:pipeline_id>/nodes/<int:node_id>", api.views.audio.pipeline.node.audio_pipeline_nodes.AudioPipelineNodeDetail.as_view(), name="pipeline_node"),
     path("pipelines/<int:pipeline_id>/edges", api.views.audio.pipeline.audio_pipeline_edges.AudioPipelineEdgeList.as_view(), name="pipeline_edges"),
     path("pipelines/<int:pipeline_id>/edges/<int:edge_id>", api.views.audio.pipeline.audio_pipeline_edges.AudioPipelineEdgeDetail.as_view(), name="pipeline_edge"),
 
     path("pipelines/schematics", api.views.audio.pipeline.audio_pipelines_schematic.get_pipeline_schematics, name="pipeline_schematics"),
-    path("pipelines/schematics/<str:type_name>/<str:field_name>", api.views.audio.pipeline.audio_pipeline_node_relations.node_relations, name="pipeline_node_relations"),
+    path("pipelines/schematics/<str:type_name>/<str:field_name>", api.views.audio.pipeline.node.audio_pipeline_node_relations.node_relations, name="pipeline_node_relations"),
     path("pipelines/<int:pipeline_id>/nodes/<int:node_id>/schematics", api.views.audio.pipeline.audio_pipelines_schematic.get_node_schematic, name="pipeline_node_schematics"),
 
     # Preferences
