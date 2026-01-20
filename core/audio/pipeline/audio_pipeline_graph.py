@@ -8,7 +8,6 @@ from api.models.audio.pipeline.audio_pipeline_node_slot import AudioPipelineNode
 if TYPE_CHECKING:
     from api.models.audio.pipeline.audio_pipeline_node import AudioPipelineNode
     from api.models.audio.audio_pipeline import AudioPipeline
-    from api.models.audio.pipeline.audio_pipeline_node_slot import AudioPipelineNodeSlot, SlotType
 
 
 class EdgeSlots(NamedTuple):
@@ -27,7 +26,7 @@ type AudioPipelineGraphNode = GraphNode['AudioPipelineNode', EdgeSlots]
 class AudioPipelineGraph(Graph['AudioPipelineNode', EdgeSlots]):
 
     def __init__(self, pipeline: 'AudioPipeline'):
-        from api.views.audio_pipelines import find_model_by_name
+        from api.views.audio.pipeline.audio_pipelines import find_model_by_name
 
         # Create graph nodes from pipeline nodes
         node_map = {}  # Map AudioPipelineNode.id -> GraphNode

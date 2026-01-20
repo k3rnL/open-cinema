@@ -5,6 +5,7 @@ from rest_framework import serializers
 from rest_framework.views import APIView
 
 from api.models.audio.pipeline.audio_pipeline_edge import AudioPipelineEdge
+from api.views.audio.pipeline.pipeline_guard_mixin import PipelineGuardMixin
 
 
 class EdgeDeleteRequest(serializers.Serializer):
@@ -14,7 +15,7 @@ class EdgeDeleteRequest(serializers.Serializer):
 class EdgeCreateRequest(EdgeDeleteRequest):
     pass
 
-class AudioPipelineEdgeList(APIView):
+class AudioPipelineEdgeList(PipelineGuardMixin, APIView):
 
     def delete(self, request, pipeline_id):
         data = json.loads(request.body)
@@ -50,7 +51,7 @@ class AudioPipelineEdgeList(APIView):
         return JsonResponse(data, safe=False, status=201)
 
 
-class AudioPipelineEdgeDetail(APIView):
+class AudioPipelineEdgeDetail(PipelineGuardMixin, APIView):
 
     def delete(self, request, pipeline_id, edge_id):
         try:

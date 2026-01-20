@@ -7,7 +7,7 @@ from django.views.decorators.http import require_http_methods
 from api.models import AudioPipelineNode
 from api.models.audio.pipeline.audio_pipeline_io_node import AudioPipelineIONode
 from api.models.audio.pipeline.audio_pipeline_processing_node import AudioPipelineProcessingNode
-from api.views.audio_pipelines import find_model_by_name
+from api.views.audio.pipeline.audio_pipelines import find_model_by_name
 
 
 def field_to_json(field: Field):

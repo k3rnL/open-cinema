@@ -4,7 +4,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from api.views.audio_pipelines import find_model_by_name
+from api.views.audio.pipeline.audio_pipelines import find_model_by_name
 
 
 @csrf_exempt

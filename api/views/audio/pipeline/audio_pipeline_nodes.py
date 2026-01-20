@@ -9,6 +9,7 @@ from rest_framework import serializers
 from rest_framework.views import APIView
 
 from api.models import AudioPipelineNode
+from api.views.audio.pipeline.pipeline_guard_mixin import PipelineGuardMixin
 
 
 class NodeSerializer(serializers.Serializer):
@@ -203,7 +204,7 @@ def update_slots(node: AudioPipelineNode) -> None:
             slot.save()
 
 
-class AudioPipelineNodeList(APIView):
+class AudioPipelineNodeList(PipelineGuardMixin, APIView):
 
     def get(self, request, pipeline_id):
         nodes = AudioPipelineNode.objects.filter(pipeline_id=pipeline_id).all()
@@ -228,7 +229,7 @@ class AudioPipelineNodeList(APIView):
         return JsonResponse(data, safe=False, status=201)
 
 
-class AudioPipelineNodeDetail(APIView):
+class AudioPipelineNodeDetail(PipelineGuardMixin, APIView):
     def get(self, request, pipeline_id, node_id):
         try:
             base_node = AudioPipelineNode.objects.get(id=node_id)

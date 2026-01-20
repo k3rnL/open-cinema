@@ -1,0 +1,3 @@
+
+class PipelineReadOnlyException(Exception):
+    pass

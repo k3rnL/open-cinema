@@ -10,8 +10,9 @@ from api.models.audio.audio_pipeline import AudioPipeline
 from api.models.audio.pipeline.audio_pipeline_edge import AudioPipelineEdge
 from api.models.audio.pipeline.audio_pipeline_node import AudioPipelineNode
 from api.models.audio.pipeline.audio_pipeline_node_slot import AudioPipelineNodeSlot
-from api.views.audio_pipeline_nodes import NodeSerializer, node_to_json, get_concrete_node, update_slots, \
+from api.views.audio.pipeline.audio_pipeline_nodes import NodeSerializer, node_to_json, get_concrete_node, update_slots, \
     json_node_to_model, find_model_by_name, fill_model_from_json
+from api.views.audio.pipeline.pipeline_guard_mixin import PipelineGuardMixin
 
 
 # Serializers
@@ -34,7 +35,7 @@ class PipelineSerializer(serializers.Serializer):
     active = serializers.BooleanField(required=False)
 
 
-class AudioPipelineList(APIView):
+class AudioPipelineList(PipelineGuardMixin, APIView):
     """Handle GET (list) and POST (create) for pipelines collection."""
 
     def get(self, request):
@@ -143,7 +144,7 @@ def update_edges(nodes: list[AudioPipelineNode], edges) -> None:
             edge.delete()
 
 
-class AudioPipelineDetail(APIView):
+class AudioPipelineDetail(PipelineGuardMixin, APIView):
     """Handle GET, PATCH for pipeline item."""
 
     def delete(self, request, pipeline_id):

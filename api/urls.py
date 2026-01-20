@@ -1,16 +1,16 @@
 from django.urls import path, include
 
-import api.views.audio_devices
-import api.views.audio_pipelines
-import api.views.audio_pipeline_apply
-import api.views.audio_pipeline_events
-import api.views.audio_pipeline_validation
-import api.views.audio_pipeline_edges
-import api.views.audio_pipeline_nodes
-import api.views.audio_pipeline_node_relations
-import api.views.audio_pipelines_schematic
+import api.views.audio.audio_devices
+import api.views.audio.pipeline.audio_pipelines
+import api.views.audio.pipeline.audio_pipeline_apply
+import api.views.audio.pipeline.audio_pipeline_events
+import api.views.audio.pipeline.audio_pipeline_validation
+import api.views.audio.pipeline.audio_pipeline_edges
+import api.views.audio.pipeline.audio_pipeline_nodes
+import api.views.audio.pipeline.audio_pipeline_node_relations
+import api.views.audio.pipeline.audio_pipelines_schematic
 import api.views.preferences_audio_backend
-import api.views.device_discovery
+import api.views.audio.device_discovery
 import api.views.camilladsp_pipelines
 import api.views.camilladsp_mixers
 import api.views.camilladsp_status
@@ -22,25 +22,25 @@ urlpatterns = [
     path("version", api.views.version.get_version, name="version"),
 
     # Audio devices
-    path("devices", api.views.audio_devices.get_devices, name="get_devices"),
-    path("devices/<int:device_id>", api.views.audio_devices.forget_device, name="forget_device"),
-    path("devices/discover", api.views.audio_devices.discover_devices, name="discover_devices"),
-    path("devices/update", api.views.device_discovery.trigger_discovery, name="trigger_discovery"),
+    path("devices", api.views.audio.audio_devices.get_devices, name="get_devices"),
+    path("devices/<int:device_id>", api.views.audio.audio_devices.forget_device, name="forget_device"),
+    path("devices/discover", api.views.audio.audio_devices.discover_devices, name="discover_devices"),
+    path("devices/update", api.views.audio.device_discovery.trigger_discovery, name="trigger_discovery"),
 
-    path("pipelines", api.views.audio_pipelines.AudioPipelineList.as_view(), name="pipelines"),
-    path("pipelines/<int:pipeline_id>", api.views.audio_pipelines.AudioPipelineDetail.as_view(), name="pipeline"),
-    path("pipelines/<int:pipeline_id>/validate", api.views.audio_pipeline_validation.validate_audio_pipeline, name="pipeline"),
-    path("pipelines/<int:pipeline_id>/apply", api.views.audio_pipeline_apply.AudioPipelineApplyView.as_view(), name="pipeline_apply"),
-    path("pipelines/<int:pipeline_id>/unapply", api.views.audio_pipeline_apply.AudioPipelineApplyView.as_view(), name="pipeline_unapply"),
-    path("pipelines/<int:pipeline_id>/job/<int:job_id>", api.views.audio_pipeline_events.AudioPipelineApplyEventList.as_view(), name="pipeline_events"),
-    path("pipelines/<int:pipeline_id>/nodes", api.views.audio_pipeline_nodes.AudioPipelineNodeList.as_view(), name="pipeline_nodes"),
-    path("pipelines/<int:pipeline_id>/nodes/<int:node_id>", api.views.audio_pipeline_nodes.AudioPipelineNodeDetail.as_view(), name="pipeline_node"),
-    path("pipelines/<int:pipeline_id>/edges", api.views.audio_pipeline_edges.AudioPipelineEdgeList.as_view(), name="pipeline_edges"),
-    path("pipelines/<int:pipeline_id>/edges/<int:edge_id>", api.views.audio_pipeline_edges.AudioPipelineEdgeDetail.as_view(), name="pipeline_edge"),
+    path("pipelines", api.views.audio.pipeline.audio_pipelines.AudioPipelineList.as_view(), name="pipelines"),
+    path("pipelines/<int:pipeline_id>", api.views.audio.pipeline.audio_pipelines.AudioPipelineDetail.as_view(), name="pipeline"),
+    path("pipelines/<int:pipeline_id>/validate", api.views.audio.pipeline.audio_pipeline_validation.validate_audio_pipeline, name="pipeline"),
+    path("pipelines/<int:pipeline_id>/apply", api.views.audio.pipeline.audio_pipeline_apply.AudioPipelineApplyView.as_view(), name="pipeline_apply"),
+    path("pipelines/<int:pipeline_id>/unapply", api.views.audio.pipeline.audio_pipeline_apply.AudioPipelineApplyView.as_view(), name="pipeline_unapply"),
+    path("pipelines/<int:pipeline_id>/job/<int:job_id>", api.views.audio.pipeline.audio_pipeline_events.AudioPipelineApplyEventList.as_view(), name="pipeline_events"),
+    path("pipelines/<int:pipeline_id>/nodes", api.views.audio.pipeline.audio_pipeline_nodes.AudioPipelineNodeList.as_view(), name="pipeline_nodes"),
+    path("pipelines/<int:pipeline_id>/nodes/<int:node_id>", api.views.audio.pipeline.audio_pipeline_nodes.AudioPipelineNodeDetail.as_view(), name="pipeline_node"),
+    path("pipelines/<int:pipeline_id>/edges", api.views.audio.pipeline.audio_pipeline_edges.AudioPipelineEdgeList.as_view(), name="pipeline_edges"),
+    path("pipelines/<int:pipeline_id>/edges/<int:edge_id>", api.views.audio.pipeline.audio_pipeline_edges.AudioPipelineEdgeDetail.as_view(), name="pipeline_edge"),
 
-    path("pipelines/schematics", api.views.audio_pipelines_schematic.get_pipeline_schematics, name="pipeline_schematics"),
-    path("pipelines/schematics/<str:type_name>/<str:field_name>", api.views.audio_pipeline_node_relations.node_relations, name="pipeline_node_relations"),
-    path("pipelines/<int:pipeline_id>/nodes/<int:node_id>/schematics", api.views.audio_pipelines_schematic.get_node_schematic, name="pipeline_node_schematics"),
+    path("pipelines/schematics", api.views.audio.pipeline.audio_pipelines_schematic.get_pipeline_schematics, name="pipeline_schematics"),
+    path("pipelines/schematics/<str:type_name>/<str:field_name>", api.views.audio.pipeline.audio_pipeline_node_relations.node_relations, name="pipeline_node_relations"),
+    path("pipelines/<int:pipeline_id>/nodes/<int:node_id>/schematics", api.views.audio.pipeline.audio_pipelines_schematic.get_node_schematic, name="pipeline_node_schematics"),
 
     # Preferences
     path("preferences/audio-backends", api.views.preferences_audio_backend.get_audio_backends_preferences, name="get_audio_backend_preferences"),
