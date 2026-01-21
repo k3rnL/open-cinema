@@ -1,0 +1,28 @@
+[Unit]
+Description=Open Cinema Celery Worker
+Documentation=https://github.com/{{ open_cinema.repo }}
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=exec
+User={{ open_cinema.user }}
+Group={{ open_cinema.group }}
+WorkingDirectory={{ open_cinema.app_path }}
+EnvironmentFile={{ open_cinema.app_path }}/.env
+
+ExecStart={{ open_cinema.venv_path }}/bin/celery -A opencinema worker \
+    --loglevel=info \
+    --logfile=/var/log/open-cinema/celery.log
+
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

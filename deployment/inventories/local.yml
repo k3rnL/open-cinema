@@ -3,7 +3,5 @@ all:
     cinema_pi:
       ansible_host: 192.168.1.37
       ansible_user: erwandaniel
-
-open_cinema:
-  install_from_local: true
-  local_source_path: "../.."  # Optional, defaults to "../.." (project root relative to deployment/)
+      install_from_local: true
+      local_source_path: "/IdeaProjects/open-cinema"

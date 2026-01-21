@@ -4,3 +4,9 @@
     name: open-cinema
     state: restarted
     daemon_reload: true
+
+- name: Restart celery
+  ansible.builtin.systemd:
+    name: celery
+    state: restarted
+    daemon_reload: true

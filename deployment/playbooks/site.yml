@@ -15,7 +15,7 @@
     - role: camilladsp
       tags: [camilladsp, audio]
 
-    - role: python-app
+    - role: open-cinema
       tags: [python, app, opencinema]
 
     - role: nginx

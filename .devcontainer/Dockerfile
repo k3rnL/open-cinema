@@ -6,7 +6,7 @@ RUN apt update && apt install -y \
     libavfilter-dev libavdevice-dev libclang-dev \
     ffmpeg wget pulseaudio sudo \
     git curl build-essential pkg-config libasound2-dev python3-dev \
-    curl build-essential libalsaplayer-dev librust-alsa-sys-dev  # Should be in a build container
+    curl rsync build-essential libalsaplayer-dev librust-alsa-sys-dev  # Should be in a build container
 
 RUN echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu \
     && chmod 440 /etc/sudoers.d/ubuntu

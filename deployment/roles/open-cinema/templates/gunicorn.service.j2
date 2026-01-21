@@ -1,8 +1,8 @@
 [Unit]
 Description=Open Cinema Django Application
 Documentation=https://github.com/{{ open_cinema.repo }}
-After=network.target camilladsp.service
-Wants=camilladsp.service
+After=network.target redis-server.service
+Wants=redis-server.service
 
 [Service]
 Type=exec

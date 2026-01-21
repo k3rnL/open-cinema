@@ -32,12 +32,6 @@
     state: present
   when: ansible_facts["distribution"] in ['Debian', 'Raspbian']
 
-- name: Install uv dependency manager
-  ansible.builtin.pip:
-    name:
-      - uv
-    state: present
-
 - name: Create application directory
   ansible.builtin.file:
     path: "{{ open_cinema.app_path }}"
@@ -61,13 +55,15 @@
     version: "v{{ open_cinema.version }}"
     force: yes
   become_user: "{{ open_cinema.user }}"
-  when: open_cinema.install_from_local is not defined or not open_cinema.install_from_local
+  when: install_from_local is not defined or not install_from_local
 
 - name: Synchronize local Open Cinema source
   ansible.posix.synchronize:
-    src: "{{ open_cinema.local_source_path | default('../..') }}/"
+    src: "{{ local_source_path | default('/IdeaProjects/open-cinema') }}/"
     dest: "{{ open_cinema.app_path }}"
     delete: yes
+    rsync_path: "sudo rsync"
+    mode: push
     rsync_opts:
       - "--exclude=.git"
       - "--exclude=__pycache__"
@@ -79,9 +75,7 @@
       - "--exclude=.idea"
       - "--exclude=.vscode"
       - "--exclude=node_modules"
-  become: false
-  delegate_to: localhost
-  when: open_cinema.install_from_local is defined and open_cinema.install_from_local
+  when: install_from_local is defined and install_from_local
 
 - name: Set ownership of application directory
   ansible.builtin.file:
@@ -89,7 +83,7 @@
     owner: "{{ open_cinema.user }}"
     group: "{{ open_cinema.group }}"
     recurse: yes
-  when: open_cinema.install_from_local is defined and open_cinema.install_from_local
+  when: install_from_local is defined and install_from_local
 
 - name: Create Python virtual environment
   ansible.builtin.command:
@@ -104,17 +98,38 @@
     virtualenv: "{{ open_cinema.venv_path }}"
   become_user: "{{ open_cinema.user }}"
 
-- name: Install Python dependencies
+- name: Install uv in virtual environment
   ansible.builtin.pip:
-    requirements: "{{ open_cinema.app_path }}/requirements.txt"
+    name: uv
     virtualenv: "{{ open_cinema.venv_path }}"
   become_user: "{{ open_cinema.user }}"
-  notify: Restart open-cinema
+
+- name: Install Redis server
+  ansible.builtin.apt:
+    name:
+      - redis-server
+    state: present
+    update_cache: true
+
+- name: Enable and start Redis service
+  ansible.builtin.systemd:
+    name: redis-server
+    enabled: true
+    state: started
+
+- name: Install Python dependencies with uv
+  ansible.builtin.command:
+    cmd: "{{ open_cinema.venv_path }}/bin/uv pip install --python {{ open_cinema.venv_path }}/bin/python -e ."
+    chdir: "{{ open_cinema.app_path }}"
+  become_user: "{{ open_cinema.user }}"
+  notify:
+    - Restart open-cinema
+    - Restart celery
 
 - name: Install Gunicorn
-  ansible.builtin.pip:
-    name: gunicorn
-    virtualenv: "{{ open_cinema.venv_path }}"
+  ansible.builtin.command:
+    cmd: "{{ open_cinema.venv_path }}/bin/uv pip install --python {{ open_cinema.venv_path }}/bin/python gunicorn"
+    chdir: "{{ open_cinema.app_path }}"
   become_user: "{{ open_cinema.user }}"
 
 - name: Create Django environment file
@@ -150,9 +165,23 @@
     mode: '0644'
   notify: Restart open-cinema
 
+- name: Install Celery systemd service
+  ansible.builtin.template:
+    src: celery.service.j2
+    dest: /etc/systemd/system/celery.service
+    mode: '0644'
+  notify: Restart celery
+
 - name: Enable and start Open Cinema service
   ansible.builtin.systemd:
     name: open-cinema
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Enable and start Celery service
+  ansible.builtin.systemd:
+    name: celery
     enabled: true
     state: started
     daemon_reload: true
