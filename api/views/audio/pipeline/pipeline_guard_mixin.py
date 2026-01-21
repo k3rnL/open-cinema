@@ -24,8 +24,11 @@ class PipelineGuardMixin:
         if self.guard_unsafe_methods_only and request.method in ("GET", "HEAD", "OPTIONS"):
             return
 
-        pipeline = self.get_pipeline()
-        if pipeline and (pipeline.active or pipeline.stale):
-            if pipeline.stale:
-               raise PipelineReadOnlyException(f"Pipeline {pipeline.name} is stale")
-            raise PipelineReadOnlyException(f"Pipeline {pipeline.name} is active")
+        try:
+            pipeline = self.get_pipeline()
+            if pipeline and (pipeline.active or pipeline.stale):
+                if pipeline.stale:
+                   raise PipelineReadOnlyException(f"Pipeline {pipeline.name} is stale")
+                raise PipelineReadOnlyException(f"Pipeline {pipeline.name} is active")
+        except AudioPipeline.DoesNotExist:
+            pass

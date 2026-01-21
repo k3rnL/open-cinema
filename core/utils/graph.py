@@ -71,6 +71,7 @@ class Graph(Generic[T, V]):
         Checks if the graph contains a cycle by performing a depth-first search.
         Returns True if a cycle is detected, False otherwise.
         """
+        if not self.nodes: return False
         visited: set[GraphNode[T, V]] = set()
         stack: list[GraphNode[T, V]] = [self.nodes[0]]
         while stack:
