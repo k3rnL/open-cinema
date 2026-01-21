@@ -23,15 +23,16 @@ def discover_and_update_audio_devices():
         seen_device_keys = set()
 
         for device in discovered_devices:
-            # Create unique key for this device
+            # Create a unique key for this device
             device_key = (device.backend.name, device.name)
             seen_device_keys.add(device_key)
 
-            # Update or create device in database
+            # Update or create a device in the database
             known_device, created = KnownAudioDevice.objects.update_or_create(
                 backend=device.backend.name,
                 name=device.name,
                 defaults={
+                    'nice_name': device.nice_name,
                     'device_type': device.device_type.name,
                     'format': device.device_format.name,
                     'sample_rate': device.sample_rate,

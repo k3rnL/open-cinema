@@ -35,6 +35,7 @@ def get_devices(request):
             'id': device.id,
             'backend': device.backend,
             'name': device.name,
+            'nice_name': device.nice_name,
             'device_type': device.device_type,
             'format': device.format,
             'sample_rate': device.sample_rate,

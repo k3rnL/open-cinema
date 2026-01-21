@@ -71,11 +71,12 @@ class PulseAudioBackend(AudioBackend):
                 for source in p.source_list():
                     try:
                         logger.debug(f"Found PulseAudio source: {source.name}")
-                        source = p.get_source_by_name(source.name)  # There is a bug in pulsectl,
-                        # This is the way to get the real informations
+                        source = p.get_source_by_name(source.name)  # There is a bug in pulsectl, this is the way to get the real informations
+
                         devices.append(AudioDevice(
                             self,
                             source.name,
+                            source.proplist.get('device.string'),
                             AudioDeviceType.CAPTURE,
                             SampleFormatEnum(PaSampleFormat(source.sample_spec.format).name),
                             source.sample_spec.rate,
@@ -91,9 +92,11 @@ class PulseAudioBackend(AudioBackend):
                     try:
                         logger.debug(f"Found PulseAudio sink: {sink.name}")
                         sink = p.get_sink_by_name(sink.name)
+
                         devices.append(AudioDevice(
                             self,
                             sink.name,
+                            sink.proplist.get('device.string'),
                             AudioDeviceType.PLAYBACK,
                             SampleFormatEnum(PaSampleFormat(sink.sample_spec.format).name),
                             sink.sample_spec.rate,

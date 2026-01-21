@@ -27,6 +27,7 @@ class KnownAudioDevice(models.Model):
 
     backend = models.CharField(max_length=50, help_text="Audio backend name (e.g., 'pulseaudio')")
     name = models.CharField(max_length=255, help_text="Device identifier")
+    nice_name = models.CharField(max_length=255, help_text="Device nice name", null=True)
     device_type = models.CharField(max_length=10, choices=DEVICE_TYPE_CHOICES)
     format = models.CharField(max_length=15, choices=FORMAT_CHOICES)
     sample_rate = models.IntegerField(help_text="Sample rate in Hz")
