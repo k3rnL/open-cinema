@@ -44,16 +44,9 @@ def get_node_schematic(request, pipeline_id, node_id):
 
 @require_http_methods(['GET'])
 def get_pipeline_schematics(request):
-    io = []
-    subclasses = [
-        *AudioPipelineIONode.__subclasses__(),
-        *AudioPipelineProcessingNode.__subclasses__()
-    ]
-    for subclass in subclasses:
-        io.append(node_type_to_json(subclass))
-
     data = {
-        'io': io
+        'device': [node_type_to_json(cls) for cls in AudioPipelineIONode.__subclasses__()],
+        'processing': [node_type_to_json(cls) for cls in AudioPipelineProcessingNode.__subclasses__()],
     }
 
     return JsonResponse(data, safe=False)
