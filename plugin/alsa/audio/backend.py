@@ -47,6 +47,7 @@ class AlsaAudioBackend(AudioBackend):
                         devices.append(AudioDevice(
                             self,
                             device_name,
+                            device_name,
                             AudioDeviceType.CAPTURE,
                             SampleFormatEnum.S16LE,  # Default format
                             48000,  # Default sample rate
@@ -68,6 +69,7 @@ class AlsaAudioBackend(AudioBackend):
 
                         devices.append(AudioDevice(
                             self,
+                            device_name,
                             device_name,
                             AudioDeviceType.PLAYBACK,
                             SampleFormatEnum.S16LE,  # Default format

@@ -10,7 +10,7 @@ Group={{ open_cinema.group }}
 SupplementaryGroups=audio video
 
 # Use user mode (not system mode)
-ExecStart=/usr/bin/pulseaudio --daemonize=no --log-target=journal --exit-idle-time=-1
+ExecStart=/usr/bin/pulseaudio -vvv --daemonize=no --log-target=file:/home/opencinema/pulseaudio.log --exit-idle-time=-1
 Restart=on-failure
 RestartSec=5
 

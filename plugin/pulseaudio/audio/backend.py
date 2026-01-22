@@ -1,4 +1,5 @@
 import logging
+import uuid
 from enum import IntEnum
 
 import pulsectl
@@ -43,6 +44,7 @@ class PulseAudioBackend(AudioBackend):
             return AudioDevice(
                 self,
                 source.name,
+                source.proplist.get('device.description'),
                 AudioDeviceType.CAPTURE,
                 SampleFormatEnum(PaSampleFormat(source.sample_spec.format).name),
                 source.sample_spec.rate,
@@ -57,6 +59,7 @@ class PulseAudioBackend(AudioBackend):
             return AudioDevice(
                 self,
                 sink.name,
+                sink.proplist.get('device.description'),
                 AudioDeviceType.PLAYBACK,
                 SampleFormatEnum(PaSampleFormat(sink.sample_spec.format).name),
                 sink.sample_spec.rate,
@@ -76,7 +79,7 @@ class PulseAudioBackend(AudioBackend):
                         devices.append(AudioDevice(
                             self,
                             source.name,
-                            source.proplist.get('device.string'),
+                            source.proplist.get('device.description'),
                             AudioDeviceType.CAPTURE,
                             SampleFormatEnum(PaSampleFormat(source.sample_spec.format).name),
                             source.sample_spec.rate,
@@ -114,10 +117,11 @@ class PulseAudioBackend(AudioBackend):
         return devices
 
     def add_module(self, name: str, args: list[str] = list) -> PulseAudioCreatedModule:
+        internal_id = str(hash(' '.join(args)))
         try:
             with pulsectl.Pulse("create-module") as p:
                 module_index = p.module_load(name, args)
-                return PulseAudioCreatedModule.objects.create(module_id=module_index)
+                return PulseAudioCreatedModule.objects.create(module_id=module_index, internal_id=internal_id)
         except PulseError as e:
             logger.error(f"Failed to load PulseAudio module: {e}")
             raise e
@@ -125,8 +129,12 @@ class PulseAudioBackend(AudioBackend):
     def del_module(self, module: PulseAudioCreatedModule):
         try:
             with pulsectl.Pulse("unload-module") as p:
-                p.module_unload(module.module_id)
-                module.delete()
+                for m in p.module_list():
+                    internal_id = str(hash(m.argument))
+                    if internal_id == module.internal_id:
+                        p.module_unload(m.module_id)
+                        module.delete()
+                        return
         except PulseError as e:
             logger.error(f"Failed to unload PulseAudio module: {e}")
             raise e
