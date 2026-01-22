@@ -2,6 +2,7 @@ import logging
 
 import alsaaudio
 
+from api.models import KnownAudioDevice
 from core.audio.audio_backend import AudioBackend
 from core.audio.audio_device import AudioDevice, AudioDeviceType
 from core.audio.sample_format_enum import SampleFormatEnum
@@ -87,3 +88,10 @@ class AlsaAudioBackend(AudioBackend):
 
         logger.info(f"ALSA backend discovered {len(devices)} devices")
         return devices
+
+    def get_volume(self, device: KnownAudioDevice) -> int:
+        pass
+
+    def set_volume(self, device: KnownAudioDevice, volume: int) -> None:
+        pass
+

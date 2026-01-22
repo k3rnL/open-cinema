@@ -21,3 +21,11 @@ class AudioBackends:
             if backend.name in enabled_backends_name:
                 devices.extend(backend.devices())
         return devices
+
+    @staticmethod
+    def get_backend(name: str) -> AudioBackend:
+        """Returns an instance of the specified AudioBackend by name."""
+        for backend in AudioBackends.get_all():
+            if backend.name == name:
+                return backend
+        raise ValueError(f"No backend found with name '{name}'")

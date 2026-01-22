@@ -24,9 +24,11 @@ urlpatterns = [
 
     # Audio devices
     path("devices", api.views.audio.audio_devices.get_devices, name="get_devices"),
-    path("devices/<int:device_id>", api.views.audio.audio_devices.forget_device, name="forget_device"),
     path("devices/discover", api.views.audio.audio_devices.discover_devices, name="discover_devices"),
     path("devices/update", api.views.audio.device_discovery.trigger_discovery, name="trigger_discovery"),
+    path("devices/<int:device_id>", api.views.audio.audio_devices.forget_device, name="forget_device"),
+    path("devices/<int:device_id>/volume/<int:volume>", api.views.audio.audio_devices.set_volume_of_device, name="set_volume"),
+    path("devices/<int:device_id>/volume", api.views.audio.audio_devices.get_volume_of_device, name="get_volume"),
 
     path("pipelines", api.views.audio.pipeline.audio_pipelines.AudioPipelineList.as_view(), name="pipelines"),
     path("pipelines/<int:pipeline_id>", api.views.audio.pipeline.audio_pipelines.AudioPipelineDetail.as_view(), name="pipeline"),

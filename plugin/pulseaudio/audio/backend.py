@@ -3,10 +3,11 @@ import uuid
 from enum import IntEnum
 
 import pulsectl
-from pulsectl import PulseError
+from pulsectl import PulseError, PulseIndexError
 
 from api.models import KnownAudioDevice
 from core.audio.audio_backend import AudioBackend
+from core.audio.audio_backend_exception import AudioBackendException
 from core.audio.audio_device import AudioDevice, AudioDeviceType
 from core.audio.sample_format_enum import SampleFormatEnum
 from plugin.pulseaudio.models.pulse_audio_created_device import PulseAudioCreatedModule
@@ -156,3 +157,35 @@ class PulseAudioBackend(AudioBackend):
         except PulseError as e:
             logger.error(f"Failed to delete PulseAudio device: {e}")
             raise e
+
+    def get_volume(self, device: KnownAudioDevice) -> int:
+        try:
+            with pulsectl.Pulse("list-devices") as p:
+                if device.device_type == AudioDeviceType.CAPTURE:
+                    pulse_device = p.get_source_by_name(device.name)
+                else:
+                    pulse_device = p.get_sink_by_name(device.name)
+                return int(pulse_device.volume.value_flat * 100)
+        except PulseIndexError:
+            return 0
+        except PulseError as e:
+            raise AudioBackendException(f"Failed to get volume for device {device.name}: {e}") from e
+
+    def set_volume(self, device: KnownAudioDevice, volume: int) -> None:
+        try:
+            with pulsectl.Pulse("set-volume") as p:
+                if device.device_type == AudioDeviceType.CAPTURE:
+                    pulse_device = p.get_source_by_name(device.name)
+                else:
+                    pulse_device = p.get_sink_by_name(device.name)
+                device_volume = pulse_device.volume
+                device_volume.value_flat = float(volume) / 100.0
+                p.volume_set(pulse_device, device_volume)
+        except PulseIndexError:
+            # Device does not exist (yet?), mark it as inactive
+            device.active = False
+            device.save()
+        except PulseError as e:
+            logger.error(f"Failed to set volume for device {device.name}: {e}")
+            raise AudioBackendException(f"Failed to set volume for device {device.name}: {e}") from e
+

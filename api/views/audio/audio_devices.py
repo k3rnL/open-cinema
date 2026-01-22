@@ -1,10 +1,15 @@
+import logging
+import traceback
+
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.db.models.deletion import ProtectedError
 
 from api.models import KnownAudioDevice
+from core.audio.audio_backend_exception import AudioBackendException
 from core.audio.audio_backends import AudioBackends
 
+logger = logging.getLogger(__name__)
 
 @require_http_methods(["GET"])
 def get_devices(request):
@@ -29,6 +34,15 @@ def get_devices(request):
     if device_type_filter:
         devices = devices.filter(device_type=device_type_filter.upper())
 
+    volumes = {}
+    for device in devices:
+        try:
+            volumes[device.id] = AudioBackends.get_backend(device.backend).get_volume(device)
+        except AudioBackendException as e:
+            logger.error(f"Failed to get volume for device {device.id}: {e}")
+            volumes[device.id] = 0
+            continue
+
     # Convert to JSON
     devices_data = [
         {
@@ -41,12 +55,14 @@ def get_devices(request):
             'sample_rate': device.sample_rate,
             'channels': device.channels,
             'active': device.active,
-            'last_seen': device.last_seen.isoformat()
+            'last_seen': device.last_seen.isoformat(),
+            'volume': volumes[device.id],
         }
         for device in devices
     ]
 
     return JsonResponse(devices_data, safe=False)
+
 
 @require_http_methods(["DELETE"])
 def forget_device(request, device_id):
@@ -91,3 +107,31 @@ def discover_devices(request):
     ]
 
     return JsonResponse(devices_data, safe=False)
+
+def set_volume_of_device(request, device_id: int, volume: int):
+    if volume < 0 or volume > 100:
+        return JsonResponse({'error': 'Volume must be between 0 and 100'}, status=400)
+    try:
+        device = KnownAudioDevice.objects.get(id=device_id)
+        if not device.active:
+            return JsonResponse({'error': 'Device is not active'}, status=400)
+        AudioBackends.get_backend(device.backend).set_volume(device, volume)
+        return JsonResponse({}, status=204)
+    except KnownAudioDevice.DoesNotExist:
+        return JsonResponse({'error': f'Device with ID {device_id} does not exist'}, status=404)
+    except AudioBackendException as e:
+        logger.error(f'Failed to set volume for device {device_id}: {str(e)}')
+        return JsonResponse({'error': 'Failed to set volume, is the device connected?'}, status=400)
+
+def get_volume_of_device(request, device_id: int):
+    try:
+        device = KnownAudioDevice.objects.get(id=device_id)
+        if not device.active:
+            return JsonResponse({'error': 'Device is not active'}, status=400)
+        return JsonResponse({'volume': AudioBackends.get_backend(device.backend).get_volume(device)})
+    except KnownAudioDevice.DoesNotExist:
+        return JsonResponse({'error': f'Device with ID {device_id} does not exist'}, status=404)
+    except AudioBackendException as e:
+        traceback.print_exception(e)
+        logger.error(f'Failed to get volume for device {device_id}: {str(e)}')
+        return JsonResponse({'error': 'Failed to get volume, is the device connected?'}, status=400)
