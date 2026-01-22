@@ -104,6 +104,7 @@ def unapply_audio_pipeline(self, pipeline_id: int, job_id: int):
             node.data.get_manager().unapply(node, graph)
             job_log_completed_node_event(job, node.data.id)
         except Exception as e:
+            logger.exception(f"Failed to unapply node {node.data.id}: {e}")
             job_log_failure_node_event(job, node.data, PipelineJobEventData(node_errors=[f'Error unapplying node: {str(e)}']))
             pipeline.stale = True
             pipeline.save()

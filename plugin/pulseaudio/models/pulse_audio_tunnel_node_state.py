@@ -10,7 +10,7 @@ class PulseAudioTunnelNodeState(models.Model):
 
     module = models.ForeignKey(PulseAudioCreatedModule, on_delete=models.CASCADE, null=False)
 
-    device = models.ForeignKey(KnownAudioDevice, on_delete=models.RESTRICT, null=True)
+    device = models.ForeignKey(KnownAudioDevice, on_delete=models.SET_NULL, null=True)
 
     class Meta:
         app_label = 'api'

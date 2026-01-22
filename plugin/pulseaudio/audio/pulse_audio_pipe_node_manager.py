@@ -38,7 +38,7 @@ class PulseAudioPipeNodeManager(AudioPipelineNodeManager):
         args = [
             f'source={previous_device.name}',
             f'sink={next_device.name}',
-            'latency_msec=200',
+            f'latency_msec={self.node.latency}',
             'adjust_time=10'
         ]
 

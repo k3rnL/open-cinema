@@ -1,6 +1,8 @@
+from time import sleep
 from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist
+from pulsectl import PulseIndexError
 
 from api.models import KnownAudioDevice
 from api.models.audio.pipeline.audio_pipeline_node_slot import AudioPipelineNodeSlot, SlotType, SlotDirection
@@ -30,7 +32,7 @@ class PulseAudioTunnelNodeManager(AudioPipelineNodeManager):
         mode = self.node.mode.lower()
         internal_id = f'{self.node.pipeline.id}_{self.node.id}'
         name = f'opencinema_tunnel_{internal_id}'
-        kind = f'module-tunnel-{mode}'
+        kind = f'module-tunnel-{mode}-new'
         args = [
             f'{mode}_name={name}',
             f'server={self.node.server}',
@@ -42,6 +44,7 @@ class PulseAudioTunnelNodeManager(AudioPipelineNodeManager):
 
         backend = PulseAudioBackend()
         module = backend.add_module(kind, args)
+        sleep(0.2) # Wait it's up
         if self.node.mode == 'SOURCE' or self.node.mode == 'source':
             device = backend.get_source(name)
         elif self.node.mode == 'SINK' or self.node.mode == 'sink':
@@ -66,9 +69,12 @@ class PulseAudioTunnelNodeManager(AudioPipelineNodeManager):
             state = self.node.pulseaudiotunnelnodestate
         except ObjectDoesNotExist:
             return
+        try:
+            PulseAudioBackend().del_device(state.device)
+        except PulseIndexError as e:
+            # device may not exist anymore
+            pass
         state.delete()
-        state.device.delete()
-        PulseAudioBackend().del_module(state.module)
 
     def validate(self, graph_node: AudioPipelineGraphNode, graph: AudioPipelineGraph) -> ValidationResultNode | None:
         field_errors = {}

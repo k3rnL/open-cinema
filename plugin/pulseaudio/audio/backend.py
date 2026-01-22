@@ -5,6 +5,7 @@ from enum import IntEnum
 import pulsectl
 from pulsectl import PulseError
 
+from api.models import KnownAudioDevice
 from core.audio.audio_backend import AudioBackend
 from core.audio.audio_device import AudioDevice, AudioDeviceType
 from core.audio.sample_format_enum import SampleFormatEnum
@@ -132,9 +133,26 @@ class PulseAudioBackend(AudioBackend):
                 for m in p.module_list():
                     internal_id = str(hash(m.argument))
                     if internal_id == module.internal_id:
-                        p.module_unload(m.module_id)
+                        p.module_unload(module.module_id)
                         module.delete()
                         return
         except PulseError as e:
             logger.error(f"Failed to unload PulseAudio module: {e}")
+            raise e
+
+    def del_device(self, device: KnownAudioDevice):
+        if device.backend != self.name:
+            raise ValueError(f"Cannot delete device {device.name} from backend {device.backend}, expected {self.name}")
+
+        try:
+            with pulsectl.Pulse("delete-device") as p:
+                print(f"Deleting device {device.name} of type {device.device_type}")
+                if device.device_type == AudioDeviceType.PLAYBACK:
+                    d = p.get_sink_by_name(device.name)
+                else:
+                    d = p.get_source_by_name(device.name)
+                p.module_unload(d.owner_module)
+                device.delete()
+        except PulseError as e:
+            logger.error(f"Failed to delete PulseAudio device: {e}")
             raise e

@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 
+from django.db import models
 from django.db.models import Field
 
 from api.models.audio.pipeline.audio_pipeline_processing_node import AudioPipelineProcessingNode
@@ -12,6 +13,8 @@ if TYPE_CHECKING:
 class PulseAudioPipeNode(AudioPipelineProcessingNode):
     """Represents a PulseAudio pipe node in the audio pipeline."""
 
+    latency = models.IntegerField(default=200, help_text='Latency in milliseconds')
+
     class Meta:
         app_label = 'api'
 
@@ -21,4 +24,6 @@ class PulseAudioPipeNode(AudioPipelineProcessingNode):
 
     @classmethod
     def get_exposed_fields(cls) -> list[Field]:
-        return []
+        return [
+            cls._meta.get_field('latency')
+        ]
