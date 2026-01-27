@@ -23,7 +23,7 @@ open_cinema:
 
 # CamillaDSP Configuration
 camilladsp:
-  version: "v2.0.3"
+  version: "v3.0.1"
   repo: "HEnquist/camilladsp"
   websocket_port: 1234
   websocket_address: "0.0.0.0"
