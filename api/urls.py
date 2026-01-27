@@ -3,6 +3,7 @@ from django.urls import path, include
 import api.views.audio.audio_devices
 import api.views.audio.pipeline.audio_pipelines
 import api.views.audio.pipeline.audio_pipeline_apply
+import api.views.audio.pipeline.audio_pipeline_jobs
 import api.views.audio.pipeline.audio_pipeline_events
 import api.views.audio.pipeline.audio_pipeline_validation
 import api.views.audio.pipeline.audio_pipeline_edges
@@ -35,7 +36,8 @@ urlpatterns = [
     path("pipelines/<int:pipeline_id>/validate", api.views.audio.pipeline.audio_pipeline_validation.validate_audio_pipeline, name="pipeline"),
     path("pipelines/<int:pipeline_id>/apply", api.views.audio.pipeline.audio_pipeline_apply.AudioPipelineApplyView.as_view(), name="pipeline_apply"),
     path("pipelines/<int:pipeline_id>/unapply", api.views.audio.pipeline.audio_pipeline_apply.AudioPipelineApplyView.as_view(), name="pipeline_unapply"),
-    path("pipelines/<int:pipeline_id>/job/<int:job_id>", api.views.audio.pipeline.audio_pipeline_events.AudioPipelineApplyEventList.as_view(), name="pipeline_events"),
+    path("pipelines/<int:pipeline_id>/job", api.views.audio.pipeline.audio_pipeline_jobs.AudioPipelineJobList.as_view(), name="pipeline_jobs"),
+    path("pipelines/<int:pipeline_id>/job/<int:job_id>", api.views.audio.pipeline.audio_pipeline_jobs.AudioPipelineJobDetail.as_view(), name="pipeline_events"),
     path("pipelines/<int:pipeline_id>/nodes", api.views.audio.pipeline.node.audio_pipeline_nodes.AudioPipelineNodeList.as_view(), name="pipeline_nodes"),
     path("pipelines/<int:pipeline_id>/nodes/positions", api.views.audio.pipeline.node.audio_pipeline_node_positions.AudioPipelineNodePositionList.as_view(), name="pipeline_node_positions"),
     path("pipelines/<int:pipeline_id>/nodes/<int:node_id>", api.views.audio.pipeline.node.audio_pipeline_nodes.AudioPipelineNodeDetail.as_view(), name="pipeline_node"),
