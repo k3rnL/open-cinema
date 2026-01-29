@@ -21,6 +21,7 @@
       ]
     }
   },
+  postStartCommand: "bash -lc '/workspace/.devcontainer/start-pipewire.sh'",
   features: {
     "ghcr.io/devcontainers/features/git" : {}
     // Add additional features to your project using auto-completion.

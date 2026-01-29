@@ -4,9 +4,9 @@ LABEL authors="erwandaniel"
 RUN apt update && apt install -y \
     libpulse-dev libavutil-dev libavformat-dev \
     libavfilter-dev libavdevice-dev libclang-dev \
-    ffmpeg wget pulseaudio sudo \
+    ffmpeg wget pipewire dbus-user-session dbus-x11 sudo \
     git curl build-essential pkg-config libasound2-dev python3-dev \
-    curl rsync build-essential libalsaplayer-dev librust-alsa-sys-dev  # Should be in a build container
+    curl rsync libalsaplayer-dev librust-alsa-sys-dev  # Should be in a build container
 
 RUN echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu \
     && chmod 440 /etc/sudoers.d/ubuntu
