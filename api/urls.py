@@ -4,7 +4,6 @@ import api.views.audio.audio_devices
 import api.views.audio.pipeline.audio_pipelines
 import api.views.audio.pipeline.audio_pipeline_apply
 import api.views.audio.pipeline.audio_pipeline_jobs
-import api.views.audio.pipeline.audio_pipeline_events
 import api.views.audio.pipeline.audio_pipeline_validation
 import api.views.audio.pipeline.audio_pipeline_edges
 import api.views.audio.pipeline.node.audio_pipeline_nodes
