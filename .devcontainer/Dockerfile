@@ -31,8 +31,16 @@ RUN wget https://raw.githubusercontent.com/mdsimon2/RPi-CamillaDSP/main/camillag
     sed -i "s|username|$(id -u -n)|g" /lib/systemd/system/camillagui.service && \
     systemctl enable camillagui
 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# Install uv
+RUN cd /tmp && wget https://github.com/astral-sh/uv/releases/download/0.9.28/uv-aarch64-unknown-linux-gnu.tar.gz \
+    && tar -xzvf uv-aarch64-unknown-linux-gnu.tar.gz \
+    && mv uv-aarch64-unknown-linux-gnu/* /usr/bin/ \
+    && rm -rf uv-*
 
+# Allow usage of pipewire in the term
+RUN echo "export XDG_RUNTIME_DIR=/tmp/pipewire" >> /home/ubuntu/.bashrc
+
+# Propably useless now
 COPY entrypoint.sh /entrypoint.sh
 COPY camilladsp/default.yml /etc/camilladsp/default.yml
 
