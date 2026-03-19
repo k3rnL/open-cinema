@@ -12,15 +12,15 @@ mkfifo /tmp/pa.input
 mkfifo /tmp/pa.output
 
 # Start PulseAudio with pipe source and sink
-pulseaudio -D -n \
-    -L "module-pipe-source source_name=fifo_input file=/tmp/pa.input rate=48000 format=S16LE channels=2" \
-    -L "module-pipe-sink sink_name=fifo_output file=/tmp/pa.output rate=48000 format=float32LE channels=6" \
-    -L module-native-protocol-unix \
-    -L module-native-protocol-tcp \
-    --exit-idle-time=1000000
+#pulseaudio -D -n \
+#    -L "module-pipe-source source_name=fifo_input file=/tmp/pa.input rate=48000 format=S16LE channels=2" \
+#    -L "module-pipe-sink sink_name=fifo_output file=/tmp/pa.output rate=48000 format=float32LE channels=6" \
+#    -L module-native-protocol-unix \
+#    -L module-native-protocol-tcp \
+#    --exit-idle-time=1000000
 
 # Wait for PulseAudio to start
-sleep 2
+#sleep 2
 
 # Verify PulseAudio modules loaded
 echo "Checking PulseAudio status..."
@@ -44,4 +44,4 @@ echo "CamillaDSP: Running on websocket port 1234"
 echo "CamillaGUI: Check service status"
 echo "==================================="
 
-exec bash
+exec sleep infinity
