@@ -79,7 +79,22 @@ curl http://localhost:8000/api/camilladsp/status
 
 ### Using the DevContainer
 
-The project includes a complete development environment with PulseAudio and CamillaDSP:
+How to start and use the DevContainer using the official CLI
+```bash
+# Build and bring up the containers
+devcontainer up --workspace-folder 
+
+# Get into the main container
+devcontainer exec --workspace-folder . bash
+
+```
+
+Rebuilding the container can be done like this:
+```bash
+docker compose --project-name open-cinema_devcontainer -f .devcontainer/docker-compose.yml  build
+```
+
+The project includes a complete development environment with Redis, PipeWire, WirePlumber and CamillaDSP:
 
 ```bash
 # Open in DevContainer (VS Code or compatible IDE)
