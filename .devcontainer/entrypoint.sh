@@ -44,4 +44,5 @@ echo "CamillaDSP: Running on websocket port 1234"
 echo "CamillaGUI: Check service status"
 echo "==================================="
 
+/entrypoint/start-pipewire.sh
 exec sleep infinity

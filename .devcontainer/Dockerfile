@@ -50,11 +50,12 @@ RUN set -eux; \
 
 RUN echo "export XDG_RUNTIME_DIR=/tmp/pipewire" >> /home/ubuntu/.bashrc
 
-COPY entrypoint.sh /entrypoint.sh
+COPY entrypoint.sh start-pipewire.sh /entrypoint/
 COPY camilladsp/default.yml /etc/camilladsp/default.yml
 
-RUN chmod +x /entrypoint.sh && mkdir -p /etc/camilladsp
+RUN chmod +x /entrypoint/*.sh && mkdir -p /etc/camilladsp
 
 EXPOSE 5005 1234
 
-ENTRYPOINT ["/entrypoint.sh"]
+USER ubuntu
+ENTRYPOINT ["/entrypoint/entrypoint.sh"]
