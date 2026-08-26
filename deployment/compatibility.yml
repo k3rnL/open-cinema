@@ -10,12 +10,16 @@ platform:
     distribution_codenames: [trixie]
     architectures: [aarch64]
     raspberry_pi_models:
-      - name: Raspberry Pi 4 Model B
-        minimum_memory_mb: 2048
       - name: Raspberry Pi 5 Model B
-        minimum_memory_mb: 2048
+        # An 8 GB board reports slightly less than its nominal capacity to Linux.
+        minimum_memory_mb: 7500
   experimental:
     raspberry_pi_models:
+      - name: Raspberry Pi 5 Model B
+        maximum_memory_mb_exclusive: 7500
+        reason: Smaller memory tiers have not completed hardware acceptance.
+      - name: Raspberry Pi 4 Model B
+        reason: No release or hardware benchmark has accepted this model yet.
       - name: Raspberry Pi 3 Model B+
         reason: Processor and memory limits require hardware acceptance measurements.
     distribution_major_versions: [12]
@@ -37,7 +41,7 @@ components:
     development_package: libwireplumber-0.5-dev
     pkg_config: wireplumber-0.5
   wyreplumber:
-    minimum: "0.1.0"
+    minimum: "0.2.0"
     maximum_exclusive: "0.3.0"
     python_package: wyreplumber
     required_api_contract: "1"
@@ -50,7 +54,7 @@ components:
     maximum_exclusive: "5.0.0"
     deployment_role: runtime-control
   pcm_auto_decoder:
-    minimum: "0.1.4"
+    minimum: "0.2.2"
     maximum_exclusive: "0.3.0"
     status_protocol: 2
     backend: pipewire

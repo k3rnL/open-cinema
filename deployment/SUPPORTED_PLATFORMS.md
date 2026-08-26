@@ -1,8 +1,10 @@
 # Supported appliance platform matrix
 
 The first orchestration release targets **Raspberry Pi OS Lite 64-bit based on
-Debian 13 (Trixie)** on Raspberry Pi 4 and Raspberry Pi 5 with at least 2 GB of
-memory. The machine-readable source of truth is
+Debian 13 (Trixie)** on the exercised Raspberry Pi 5 8 GB fixture. Linux must
+report at least 7,500 MB of memory; this allows for the difference between the
+board's nominal capacity and memory visible to the operating system. The
+machine-readable source of truth is
 [`compatibility.yml`](compatibility.yml); deployment preflight consumes that
 file rather than duplicating version constants in tasks.
 
@@ -10,14 +12,14 @@ file rather than duplicating version constants in tasks.
 
 | Layer | Supported range or target |
 | --- | --- |
-| Raspberry Pi | Pi 4 Model B or Pi 5 Model B, at least 2 GB RAM |
+| Raspberry Pi | Pi 5 Model B 8 GB, at least 7,500 MB reported RAM |
 | Operating system | Raspberry Pi OS Lite 64-bit, Debian 13 / Trixie |
 | Architecture | `aarch64` |
 | PipeWire | `>=1.4.0,<2.0.0` |
 | WirePlumber | `>=0.5.8,<0.6.0`, API family 0.5 |
-| WyrePlumber | `>=0.1.0`, orchestration contract 1 |
+| WyrePlumber | `>=0.2.0,<0.3.0`, orchestration contract 1 |
 | CamillaDSP / control client | `>=4.1.3,<5.0.0`, native PipeWire / pyCamillaDSP `>=4,<5` |
-| PCM auto decoder | `>=0.1.4,<0.2.0`, native PipeWire, status protocol 2 |
+| PCM auto decoder | `>=0.2.2,<0.3.0`, native PipeWire, status protocol 2 |
 | Python | `>=3.13,<3.14` |
 | Django / Gunicorn / Celery | `>=6.0,<6.1` / `>=23,<24` / `>=5.6,<6` |
 | Redis / SQLite / nginx | `>=8,<9` / `>=3.46,<4` / `>=1.26,<2` |
@@ -34,6 +36,10 @@ by Open Cinema deployment.
 
 ## Experimental paths
 
+- Raspberry Pi 4 is experimental until its complete native audio fixture is
+  characterized and accepted. Smaller Raspberry Pi 5 memory tiers are also
+  explicit experimental paths and are deferred from production for the same
+  reason.
 - Raspberry Pi 3 Model B+ is experimental until decoder and CamillaDSP CPU,
   memory, latency, and thermal tests pass.
 - Debian/Raspberry Pi OS Bookworm is experimental because its base package is
@@ -65,8 +71,9 @@ must install a validated 0.5 backport and explicitly opt in.
 
 The initial production default permits one CamillaDSP instance and one native
 PipeWire decoder instance. These are declared policy defaults, not graph-model
-limits; hardware profiling tasks may raise capacity later. Both processors use
-native PipeWire resources in the supported appliance contract.
+limits. The Pi 5 8 GB benchmark campaign must complete before performance limits
+or broader capacity claims are added. Both processors use native PipeWire
+resources in the supported appliance contract.
 
 ## Reference sources
 

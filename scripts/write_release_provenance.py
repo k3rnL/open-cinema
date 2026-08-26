@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write portable provenance for locally built Open Cinema release assets."""
+"""Write portable provenance for one set of release assets."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dist-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--project", default="open-cinema")
     parser.add_argument("--repository", required=True)
     parser.add_argument("--commit", required=True)
     parser.add_argument("--tag", required=True)
@@ -46,7 +47,7 @@ def main() -> None:
 
     document = {
         "schemaVersion": 1,
-        "project": "open-cinema",
+        "project": args.project,
         "repository": args.repository,
         "commit": args.commit,
         "tag": args.tag,

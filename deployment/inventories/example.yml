@@ -3,3 +3,10 @@ all:
     cinema_pi:
       ansible_host: YOUR_PI_HOST_OR_IP
       ansible_user: YOUR_SSH_USER
+      # Copy this file to the ignored inventories/local.yml before replacing
+      # either placeholder with a controller-local absolute path.
+      open_cinema_release_manifest_source_path: /absolute/path/to/release-manifest.yml
+      # Appliance promotion needs this only while the manifest names the
+      # private first-release replacement. Development runs protect the
+      # receipt-bound Pi copy without opening the controller capsule.
+      private_rollback_capsule_path: /absolute/private/path/to/rollback-capsule.tar.gz

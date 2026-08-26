@@ -76,7 +76,7 @@ wheels = [
 [[package]]
 name = "camilladsp"
 version = "4.0.0"
-source = { git = "https://github.com/HEnquist/pycamilladsp.git?rev=v4.0.0#fdc0d163e02dd73206a493402b43c83502ad83d7" }
+source = { git = "https://github.com/HEnquist/pycamilladsp.git?rev=fdc0d163e02dd73206a493402b43c83502ad83d7#fdc0d163e02dd73206a493402b43c83502ad83d7" }
 dependencies = [
     { name = "pyyaml" },
     { name = "websocket-client" },
@@ -546,7 +546,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0" },
-    { name = "camilladsp", git = "https://github.com/HEnquist/pycamilladsp.git?rev=v4.0.0" },
+    { name = "camilladsp", git = "https://github.com/HEnquist/pycamilladsp.git?rev=fdc0d163e02dd73206a493402b43c83502ad83d7" },
     { name = "celery", extras = ["redis"], specifier = ">=5.6.2" },
     { name = "django", specifier = ">=6.0" },
     { name = "django-cors-headers", specifier = ">=4.9.0" },
@@ -971,7 +971,7 @@ wheels = [
 
 [[package]]
 name = "wyreplumber"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "../wyreplumber" }
 dependencies = [
     { name = "setuptools" },

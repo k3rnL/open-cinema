@@ -115,6 +115,14 @@
         }}
       failed_when: false
 
+    - name: Invalidate candidate gate and readiness evidence before replacement
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ open_cinema.diagnostics_root }}/contract-gate-result.json"
+        - "{{ open_cinema.readiness_result_path }}"
+
     - name: Remove only coordinated application generation directories
       ansible.builtin.file:
         path: "{{ item }}"
@@ -165,7 +173,7 @@
         - -wal
         - -shm
 
-    - name: Restore the previous installed release and gate identities
+    - name: Restore the previous installed release identity
       ansible.builtin.copy:
         src: "{{ open_cinema_rollback_bundle_path }}/{{ item.src }}"
         dest: "{{ item.dest }}"
@@ -179,16 +187,41 @@
           owner: root
           group: root
           mode: "0644"
-        - src: contract-gate-result.json
-          dest: "{{ open_cinema.diagnostics_root }}/contract-gate-result.json"
-          owner: "{{ open_cinema.user }}"
-          group: "{{ open_cinema.group }}"
-          mode: "0600"
-        - src: readiness-result.json
-          dest: "{{ open_cinema.readiness_result_path }}"
-          owner: "{{ open_cinema.user }}"
-          group: "{{ open_cinema.group }}"
-          mode: "0640"
+
+    - name: Load the restored installed release manifest
+      ansible.builtin.slurp:
+        src: "{{ release_manifest.install_path }}"
+      register: open_cinema_restored_release_manifest_file
+
+    - name: Publish the restored manifest for post-rollback readiness
+      ansible.builtin.set_fact:
+        open_cinema_release_manifest: >-
+          {{ open_cinema_restored_release_manifest_file.content | b64decode | from_yaml }}
+
+    - name: Require a content-addressed previous contract-gate identity
+      ansible.builtin.assert:
+        that:
+          - >-
+            (open_cinema_rollback_manifest.previous_candidate_digest | default('')) is
+            match('^[0-9a-f]{64}$')
+        fail_msg: >-
+          The selected rollback manifest cannot reconstruct a trusted previous
+          contract-gate identity; no unverified bundled diagnostic is restored.
+
+    - name: Reconstruct the passed contract gate from the verified rollback manifest
+      ansible.builtin.copy:
+        content: >-
+          {{ {'schemaVersion': 1,
+               'status': 'passed',
+               'candidateDigest': open_cinema_rollback_manifest.previous_candidate_digest,
+               'releaseId': open_cinema_release_manifest.release_id,
+               'source': 'verified-rollback-manifest',
+               'restoredFromBundle': open_cinema_rollback_bundle_id} |
+             to_nice_json }}
+        dest: "{{ open_cinema.diagnostics_root }}/contract-gate-result.json"
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
 
     - name: Reload restored system service definitions
       ansible.builtin.systemd:

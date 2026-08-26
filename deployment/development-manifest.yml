@@ -1,0 +1,119 @@
+---
+schema_version: 1
+release_id: open-cinema-local-development
+input_mode: development
+status: experimental
+promotable: false
+
+platform:
+  compatibility_matrix: open-cinema-raspberry-audio-v1
+  distribution_family: Debian
+  distribution_major: 13
+  distribution_codename: trixie
+  architecture: aarch64
+  raspberry_pi_tiers:
+    - pi5-8gb
+
+contracts:
+  audio_api: /api/audio/v1
+  orchestration_schema: 1
+  desired_graph_schema: 1
+  ui_dto_schema: 1
+  processing_plugin: 1
+  processing_driver: 1
+  wyreplumber_orchestration: 1
+  wyreplumber_runtime_value_schema: 1
+  wireplumber_api_family: "0.5"
+  decoder_status_protocol: 2
+  decoder_output: one-stable-adaptive-native-pipewire-pcm-output
+
+runtime_profile: full
+
+components:
+  open_cinema:
+    version: 0.3.0
+    repository: k3rnL/open-cinema
+    source_mode: local-source-tree
+    immutable: false
+  wyreplumber:
+    version: 0.2.0
+    repository: k3rnL/wyreplumber
+    source_mode: local-source-tree
+    immutable: false
+  management_ui:
+    version: 2.0.0
+    repository: k3rnL/open-cinema-ui
+    source_mode: local-source-tree
+    immutable: false
+  pcm_auto_decoder:
+    version: 0.2.2
+    repository: k3rnl/pcm-auto-decoder
+    source_mode: local-source-tree
+    immutable: false
+    backend: pipewire
+    status_protocol: 2
+  camilladsp:
+    version: 4.1.3
+    repository: HEnquist/camilladsp
+    source_mode: upstream-release-asset
+    immutable: true
+    backend: pipewire
+    artifacts:
+      - name: camilladsp-linux-pipewire-aarch64.tar.gz
+        kind: native-archive
+        url: https://github.com/HEnquist/camilladsp/releases/download/v4.1.3/camilladsp-linux-pipewire-aarch64.tar.gz
+        sha256: ca8b6cc32bda29bd7cb38f7bcda5fcc6f5e69690b3d0efaa23b6c3c05c45696c
+        platform:
+          distribution_family: Debian
+          distribution_major: 13
+          distribution_codename: trixie
+          architecture: aarch64
+          wireplumber_api_family: "0.5"
+        provenance_ref: components.camilladsp.provenance
+  pycamilladsp:
+    version: 4.0.0
+    repository: HEnquist/pycamilladsp
+    source_mode: locked-python-package
+  pipewire:
+    compatibility_ref: components.pipewire
+  wireplumber:
+    compatibility_ref: components.wireplumber
+  python:
+    compatibility_ref: components.python
+  django:
+    compatibility_ref: components.django
+  gunicorn:
+    compatibility_ref: components.gunicorn
+  celery:
+    compatibility_ref: components.celery
+  redis:
+    compatibility_ref: components.redis
+  sqlite:
+    compatibility_ref: components.sqlite
+  nginx:
+    compatibility_ref: components.nginx
+  bluez:
+    compatibility_ref: components.bluez
+  ffmpeg:
+    compatibility_ref: components.ffmpeg
+
+processor_requirements:
+  camilladsp_instances: 1
+  decoder_instances: 1
+
+rollback:
+  strategy: private-full-generation-replacement
+  close_window: false
+  previous:
+    kind: private-replacement-baseline
+    first_release_exception: true
+    receipt_id: open-cinema-replacement-baseline-v1
+    receipt_path: rollback-baselines/open-cinema-replacement-baseline-v1.yml
+    receipt_sha256: 899dd08618efafb86bcec1e6b9942535bcd417cadeced2035bef3bb0a14ae05a
+    retrieval_ref: inventory-private:open-cinema-replacement-baseline-v1
+    public: false
+    verified: true
+
+limitations:
+  - Local source trees are mutable development inputs, not release provenance.
+  - Hardware performance acceptance remains pending.

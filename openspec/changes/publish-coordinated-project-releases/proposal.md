@@ -4,7 +4,7 @@ Open Cinema now spans four independently built repositories, but the deployed ap
 
 ## What Changes
 
-- Introduce a coordinated release contract covering Open Cinema `0.3.0`, WyrePlumber `0.2.0`, PCM Auto Decoder `0.2.0`, and Open Cinema UI `2.0.0`.
+- Introduce a coordinated release contract covering Open Cinema `0.3.0`, WyrePlumber `0.2.0`, PCM Auto Decoder `0.2.2`, and Open Cinema UI `2.0.0`. Decoder `v0.2.0` remains an unpublished failed tag, and published `v0.2.1` remains rejected because its AArch64 post-download runtime gate failed; neither tag is moved or reused.
 - Require repository metadata, package versions, Git tags, release assets, native ABI/architecture, hashes, provenance, and deployment-manifest entries to agree.
 - Curate the existing dirty worktrees into intentional conventional commits without discarding user work, then validate, version, push, tag, and publish through each repository's established CI and release strategy.
 - Repair release blockers in the backend, WyrePlumber Python binding, native decoder, and UI build/test pipelines; remove obsolete PulseAudio-era CamillaDSP release automation from the current backend release path.

@@ -1,0 +1,42 @@
+---
+schema_version: 1
+receipt_id: open-cinema-replacement-baseline-v1
+kind: private-full-generation-replacement
+baseline_id: transition-20260826T002452-ebd7b2b6d014
+public: false
+storage_class: authenticated-private-off-appliance
+retention:
+  appliance_copy:
+    present: true
+    immutable_flag: true
+  controller_copy:
+    present: true
+    mode: "0400"
+    parent_mode: "0700"
+    immutable_flag: false
+  minimum_copies: 2
+integrity:
+  capsule_sha256: 11adef20b3a26992b61ea3f43608907f990f409e70dab0eb7cf32717a340db77
+  capsule_size_bytes: 84236888
+  manifest_sha256: 8bb5c2b83c0ef8c16844aa10d577cfd6b91c814bf968a9372850ee72852a073b
+  ready_sha256: 9ad6568efb9be626db9e000d44e0bc24f64c6648637a441e75595ab6d829525f
+  regular_file_count: 18
+  restore_artifact_count: 9
+  nested_archive_count: 6
+  sqlite_integrity: ok
+verification:
+  verified_at: "2026-08-26T20:59:29Z"
+  result: verified
+  verifier: deployment/scripts/verify_private_rollback_capsule.py
+privacy:
+  committed_receipt_only: true
+  excluded:
+    - capsule location
+    - database and user audio intent
+    - endpoint and device state
+    - inventory and host identity
+    - configuration contents
+    - logs and diagnostics
+scope:
+  first_coordinated_release_only: true
+  successor_policy: finalized-previous-coordinated-manifest

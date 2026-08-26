@@ -27,13 +27,13 @@ dependencies = [
     "websocket-client>=1.9.0",
     "django-cors-headers>=4.9.0",
     "django-environ>=0.11.2",
-    "camilladsp@git+https://github.com/HEnquist/pycamilladsp.git@v4.0.0",
+    "camilladsp==4.0.0",
     "django-enum>=2.3.0",
     "djangorestframework>=3.16.1",
     "celery[redis]>=5.6.2",
     "gunicorn==23.0.0",
     "jsonschema>=4.25",
-    "wyreplumber==0.1.0",
+    "wyreplumber==0.2.0",
 ]
 
 [project.scripts]
@@ -43,6 +43,7 @@ open-cinema-orchestrator = "opencinema.orchestrator:main"
 counter = "plugin.counter.api.plugin:CounterApplicationPlugin"
 
 [tool.uv.sources]
+camilladsp = { git = "https://github.com/HEnquist/pycamilladsp.git", rev = "fdc0d163e02dd73206a493402b43c83502ad83d7" }
 wyreplumber = { path = "../wyreplumber", editable = true }
 
 [project.optional-dependencies]

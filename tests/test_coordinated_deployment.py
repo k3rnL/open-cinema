@@ -96,14 +96,24 @@ def test_release_manifest_is_installed_and_correlated_with_recovery_records() ->
 def test_manifest_input_validation_precedes_every_appliance_role() -> None:
     site = read(DEPLOYMENT / "playbooks/site.yml")
     validator = read(DEPLOYMENT / "scripts/validate_release_manifest.py")
+    rollback_preflight = read(DEPLOYMENT / "tasks/private-rollback-preflight.yml")
 
     validation_at = site.index(
         "Validate and resolve every deployment input before appliance mutation"
     )
     assert validation_at < site.index("role: common")
     assert validation_at < site.index("role: pipewire-wireplumber")
+    rollback_at = site.index("Verify retained rollback input before any appliance mutation")
+    assert validation_at < rollback_at < site.index("role: common")
     assert "--mode" in site
     assert "install_from_local" in site
+    assert "verify_private_rollback_capsule.py" in rollback_preflight
+    assert "--receipt-sha256" in rollback_preflight
+    assert "no_log: true" in rollback_preflight
+    assert "Publish the protected appliance baseline path" in rollback_preflight
+    assert "Verify recursive immutable protection" in rollback_preflight
+    assert "target-verified" in rollback_preflight
+    assert "when: not install_from_local" in rollback_preflight
     assert "MUTABLE_SOURCE_MARKERS" not in validator
     for rejected_input in (
         "editable",
@@ -137,7 +147,7 @@ def test_release_installers_consume_only_selected_manifest_artifacts() -> None:
         assert f"open_cinema_release_artifacts.{selected}" in app
     for source in (app, ui, decoder, camilladsp):
         assert "open_cinema_release_artifacts" in source
-        assert "checksum: \"sha256:" in source
+        assert 'checksum: "sha256:' in source
     assert "--no-deps" in app
     assert "--force-reinstall" in app
     assert "Install only manifest-selected Python wheels in appliance mode" in app
@@ -238,6 +248,9 @@ def test_changed_candidate_creates_a_full_coordinated_transition_bundle() -> Non
         assert artifact in tasks
     assert "Retain the controller inventory inputs" in tasks
     assert "Mark the coordinated transition bundle restorable" in tasks
+    assert "open_cinema_transition_mutable_bundle_paths" in tasks
+    assert "open_cinema_protected_rollback_bundle_ids" in tasks
+    assert "Require protected transition bundles to remain outside the mutable set" in tasks
     assert "previous_candidate_digest" in manifest
     assert "artifacts:" in manifest
     for model in (
@@ -265,7 +278,19 @@ def test_rollback_restores_one_explicit_verified_generation() -> None:
     assert "Remove only coordinated application generation directories" in tasks
     assert "Extract coordinated application binding and web archives" in tasks
     assert "Restore the coordinated pre-transition database" in tasks
-    assert "Restore the previous installed release and gate identities" in tasks
+    assert "Restore the previous installed release identity" in tasks
+    assert "Invalidate candidate gate and readiness evidence before replacement" in tasks
+    assert "Reconstruct the passed contract gate from the verified rollback manifest" in tasks
+    restored_identity_at = tasks.index("Restore the previous installed release identity")
+    restored_identity_end = tasks.index("Load the restored installed release manifest")
+    restored_identity = tasks[restored_identity_at:restored_identity_end]
+    assert "src: contract-gate-result.json" not in restored_identity
+    assert "src: readiness-result.json" not in restored_identity
+    restored_manifest_at = tasks.index("Load the restored installed release manifest")
+    publish_manifest_at = tasks.index("Publish the restored manifest for post-rollback readiness")
+    assert restored_manifest_at < publish_manifest_at
+    assert "open_cinema_release_manifest:" in tasks[publish_manifest_at:]
+    assert "Verify retained rollback input before rollback mutation" in playbook
     assert "Require rollback to restore exact user-owned audio intent" in tasks
     assert "Record the successful coordinated rollback result" in tasks
     assert "role: rollback" in playbook
@@ -328,14 +353,13 @@ def test_deployment_uses_one_contract_gated_full_runtime() -> None:
     assert "open_cinema_feature_" not in environment
     assert "OPEN_CINEMA_AUDIO_LIVE_GRAPH_ALLOWLIST=*" in environment
     assert environment.count("open_cinema_contract_gate_complete | default(false)") == 2
-    assert "runtimeProfile: \"{{ open_cinema_release_manifest.runtime_profile }}\"" in readiness
-    assert "runtime_profile: \"{{ open_cinema_release_manifest.runtime_profile }}\"" in readiness
+    assert 'runtimeProfile: "{{ open_cinema_release_manifest.runtime_profile }}"' in readiness
+    assert 'runtime_profile: "{{ open_cinema_release_manifest.runtime_profile }}"' in readiness
     assert "rolloutStage" not in readiness
     assert "rollout_stage" not in readiness
     assert "rollout-stages.yml" not in backup
     assert (
-        "runtime_profile: \"{{ open_cinema_release_manifest.runtime_profile }}\""
-        in rollback_manifest
+        'runtime_profile: "{{ open_cinema_release_manifest.runtime_profile }}"' in rollback_manifest
     )
     assert "local_product_gate_complete" not in rollback_manifest
 
@@ -596,16 +620,38 @@ def test_service_ordering_uses_dependencies_and_readiness_not_timing_delays() ->
     assert "sleep " not in deployment_sources
 
 
-def test_successful_readiness_keeps_exactly_one_recorded_rollback_release() -> None:
+def test_successful_readiness_keeps_one_active_and_verified_protected_rollback() -> None:
     inventory = yaml.safe_load(read(DEPLOYMENT / "inventories/group_vars/all.yml"))
     tasks = read(READINESS_ROLE / "tasks/main.yml")
 
     assert inventory["open_cinema"]["rollback_releases_to_keep"] == 1
-    assert "Require the one-release rollback policy" in tasks
+    assert inventory["private_rollback_capsule_path"] == ""
+    assert "Require one active rollback release and any verified protected exception" in tasks
     assert "Record the successful one-release rollback boundary" in tasks
     assert "rollback-window.yml" in tasks
     assert "Remove rollback bundles older than the accepted previous release" in tasks
-    assert "Verify exactly one rollback release remains" in tasks
+    assert "open_cinema_protected_rollback_bundle_paths" in tasks
+    assert "open_cinema_expected_retained_rollback_paths" in tasks
+    assert "Verify the active and protected rollback releases remain" in tasks
+    assert "['verified', 'target-verified']" in tasks
+
+
+def test_private_inventory_is_ignored_and_public_example_has_safe_placeholders() -> None:
+    gitignore = read(ROOT / ".gitignore")
+    example = yaml.safe_load(read(DEPLOYMENT / "inventories/example.yml"))
+    host = example["all"]["hosts"]["cinema_pi"]
+
+    assert "/deployment/inventories/local.yml" in gitignore
+    assert "/deployment/inventories/*.local.yml" in gitignore
+    assert host["open_cinema_release_manifest_source_path"].startswith("/absolute/")
+    assert host["private_rollback_capsule_path"].startswith("/absolute/private/")
+
+
+def test_readiness_preserves_a_manifest_published_by_rollback() -> None:
+    tasks = read(READINESS_ROLE / "tasks/main.yml")
+
+    load_at = tasks.index("Load the coordinated release manifest for independently tagged runs")
+    assert "when: open_cinema_release_manifest is not defined" in tasks[load_at : load_at + 300]
 
 
 def test_readiness_verifies_vendor_integrity_and_permission_boundaries() -> None:
@@ -696,6 +742,8 @@ def test_preflight_aggregates_compatibility_before_destructive_or_live_roles() -
     assert "open_cinema_preflight_runtime_failures" in preflight
     assert "open_cinema_preflight_manifest_failures" in preflight
     assert "Probe installed Python packages and orchestration contracts" in preflight
+    assert "Verify retained rollback input for standalone preflight runs" in preflight
+    assert "private-rollback-preflight.yml" in preflight
     assert defaults["open_cinema_preflight_result_path"] == "/tmp/open-cinema-preflight-result.json"
 
 

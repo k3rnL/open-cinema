@@ -26,6 +26,10 @@ db.sqlite3
 # Django static & media (if collected locally)
 staticfiles/
 media/
+!/deployment/benchmarks/media/
+!/deployment/benchmarks/media/**
+/deployment/benchmarks/media/**/__pycache__/
+/deployment/benchmarks/media/**/*.py[cod]
 
 # Django migrations cache
 */migrations/__pycache__/
@@ -70,6 +74,8 @@ htmlcov/
 # Ansible
 # =========================
 *.retry
+/deployment/inventories/local.yml
+/deployment/inventories/*.local.yml
 
 # =========================
 # Git

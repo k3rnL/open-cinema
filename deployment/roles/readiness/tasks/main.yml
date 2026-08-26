@@ -3,6 +3,7 @@
   ansible.builtin.include_vars:
     file: "{{ release_manifest.source_path }}"
     name: open_cinema_release_manifest
+  when: open_cinema_release_manifest is not defined
 
 - name: Read the installed release-manifest digest for readiness records
   ansible.builtin.stat:
@@ -1065,14 +1066,31 @@
     group: "{{ open_cinema.group }}"
     mode: "0640"
 
-- name: Require the one-release rollback policy
+- name: Require one active rollback release and any verified protected exception
   ansible.builtin.assert:
     that:
       - open_cinema.rollback_releases_to_keep | int == 1
       - open_cinema_rollback_id is defined
+      - >-
+        open_cinema_release_manifest.rollback.strategy !=
+        'private-full-generation-replacement' or
+        (open_cinema_private_rollback_verification.result | default('missing')) in
+        ['verified', 'target-verified']
+      - >-
+        open_cinema_release_manifest.rollback.strategy !=
+        'private-full-generation-replacement' or
+        (open_cinema_private_rollback_verification.baselineId | default('')) in
+        (open_cinema_protected_rollback_bundle_ids | default([]))
     fail_msg: >-
-      A successful coordinated release must preserve exactly one known rollback
-      bundle created by this deployment.
+      A successful coordinated release must preserve one active rollback bundle
+      and every manifest-verified protected replacement baseline.
+  when: open_cinema_close_rollback_window | bool
+
+- name: Resolve rollback bundle paths protected from automated mutation
+  ansible.builtin.set_fact:
+    open_cinema_protected_rollback_bundle_paths: >-
+      {{ open_cinema_protected_rollback_bundle_ids | default([]) |
+         map('regex_replace', '^', open_cinema.rollback_root ~ '/') | list }}
   when: open_cinema_close_rollback_window | bool
 
 - name: Find coordinated rollback release bundles after successful readiness
@@ -1088,9 +1106,14 @@
     open_cinema_closed_rollback_paths: >-
       {{ open_cinema_rollback_release_directories.files
          | map(attribute='path')
-         | reject('equalto', open_cinema.rollback_root ~ '/' ~ open_cinema_rollback_id)
+         | difference(
+             ([open_cinema.rollback_root ~ '/' ~ open_cinema_rollback_id] +
+              open_cinema_protected_rollback_bundle_paths) | unique | list)
          | sort
          | list }}
+    open_cinema_expected_retained_rollback_paths: >-
+      {{ ([open_cinema.rollback_root ~ '/' ~ open_cinema_rollback_id] +
+          open_cinema_protected_rollback_bundle_paths) | unique | sort | list }}
   when: open_cinema_close_rollback_window | bool
 
 - name: Record the successful one-release rollback boundary
@@ -1098,8 +1121,9 @@
     content: |
       schema_version: 1
       updated_at: "{{ ansible_date_time.iso8601 }}"
-      retained_release_count: 1
+      retained_release_count: {{ open_cinema_expected_retained_rollback_paths | length }}
       open_bundle: "{{ open_cinema_rollback_id }}"
+      protected_bundles: {{ open_cinema_protected_rollback_bundle_ids | default([]) | to_json }}
       previous_windows_closed_at: "{{ ansible_date_time.iso8601 }}"
       closed_bundle_paths: {{ open_cinema_closed_rollback_paths | to_json }}
     dest: "{{ open_cinema.rollback_root }}/rollback-window.yml"
@@ -1117,14 +1141,16 @@
     - open_cinema_close_rollback_window | bool
     - open_cinema_closed_rollback_paths | length > 0
 
-- name: Verify exactly one rollback release remains
+- name: Verify the active and protected rollback releases remain
   ansible.builtin.find:
     paths: "{{ open_cinema.rollback_root }}"
     file_type: directory
     recurse: false
   register: open_cinema_retained_rollback_releases
   failed_when: >-
-    open_cinema_retained_rollback_releases.matched != 1 or
-    (open_cinema_retained_rollback_releases.files | map(attribute='path') | list) !=
-    [open_cinema.rollback_root ~ '/' ~ open_cinema_rollback_id]
+    open_cinema_retained_rollback_releases.matched !=
+      open_cinema_expected_retained_rollback_paths | length or
+    (open_cinema_retained_rollback_releases.files |
+     map(attribute='path') | sort | list) !=
+      open_cinema_expected_retained_rollback_paths
   when: open_cinema_close_rollback_window | bool

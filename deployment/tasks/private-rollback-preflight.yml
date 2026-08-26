@@ -1,0 +1,243 @@
+---
+- name: Record that no private replacement is required for a published predecessor
+  ansible.builtin.set_fact:
+    open_cinema_private_rollback_verification:
+      schemaVersion: 1
+      result: not-required
+      reason: previous-coordinated-release
+    open_cinema_protected_rollback_bundle_ids: []
+  when: open_cinema_private_rollback_manifest.rollback.strategy == 'previous-coordinated-release'
+
+- name: Verify and protect the private first-release replacement baseline
+  when:
+    - open_cinema_private_rollback_manifest.rollback.strategy == 'private-full-generation-replacement'
+  block:
+    - name: Resolve the committed rollback receipt without exposing private storage
+      ansible.builtin.set_fact:
+        open_cinema_private_rollback_receipt_path: >-
+          {{ playbook_dir }}/../{{
+             open_cinema_private_rollback_manifest.rollback.previous.receipt_path }}
+
+    - name: Inspect the committed privacy-safe rollback receipt
+      ansible.builtin.stat:
+        path: "{{ open_cinema_private_rollback_receipt_path }}"
+        checksum_algorithm: sha256
+        follow: false
+      delegate_to: localhost
+      become: false
+      register: open_cinema_private_rollback_receipt_stat
+      no_log: true
+
+    - name: Require the manifest-bound privacy-safe rollback receipt
+      ansible.builtin.assert:
+        that:
+          - open_cinema_private_rollback_manifest.rollback.previous.kind == 'private-replacement-baseline'
+          - open_cinema_private_rollback_manifest.rollback.previous.public is false
+          - open_cinema_private_rollback_manifest.rollback.previous.verified is true
+          - >-
+            open_cinema_private_rollback_manifest.rollback.previous.retrieval_ref ==
+            'inventory-private:' ~ open_cinema_private_rollback_manifest.rollback.previous.receipt_id
+          - open_cinema_private_rollback_receipt_stat.stat.exists
+          - open_cinema_private_rollback_receipt_stat.stat.isreg
+          - not open_cinema_private_rollback_receipt_stat.stat.islnk
+          - >-
+            open_cinema_private_rollback_receipt_stat.stat.checksum ==
+            open_cinema_private_rollback_manifest.rollback.previous.receipt_sha256
+        fail_msg: >-
+          The committed private rollback receipt is missing or disagrees with
+          the selected manifest; deployment is blocked before target mutation.
+      no_log: true
+
+    - name: Load the verified privacy-safe rollback receipt
+      ansible.builtin.include_vars:
+        file: "{{ open_cinema_private_rollback_receipt_path }}"
+        name: open_cinema_private_rollback_receipt
+      no_log: true
+
+    - name: Require one receipt-bound appliance baseline identity
+      ansible.builtin.assert:
+        that:
+          - open_cinema_private_rollback_receipt.schema_version == 1
+          - >-
+            open_cinema_private_rollback_receipt.receipt_id ==
+            open_cinema_private_rollback_manifest.rollback.previous.receipt_id
+          - open_cinema_private_rollback_receipt.kind == 'private-full-generation-replacement'
+          - open_cinema_private_rollback_receipt.public is false
+          - open_cinema_private_rollback_receipt.verification.result == 'verified'
+          - open_cinema_private_rollback_receipt.retention.appliance_copy.present is true
+          - >-
+            open_cinema_private_rollback_receipt.retention.appliance_copy.immutable_flag is true
+          - >-
+            open_cinema_private_rollback_receipt.baseline_id is
+            match('^transition-[0-9T]+-[0-9a-f]{12}$')
+          - >-
+            open_cinema_private_rollback_receipt.integrity.manifest_sha256 is
+            match('^[0-9a-f]{64}$')
+          - >-
+            open_cinema_private_rollback_receipt.integrity.ready_sha256 is
+            match('^[0-9a-f]{64}$')
+          - open_cinema_private_rollback_receipt.integrity.regular_file_count | int > 0
+        fail_msg: >-
+          The privacy-safe receipt does not identify a verified immutable
+          appliance baseline; deployment is blocked before target mutation.
+      no_log: true
+
+    - name: Publish the protected appliance baseline path
+      ansible.builtin.set_fact:
+        open_cinema_protected_rollback_bundle_ids:
+          - "{{ open_cinema_private_rollback_receipt.baseline_id }}"
+        open_cinema_private_rollback_appliance_path: >-
+          {{ open_cinema.rollback_root }}/{{ open_cinema_private_rollback_receipt.baseline_id }}
+
+    - name: Inspect the protected appliance baseline root
+      ansible.builtin.stat:
+        path: "{{ open_cinema_private_rollback_appliance_path }}"
+        follow: false
+      register: open_cinema_private_rollback_appliance_root_stat
+      no_log: true
+
+    - name: Inspect privacy-safe appliance baseline integrity records
+      ansible.builtin.stat:
+        path: "{{ open_cinema_private_rollback_appliance_path }}/{{ item }}"
+        checksum_algorithm: sha256
+        follow: false
+      loop:
+        - manifest.yml
+        - READY
+      register: open_cinema_private_rollback_appliance_integrity_stats
+      no_log: true
+
+    - name: Require the retained appliance baseline and receipt digests to agree
+      ansible.builtin.assert:
+        that:
+          - open_cinema_private_rollback_appliance_root_stat.stat.exists
+          - open_cinema_private_rollback_appliance_root_stat.stat.isdir
+          - not open_cinema_private_rollback_appliance_root_stat.stat.islnk
+          - open_cinema_private_rollback_appliance_integrity_stats.results[0].stat.exists
+          - open_cinema_private_rollback_appliance_integrity_stats.results[0].stat.isreg
+          - not open_cinema_private_rollback_appliance_integrity_stats.results[0].stat.islnk
+          - >-
+            open_cinema_private_rollback_appliance_integrity_stats.results[0].stat.checksum ==
+            open_cinema_private_rollback_receipt.integrity.manifest_sha256
+          - open_cinema_private_rollback_appliance_integrity_stats.results[1].stat.exists
+          - open_cinema_private_rollback_appliance_integrity_stats.results[1].stat.isreg
+          - not open_cinema_private_rollback_appliance_integrity_stats.results[1].stat.islnk
+          - >-
+            open_cinema_private_rollback_appliance_integrity_stats.results[1].stat.checksum ==
+            open_cinema_private_rollback_receipt.integrity.ready_sha256
+        fail_msg: >-
+          The protected appliance rollback baseline is missing or its
+          privacy-safe integrity records drifted. Restore it manually from the
+          retained controller copy before retrying; deployment will not
+          rehydrate or mutate it automatically.
+      no_log: true
+
+    - name: Verify recursive immutable protection and retained regular-file count
+      ansible.builtin.command:
+        argv:
+          - /bin/bash
+          - -c
+          - |
+            set -euo pipefail
+            root=$1
+            expected_regular_files=$2
+            immutable_entries=0
+            while IFS= read -r -d '' entry; do
+              attributes=$(/usr/bin/lsattr -d "$entry")
+              attribute_field=${attributes%% *}
+              case "$attribute_field" in
+                *i*) ;;
+                *) exit 42 ;;
+              esac
+              immutable_entries=$((immutable_entries + 1))
+            done < <(/usr/bin/find "$root" -xdev -print0)
+            regular_files=$(/usr/bin/find "$root" -xdev -type f -printf '.\n' | /usr/bin/wc -l)
+            test "$immutable_entries" -gt 0
+            test "$regular_files" -eq "$expected_regular_files"
+            printf '%s %s\n' "$immutable_entries" "$regular_files"
+          - open-cinema-private-rollback-check
+          - "{{ open_cinema_private_rollback_appliance_path }}"
+          - "{{ open_cinema_private_rollback_receipt.integrity.regular_file_count }}"
+      register: open_cinema_private_rollback_appliance_immutable_command
+      changed_when: false
+      no_log: true
+
+    - name: Publish only the privacy-safe target verification identity
+      ansible.builtin.set_fact:
+        open_cinema_private_rollback_target_verification:
+          schemaVersion: 1
+          result: target-verified
+          receiptId: "{{ open_cinema_private_rollback_receipt.receipt_id }}"
+          receiptSha256: >-
+            {{ open_cinema_private_rollback_manifest.rollback.previous.receipt_sha256 }}
+          baselineId: "{{ open_cinema_private_rollback_receipt.baseline_id }}"
+          manifestSha256: "{{ open_cinema_private_rollback_receipt.integrity.manifest_sha256 }}"
+          readySha256: "{{ open_cinema_private_rollback_receipt.integrity.ready_sha256 }}"
+          regularFileCount: >-
+            {{ open_cinema_private_rollback_appliance_immutable_command.stdout.split()[1] | int }}
+          immutableEntryCount: >-
+            {{ open_cinema_private_rollback_appliance_immutable_command.stdout.split()[0] | int }}
+        open_cinema_private_rollback_verification:
+          schemaVersion: 1
+          result: target-verified
+          receiptId: "{{ open_cinema_private_rollback_receipt.receipt_id }}"
+          receiptSha256: >-
+            {{ open_cinema_private_rollback_manifest.rollback.previous.receipt_sha256 }}
+          baselineId: "{{ open_cinema_private_rollback_receipt.baseline_id }}"
+
+    - name: Verify the private controller capsule before appliance promotion
+      when: not install_from_local | default(false) | bool
+      block:
+        - name: Require the manifest-bound private controller retrieval pointer
+          ansible.builtin.assert:
+            that:
+              - private_rollback_capsule_path | default('') | trim | length > 0
+              - (private_rollback_capsule_path | default('')) is match('^/')
+            fail_msg: >-
+              Appliance mode requires the manifest-bound private rollback capsule
+              pointer in protected inventory before any target mutation.
+          no_log: true
+
+        - name: Verify the private rollback capsule against the committed receipt
+          ansible.builtin.command:
+            argv:
+              - python3
+              - "{{ playbook_dir }}/../scripts/verify_private_rollback_capsule.py"
+              - "{{ private_rollback_capsule_path }}"
+              - --receipt
+              - "{{ open_cinema_private_rollback_receipt_path }}"
+              - --receipt-sha256
+              - "{{ open_cinema_private_rollback_manifest.rollback.previous.receipt_sha256 }}"
+              - --receipt-id
+              - "{{ open_cinema_private_rollback_manifest.rollback.previous.receipt_id }}"
+          delegate_to: localhost
+          become: false
+          register: open_cinema_private_rollback_verification_command
+          changed_when: false
+          no_log: true
+
+        - name: Publish only the privacy-safe combined rollback verification
+          ansible.builtin.set_fact:
+            open_cinema_private_rollback_verification: >-
+              {{ (open_cinema_private_rollback_verification_command.stdout | from_json) |
+                 combine({'targetVerification':
+                          open_cinema_private_rollback_target_verification}) }}
+
+        - name: Require matching controller and appliance replacement identities
+          ansible.builtin.assert:
+            that:
+              - open_cinema_private_rollback_verification.result == 'verified'
+              - >-
+                open_cinema_private_rollback_verification.baselineId ==
+                open_cinema_private_rollback_target_verification.baselineId
+              - >-
+                open_cinema_private_rollback_verification.receiptId ==
+                open_cinema_private_rollback_manifest.rollback.previous.receipt_id
+              - >-
+                open_cinema_private_rollback_verification.receiptSha256 ==
+                open_cinema_private_rollback_manifest.rollback.previous.receipt_sha256
+              - open_cinema_private_rollback_verification.sqliteIntegrity == 'ok'
+            fail_msg: >-
+              The private controller capsule and protected appliance baseline do
+              not prove the same replacement identity; candidate promotion is
+              blocked before mutation.

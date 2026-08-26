@@ -5,11 +5,18 @@ project_root: "/opt/home-cinema"
 open_cinema_close_rollback_window: false
 
 release_manifest:
-  source_path: "{{ playbook_dir }}/../release-manifest.yml"
+  source_path: >-
+    {{ open_cinema_release_manifest_source_path |
+       default(playbook_dir ~ '/../release-manifest.yml') }}
   install_dir: "/etc/open-cinema"
   install_path: "/etc/open-cinema/release-manifest.yml"
   installed_identity_path: "/var/lib/open-cinema/deployment-diagnostics/installed-release.yml"
   artifact_cache_root: "/var/cache/open-cinema/artifacts"
+
+# Appliance inventories must provide a controller-local, access-controlled
+# path for a manifest that uses the private first-release rollback exception.
+# Mutable development deployments skip this verification deliberately.
+private_rollback_capsule_path: ""
 
 # One headless service identity owns the PipeWire graph and every process that
 # participates in it. Stable UID/GID values are explicit inventory data and may

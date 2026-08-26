@@ -9,6 +9,11 @@
         file: "{{ release_manifest.source_path }}"
         name: open_cinema_release_manifest
 
+    - name: Verify retained rollback input before rollback mutation
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/private-rollback-preflight.yml"
+      vars:
+        open_cinema_private_rollback_manifest: "{{ open_cinema_release_manifest }}"
+
   roles:
     - role: rollback
       tags: [rollback]

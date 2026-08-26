@@ -44,21 +44,28 @@ ansible-galaxy collection install -r collections/requirements.yml
 
 ## Configure an appliance
 
-Copy `inventories/example.yml` to a private inventory and set the target host.
-Override secrets and appliance-specific values in inventory or Ansible Vault;
-do not deploy the example Django secret.
+Copy `inventories/example.yml` to the ignored `inventories/local.yml` and set
+the target host. The local inventory is intentionally not tracked because it
+contains controller paths and appliance-specific values. Override secrets in
+that private file or Ansible Vault; do not deploy the example Django secret.
 
-For an appliance install, set `release_manifest.source_path` to the downloaded,
-finalized coordinated manifest and leave `install_from_local` false. The
-manifest is the only release-identity authority: each selected artifact carries
-its exact name, immutable HTTPS URL, SHA-256 digest, platform/ABI selector, and
-portable provenance reference. Deployment does not construct release URLs from
-inventory versions and does not clone a branch, tag, or repository.
+For an appliance install, set `open_cinema_release_manifest_source_path` to the
+downloaded, finalized coordinated manifest and leave `install_from_local`
+false. The manifest is the only release-identity authority: each selected
+artifact carries its exact name, immutable HTTPS URL, SHA-256 digest,
+platform/ABI selector, and portable provenance reference. Deployment does not
+construct release URLs from inventory versions and does not clone a branch,
+tag, or repository.
 
-The checked-in `release-manifest.yml` is deliberately a development record. It
-has `input_mode: development`, identifies the four local projects as mutable,
-and cannot be used when `install_from_local` is false. No final hashes are
-represented by placeholders.
+The checked-in `development-manifest.yml` is the deliberately mutable local
+fixture. It has `input_mode: development`, identifies the four local projects
+as mutable, and cannot be used when `install_from_local` is false. The separate
+`release-manifest.yml` is reserved for the immutable release candidate and is
+the non-deployable template finalized by the backend tag workflow. It contains
+no dummy digest: the Open Cinema artifact identity is deliberately absent until
+the tag workflow can bind the manifest to the wheel and source archive it just
+built. Its `candidate_notice` is removed during finalization; the published
+manifest contains only limitations that still apply to the supported release.
 
 For development, all edited repositories may be synchronized directly:
 
@@ -69,6 +76,7 @@ all:
       ansible_host: 192.168.1.37
       ansible_user: pi
       install_from_local: true
+      open_cinema_release_manifest_source_path: /home/me/projects/open-cinema/deployment/development-manifest.yml
       local_source_path: /home/me/projects/open-cinema
       local_wyreplumber_source_path: /home/me/projects/wyreplumber
       local_open_cinema_ui_source_path: /home/me/projects/open-cinema-ui
@@ -111,7 +119,20 @@ Before its first role, the site play validates that inventory mode matches the
 manifest, rejects local-directory/editable/floating/latest/unpinned appliance
 inputs, verifies artifact/provenance completeness, and resolves one compatible
 artifact of each required kind for Debian Trixie AArch64, Python 3.13, and
-WirePlumber 0.5. Only development mode permits local source directories.
+WirePlumber 0.5. Artifact and provenance URLs must use the declared GitHub
+repository and tag, except for components explicitly mirrored into the
+finalized Open Cinema release; that coordinated release identity must match the
+declared Open Cinema repository, tag, and commit. Unknown selector names and native assets missing
+their architecture, ABI, or WirePlumber-family selectors are rejected. For the
+first coordinated release it also verifies the private
+replacement rollback capsule against its committed receipt, hashes, archive
+inventory, permissions, and SQLite integrity before touching the Pi. The
+receipt-bound Pi baseline must also exist with matching manifest/READY digests,
+matching regular-file count, and immutable protection on every entry. Mutable
+development runs perform that target check without opening or requiring the
+controller capsule; appliance promotion verifies both copies. The capsule path
+remains protected inventory and is never written to public evidence. Only
+development mode permits local source directories.
 
 The site play then installs PipeWire/WirePlumber and reruns aggregate preflight
 with audio-session checks enabled, before any processor role, database
@@ -182,6 +203,15 @@ checksumming the complete recovery boundary:
 An initial installation has no accepted generation to preserve and therefore
 does not manufacture an empty rollback bundle. An identical candidate reuses
 its passed contract gate and does not stop audio or create another bundle.
+Because the historical public releases cannot restore the native PipeWire
+stack, `0.3.0` uses a one-time private replacement baseline. Its privacy-safe
+receipt is retained in `rollback-baselines/`; the capsule itself stays in the
+protected controller store and immutable appliance directory. Later releases
+must instead retain the immediately previous finalized coordinated manifest.
+The verified baseline identity is excluded from permission rewrites and
+rollback pruning in both development and appliance modes. Missing, mutable, or
+digest-drifted target state blocks before mutation and must be restored manually
+from a retained private copy; deployment does not rehydrate it automatically.
 
 Schema transitions also retain their migration plan and a bounded online
 SQLite backup. The plan, SQLite integrity check, Django migration-history
@@ -212,7 +242,12 @@ The rollback play verifies every artifact checksum before mutation, checkpoints
 the failed candidate database, stops all database writers and managed
 processors, restores the application, binding, web builds, processor binaries,
 runtime configuration, managed static files, release evidence, and database as
-one generation, then runs the normal end-of-play readiness checks. It also
+one generation, loads the restored installed manifest as the readiness identity,
+then runs the normal end-of-play readiness checks. Historical contract-gate and
+readiness snapshots remain supplemental bundle diagnostics rather than hashed
+restore artifacts: rollback never restores or trusts them. It reconstructs the
+minimal gate identity from the checksum-verified rollback manifest, while
+readiness publishes a fresh result for the restored runtime. It also
 requires the restored graph/endpoint/profile/activation/adapter/override digest
 to match the pre-transition digest. The result is written privately to
 `/var/lib/open-cinema/deployment-diagnostics/rollback-result.json`.
@@ -234,8 +269,9 @@ explicit `mutable_install: true`; both records retain the installed coordinated
 manifest SHA-256 for diagnostics and rollback.
 
 Experimental deployments retain every recovery bundle. Only a later explicitly
-accepted run with `open_cinema_close_rollback_window=true` may keep exactly the
-selected pre-deployment bundle, remove older recovery points, and write
+accepted run with `open_cinema_close_rollback_window=true` may keep the selected
+pre-deployment bundle plus any manifest-verified protected first-release
+replacement, remove other recovery points, and write
 `/var/lib/open-cinema/rollback/rollback-window.yml`. A failed deployment never
 reaches that closure step.
 

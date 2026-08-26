@@ -47,6 +47,12 @@
           {{ (open_cinema_release_manifest_validation_command.stdout | from_json).selectedArtifacts }}
       tags: [always]
 
+    - name: Verify retained rollback input before any appliance mutation
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/private-rollback-preflight.yml"
+      vars:
+        open_cinema_private_rollback_manifest: "{{ open_cinema_release_manifest }}"
+      tags: [always]
+
     - name: Hash the candidate release manifest on the controller
       ansible.builtin.stat:
         path: "{{ release_manifest.source_path }}"

@@ -5,7 +5,7 @@ Defines how independently built Open Cinema projects are published as one tracea
 ## ADDED Requirements
 
 ### Requirement: Coordinated release identity
-Each coordinated release SHALL declare exactly one repository version and Git tag for every participating project, and each project's package metadata, runtime version report, tag, release title, and artifact metadata SHALL agree on that version. The first release governed by this capability SHALL contain Open Cinema `0.3.0`, WyrePlumber `0.2.0`, PCM Auto Decoder `0.2.0`, and Open Cinema UI `2.0.0`.
+Each coordinated release SHALL declare exactly one accepted repository version and Git tag for every participating project, and each project's package metadata, runtime version report, tag, release title, and artifact metadata SHALL agree on that version. The first release governed by this capability SHALL contain Open Cinema `0.3.0`, WyrePlumber `0.2.0`, PCM Auto Decoder `0.2.2`, and Open Cinema UI `2.0.0`; the decoder's unpublished failed `v0.2.0` tag and published-but-rejected `v0.2.1` tag SHALL NOT be moved, reused, or admitted to the tuple.
 
 #### Scenario: All release identities agree
 - **WHEN** a coordinated release candidate is inspected

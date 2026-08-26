@@ -3,7 +3,7 @@
 Date: 2026-08-26 UTC
 
 Scope: release-preparation tasks 1.1–1.6 for Open Cinema `0.3.0`,
-WyrePlumber `0.2.0`, PCM Auto Decoder `0.2.0`, and Open Cinema UI `2.0.0`.
+WyrePlumber `0.2.0`, PCM Auto Decoder `0.2.2`, and Open Cinema UI `2.0.0`.
 This is evidence only: no index entry, commit, branch, tag, release, or remote
 reference was changed while collecting it.
 
@@ -31,6 +31,16 @@ previous generation. That private bundle is suitable as the first coordinated
 release's operational fallback only if its live presence and checksums are
 reverified and it is retained; it is not a substitute for a downloadable
 previous coordinated release manifest.
+
+During publication, decoder `v0.2.0` was created once at
+`aa94345fa2db1c6b9a5f89ea9eb1e23da187eb5d`, but both packaging jobs failed
+before release creation because Git rejected the container-owned checkout as
+unsafe. No release assets were published. The tag is retained and is not moved
+or reused. Corrective `v0.2.1` then published artifacts, but its AArch64
+post-download job failed because the minimum-runtime verification image omitted
+`libavformat61`; the same published AArch64 bytes passed digest, version, and
+native-linkage execution on the target Pi. That tag is also retained and
+rejected. The corrected decoder target is `0.2.2` / `v0.2.2`.
 
 ## Collection method and safety checks
 
@@ -115,6 +125,40 @@ The large source inventory is completely covered by these current subtrees:
 `opencinema`, `openspec`, `plugin`, `scripts`, `tests`, and the ten root-level
 status entries named above (nine release files plus `api_tests.http`). No dirty
 path falls outside those sets.
+
+#### Release-candidate inclusion recheck
+
+The final pre-commit recheck at `2026-08-26T22:16:22Z` contains 98 status
+entries (`M` 41, staged `D` 1, `AD` 3, and `??` 53), with status-stream
+SHA-256 `8e85111fe5f07713daf1ac8c47b31919591d2efeaa17bf6dd975a275126c2457`.
+Ninety-one entries are release-owned and seven remain explicitly deferred.
+
+New release-owned paths since the initial inventory are the benchmark runner,
+intent adapter, workload driver, waveform analyzer, deterministic media and
+CamillaDSP fixtures under `deployment/benchmarks/`; the benchmark command
+template; `deployment/development-manifest.yml`; the privacy-safe rollback
+receipt and documentation; private-capsule verifier and shared rollback
+preflight task; and their six focused test modules. The generated audio files
+are checksummed deterministic test fixtures covered by the media manifest, not
+observed appliance recordings or disposable build output.
+
+The staged deletion of `deployment/inventories/local.yml` is intentional: it
+removes machine-private content from Git while the ignored file remains present
+on the controller. The three staged-but-worktree-deleted `plugin/pipewire/**`
+entries and both two-file future OpenSpec proposals remain untouched and are
+the seven deferred entries. No private-key, GitHub-token, or AWS-key marker was
+found in the release-owned paths. The private rollback capsule and its
+controller path remain outside Git; only its privacy-safe content-addressed
+receipt is included.
+
+The remaining release-owned work uses
+`feat(benchmark): harden Raspberry audio evidence collection` for the bounded
+benchmark contract/harness/fixtures/tests and
+`build(release): prepare coordinated 0.3.0 publication` for rollback hardening,
+manifest validation/finalization, workflows, version/lock data, deployment and
+release documentation, and OpenSpec state. Narrow housekeeping commits untrack
+the private inventory and normalize fixture endings. Every commit uses explicit
+pathspecs so the seven deferred entries cannot enter it.
 
 ### WyrePlumber
 
@@ -255,7 +299,7 @@ and the corresponding branch run is green.
 |---|---|---|
 | Open Cinema | `opencinema/version.py` reports `0.2.0`; `pyproject.toml` derives package metadata from it; `/api/version` imports it. `pyproject.toml` and `uv.lock` still resolve WyrePlumber `0.1.0` through an adjacent editable development source. Shared inventory and the development manifest also identify Open Cinema `0.2.0`. | Set all backend/package/lock/deployment surfaces to `0.3.0`/`v0.3.0`; consume verified WyrePlumber `0.2.0` in release mode while keeping the adjacent path only as an explicit development override. README now accurately describes native PipeWire/WirePlumber, processor ownership, admin/on-box roles, Trixie appliance, validation, immutable deployment, and tag flow. |
 | WyrePlumber | `pyproject.toml` is `0.1.0`; installed `__version__` comes from package metadata. Build family is selected in `setup.py`/CMake, with candidate release workflow fixed to WirePlumber 0.5. Public native surfaces include `_core`, `_core.pyi`, `py.typed`, and runtime contract/value schema v1. | Set metadata/lock to `0.2.0` and tag `v0.2.0`; ship CPython 3.12/3.13/3.14 wheels for x86_64/AArch64 linked to `libwireplumber-0.5` and `libpipewire-0.3`. README's GitHub-release installation, no-PyPI statement, Trixie matrix, permission/runtime ownership, validation, and release claims match the candidate workflow. |
-| PCM Auto Decoder | `Cargo.toml` and `Cargo.lock` are `0.1.4`; Clap derives `--version` from Cargo metadata. `rust-toolchain.toml` pins 1.98.0 while package MSRV is 1.85. Status protocol is v2 and the one-output contract is implemented through native PipeWire 0.10 and system FFmpeg 8 crates/libraries. | Set Cargo/lock/binary/archive/title surfaces to `0.2.0`/`v0.2.0`; publish native Debian Trixie x86_64/AArch64 archives linked to PipeWire/FFmpeg and forbidden from linking libpulse. README's stable output, codecs/layouts, ownership, offline fixture, dependencies, validation, asset, and immutable-tag claims match the candidate. |
+| PCM Auto Decoder | `Cargo.toml` and `Cargo.lock` started at `0.1.4`; Clap derives `--version` from Cargo metadata. `rust-toolchain.toml` pins 1.98.0 while package MSRV is 1.85. Status protocol is v2 and the one-output contract is implemented through native PipeWire 0.10 and system FFmpeg 8 crates/libraries. | Set Cargo/lock/binary/archive/title surfaces to corrective `0.2.2`/`v0.2.2`; retain failed `v0.2.0` and published-but-rejected `v0.2.1`, and publish native Debian Trixie x86_64/AArch64 archives linked to PipeWire/FFmpeg and forbidden from linking libpulse. README's stable output, codecs/layouts, ownership, offline fixture, dependencies, validation, asset, and immutable-tag claims match the candidate. |
 | Open Cinema UI | Root, admin, on-box, shared manifests and corresponding lock entries are `1.0.5`; both internal shared dependencies are pinned to that version. Vite emits HTML and `open-cinema-release.json` identity and embeds the v1 client contract in admin. | Deterministically set every workspace/lock/runtime surface to `2.0.0` and tag `v2.0.0`. README correctly distinguishes the administration console from the on-box placeholder and documents environment, all hard gates, separate assets, workspace versioning, and immutable tag flow. The local release example must be updated or intentionally expressed as a version placeholder during the bump. |
 
 The coordinated manifest contracts currently inventoried are:
@@ -269,20 +313,22 @@ The coordinated manifest contracts currently inventoried are:
   `>=1.4,<2`, WirePlumber `>=0.5.8,<0.6`, CamillaDSP 4.1.3 native PipeWire,
   and pycamilladsp 4.0.0.
 
-Two current compatibility ranges are release blockers: `deployment/compatibility.yml`
-sets WyrePlumber `<0.2.0` and the decoder `<0.2.0`, so the planned releases
-would be rejected. The shared inventory still names WyrePlumber `0.1.0`, decoder
-`v0.1.4` with its legacy archive name/digest, and UI `v1.0.5`; the development
-manifest still declares local dirty sources. These surfaces must be replaced
-only after the new public bytes and digests exist.
+The previously identified compatibility blockers are corrected:
+`deployment/compatibility.yml` now requires WyrePlumber `>=0.2.0,<0.3.0` and
+PCM Auto Decoder `>=0.2.2,<0.3.0`, and the manifest validator enforces those
+ranges. Mutable local identities now live only in the explicitly selected
+`deployment/development-manifest.yml`; the local inventory points to that file
+in development mode. `deployment/release-manifest.yml` is reserved for the
+immutable candidate and must contain the verified public asset identities
+before the Open Cinema tag is created.
 
 ### Expected coordinated release matrix
 
 | Component | Version/tag | Required published assets and target identity |
 |---|---|---|
-| Open Cinema | `0.3.0` / `v0.3.0` | `open_cinema-0.3.0-py3-none-any.whl`, `open_cinema-0.3.0.tar.gz`, `checksums.sha256`, `provenance.json`, and `open-cinema-coordinated-manifest.yml` (plus its entry in the checksum file). |
+| Open Cinema | `0.3.0` / `v0.3.0` | `open_cinema-0.3.0-py3-none-any.whl`, `open_cinema-0.3.0.tar.gz`, the republished pinned `camilladsp-4.0.0-py3-none-any.whl`, `provenance.json`, `pycamilladsp-provenance.json`, `camilladsp-provenance.json`, `open-cinema-coordinated-manifest.yml`, and `checksums.sha256`. |
 | WyrePlumber | `0.2.0` / `v0.2.0` | `wyreplumber-0.2.0.tar.gz` and six wheels `wyreplumber-0.2.0-cp{312,313,314}-cp{312,313,314}-linux_{x86_64,aarch64}.whl`; every primary artifact has adjacent `.sha256` and `.provenance.json`. Appliance selector: `cp313` + `aarch64` + Debian Trixie + WirePlumber 0.5. |
-| PCM Auto Decoder | `0.2.0` / `v0.2.0` | `pcm-auto-decoder-v0.2.0-debian-trixie-{x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu}.tar.gz`, each with `.sha256` and `.provenance.json`. Appliance selector: AArch64. |
+| PCM Auto Decoder | `0.2.2` / `v0.2.2` | `pcm-auto-decoder-v0.2.2-debian-trixie-{x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu}.tar.gz`, each with `.sha256` and `.provenance.json`. Appliance selector: AArch64. |
 | Open Cinema UI | `2.0.0` / `v2.0.0` | `open-cinema-admin-v2.0.0.tar.gz`, `open-cinema-ui-v2.0.0.tar.gz`, one provenance JSON adjacent to each archive, and `checksums.sha256` covering both archives and both provenance files. |
 | CamillaDSP (external retained pin) | `4.1.3` / `v4.1.3` | `camilladsp-linux-pipewire-aarch64.tar.gz`, existing pinned SHA-256 `ca8b6cc32bda29bd7cb38f7bcda5fcc6f5e69690b3d0efaa23b6c3c05c45696c`. |
 
@@ -291,6 +337,62 @@ immutable URL, size, SHA-256, target selector, and portable provenance for every
 component and point to a verified previous/replacement manifest. No editable
 path, branch, dirty-tree parent revision, mutable `latest` URL, or unverified
 adjacent worktree is permitted.
+
+## Accepted dependency release evidence
+
+### WyrePlumber `v0.2.0`
+
+- Accepted immutable release and lightweight tag: `v0.2.0`, commit
+  `9d55ab1200ee7c484743fe57339a1f56d2c9fcd1`; the tag, remote `master`, and
+  release target agree.
+- Candidate matrix gate:
+  `https://github.com/k3rnL/wyreplumber/actions/runs/33014948301` (all six native
+  wheel targets successful). Tag publication and downloaded-wheel gates:
+  `https://github.com/k3rnL/wyreplumber/actions/runs/33015311435` (all build,
+  installed-wheel, source, and publication jobs successful).
+- Public release: `https://github.com/k3rnL/wyreplumber/releases/tag/v0.2.0`;
+  GitHub reports release ID `377432949`, `immutable: true`, `draft: false`, and
+  `prerelease: false`.
+- The complete public matrix contains six CPython 3.12/3.13/3.14 wheels for
+  AArch64/x86_64 and one source archive, with an adjacent checksum and portable
+  provenance record for each primary artifact (21 assets total). Every checksum
+  and provenance target/commit/tag/workflow record passed fresh-download
+  verification.
+- Appliance artifact:
+  `wyreplumber-0.2.0-cp313-cp313-linux_aarch64.whl`, 329,211 bytes, SHA-256
+  `cfb92cd7f407c87717f1f539ff3e04573d0cd2224ef744f8efb847a7938e05fd`;
+  provenance SHA-256
+  `ade1107162e1624afa12e101dd4a542d402af372acffdb69999ad8d7a552e858`.
+- The exact public appliance wheel was installed with `--no-deps` in an
+  isolated Python 3.13 environment on the physical AArch64 Debian Trixie Pi.
+  Import/package version `0.2.0`, AArch64 ELF identity, linkage to
+  `libpipewire-0.3.so.0` and `libwireplumber-0.5.so.0`, the absence of
+  WirePlumber 0.4 and PulseAudio linkage, build API family `0.5`, orchestration
+  contract 1, runtime-value schema 1, and the live WirePlumber 0.5.8 snapshot
+  all passed. The installed appliance environment was not modified.
+
+### Open Cinema UI `v2.0.0`
+
+- Accepted commit: `f6f437809da0c646ca29f8a9e4e2725a51378b41` on remote `master` and tag `v2.0.0`.
+- Branch gate: `https://github.com/k3rnL/open-cinema-ui/actions/runs/33010439755` (success).
+- Tag publication and downloaded-byte gate: `https://github.com/k3rnL/open-cinema-ui/actions/runs/33010953333` (both jobs successful).
+- Public release: `https://github.com/k3rnL/open-cinema-ui/releases/tag/v2.0.0`.
+- Admin archive: `open-cinema-admin-v2.0.0.tar.gz`, 1,070,748 bytes, SHA-256 `47d215f08a4740e47b7009abb6f0814f94d5330af222c4d98b90caf7ec057ea7`.
+- Admin provenance: `open-cinema-admin-v2.0.0.tar.gz.provenance.json`, 489 bytes, SHA-256 `19ce3f8ae3ccd83eab6e1457e26e582b523af83a5a07408082e84ef58f710b1c`.
+- On-box archive: `open-cinema-ui-v2.0.0.tar.gz`, 67,443 bytes, SHA-256 `91980a2c0ac72fe54ae04ba84340fddf89a5edeb3fc40b99cb296748e63d8560`.
+- On-box provenance: `open-cinema-ui-v2.0.0.tar.gz.provenance.json`, 487 bytes, SHA-256 `c7f39366661c9ba8c251a43bc79a76981153e095a898510a777ea38161c6a200`.
+- Checksums record: `checksums.sha256`, 418 bytes, SHA-256 `0feccd43c3fdbf66eb75060a6ce147584725d31155b460df0c636d7053071cec`; it validates both archives and both provenance records.
+- Fresh public-download verification passed archive safety and contents, release/version identity, the admin client-contract asset, independent HTTP entry-point smoke, and the workflow's pre-upload and post-download Playwright checks.
+
+### PCM Auto Decoder `v0.2.2`
+
+- Accepted commit: `5856a5ef035618a7284a91f80bdd4ac24afe3427` on remote `master` and lightweight tag `v0.2.2`; rejected tags `v0.2.0` and `v0.2.1` were not moved or reused.
+- Branch gate: `https://github.com/k3rnL/pcm-auto-decoder/actions/runs/33012341581` (native Debian Trixie x86_64 and AArch64 jobs successful).
+- Tag publication and downloaded-byte gates: `https://github.com/k3rnL/pcm-auto-decoder/actions/runs/33013745740` (both native builds, release creation, and both minimum-runtime download jobs successful).
+- Public release: `https://github.com/k3rnL/pcm-auto-decoder/releases/tag/v0.2.2`.
+- AArch64 archive: `pcm-auto-decoder-v0.2.2-debian-trixie-aarch64-unknown-linux-gnu.tar.gz`, 652,221 bytes, SHA-256 `7831af706c22198dbb531682264b7eedf88fc693c459d5f4c8c05e154d5e616e`; provenance SHA-256 `1ebe283c5ce274ed6bbdc1481a5b8fc9a82098f5b133f4dc02ae40a031a84f49`.
+- x86_64 archive: `pcm-auto-decoder-v0.2.2-debian-trixie-x86_64-unknown-linux-gnu.tar.gz`, 673,701 bytes, SHA-256 `53c22c155567310391c6f65f94f16f27863e5de537966cf2fb53f9676692f205`; provenance SHA-256 `ba034334cbda1b715f4cc7f1d747a7b12ff46d95020d86897b1ad1be2e5ae16a`.
+- Fresh public bytes passed the published checksums and portable-provenance checks. The AArch64 archive then ran on the physical Debian Trixie Pi: `--version` reported `0.2.2`, ELF identity was AArch64, direct linkage included PipeWire and system FFmpeg with no PulseAudio library, and the finite plus looping offline decode fixture passed.
 
 ## Previous tuple: public-byte verification and rollback decision
 
@@ -312,12 +414,20 @@ previous immutable manifest.
 
 The documented Pi transition bundle
 `transition-20260826T002452-ebd7b2b6d014` is therefore the only currently
-identified replacement baseline. Its last recorded state had nine validated
-artifacts and a successful exact rollback/forward rehearsal. Before candidate
-promotion, release task 9.2 must verify the bundle still exists, validate its
-manifest and checksums, preserve it from pruning, and record its identity as the
-first release's replacement previous baseline. If it cannot be verified, there
-is no safe previous baseline and publication/promotion must stop.
+identified replacement baseline. Release task 9.2 revalidated its private
+controller capsule against the committed receipt on 2026-08-26: the exact
+84,236,888-byte capsule and inner manifest/READY digests matched, all 18 regular
+files covered the nine restore artifacts and six nested archives, and the
+read-only SQLite integrity check returned `ok`. The controller file remains
+mode `0400` below a mode `0700` parent, while a read-only appliance check found
+all 20 entries in the retained source bundle still carrying the immutable flag.
+
+Appliance-mode Ansible now repeats that receipt-bound verification on the
+controller before the first target-mutating role. It publishes only the safe
+baseline identity, protects that identity from permission rewrites and pruning,
+and stops promotion on any mismatch or missing private retrieval pointer.
+Development mode records an explicit skip. The capsule location and private
+contents remain excluded from committed evidence.
 
 ## Remaining pre-mutation blockers
 

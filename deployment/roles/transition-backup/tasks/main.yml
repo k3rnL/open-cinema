@@ -384,6 +384,28 @@
     recurse: false
   register: open_cinema_transition_retained_bundles
 
+- name: Resolve protected and mutable transition bundle paths
+  ansible.builtin.set_fact:
+    open_cinema_protected_rollback_bundle_paths: >-
+      {{ open_cinema_protected_rollback_bundle_ids | default([]) |
+         map('regex_replace', '^', open_cinema.rollback_root ~ '/') | list }}
+    open_cinema_transition_mutable_bundle_paths: >-
+      {{ open_cinema_transition_retained_bundles.files |
+         map(attribute='path') |
+         difference(open_cinema_protected_rollback_bundle_ids | default([]) |
+                    map('regex_replace', '^', open_cinema.rollback_root ~ '/') | list) |
+         sort | list }}
+
+- name: Require protected transition bundles to remain outside the mutable set
+  ansible.builtin.assert:
+    that:
+      - >-
+        open_cinema_protected_rollback_bundle_paths |
+        intersect(open_cinema_transition_mutable_bundle_paths) | length == 0
+    fail_msg: >-
+      A manifest-verified protected rollback baseline was selected for mutation;
+      deployment is blocked without changing its ownership or permissions.
+
 - name: Enforce private ownership of coordinated transition bundle roots
   ansible.builtin.file:
     path: "{{ item.path }}"
@@ -391,19 +413,23 @@
     group: "{{ open_cinema.group }}"
     mode: "0750"
   loop: "{{ open_cinema_transition_retained_bundles.files }}"
+  when: item.path in open_cinema_transition_mutable_bundle_paths
 
-- name: Inspect retained transition bundle content by type
+- name: Inspect retained mutable transition directories
   ansible.builtin.find:
-    paths: >-
-      {{ open_cinema_transition_retained_bundles.files |
-         map(attribute='path') | list }}
+    paths: "{{ open_cinema_transition_mutable_bundle_paths }}"
     recurse: true
-    file_type: "{{ item }}"
-  loop:
-    - directory
-    - file
-  register: open_cinema_transition_retained_content
-  when: open_cinema_transition_retained_bundles.matched | int > 0
+    file_type: directory
+  register: open_cinema_transition_retained_directories
+  when: open_cinema_transition_mutable_bundle_paths | length > 0
+
+- name: Inspect retained mutable transition files
+  ansible.builtin.find:
+    paths: "{{ open_cinema_transition_mutable_bundle_paths }}"
+    recurse: true
+    file_type: file
+  register: open_cinema_transition_retained_files
+  when: open_cinema_transition_mutable_bundle_paths | length > 0
 
 - name: Enforce private retained transition directories
   ansible.builtin.file:
@@ -411,9 +437,8 @@
     owner: "{{ open_cinema.user }}"
     group: "{{ open_cinema.group }}"
     mode: "0750"
-  loop: >-
-    {{ open_cinema_transition_retained_content.results[0].files | default([]) }}
-  when: open_cinema_transition_retained_bundles.matched | int > 0
+  loop: "{{ open_cinema_transition_retained_directories.files | default([]) }}"
+  when: open_cinema_transition_mutable_bundle_paths | length > 0
 
 - name: Enforce private retained transition files
   ansible.builtin.file:
@@ -421,6 +446,5 @@
     owner: "{{ open_cinema.user }}"
     group: "{{ open_cinema.group }}"
     mode: "0600"
-  loop: >-
-    {{ open_cinema_transition_retained_content.results[1].files | default([]) }}
-  when: open_cinema_transition_retained_bundles.matched | int > 0
+  loop: "{{ open_cinema_transition_retained_files.files | default([]) }}"
+  when: open_cinema_transition_mutable_bundle_paths | length > 0

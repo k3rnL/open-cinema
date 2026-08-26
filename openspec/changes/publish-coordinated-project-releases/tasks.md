@@ -21,7 +21,7 @@
 ## 3. WyrePlumber 0.5 Artifact Readiness
 
 - [x] 3.1 Remove WirePlumber 0.4 build/test dependencies from current workflows and define the supported WirePlumber 0.5 Linux/Python/architecture release matrix, including the Debian Trixie AArch64 appliance target.
-- [ ] 3.2 Build native wheels and the source archive in WirePlumber 0.5 environments with unique target-qualified outputs, and prevent repeated source archives or flattened artifacts from silently overwriting one another.
+- [x] 3.2 Build native wheels and the source archive in WirePlumber 0.5 environments with unique target-qualified outputs, and prevent repeated source archives or flattened artifacts from silently overwriting one another.
 - [x] 3.3 Add automated agreement checks for package metadata, installed runtime version, Git tag, Python ABI, CPU architecture, and `WIREPLUMBER_BUILD_API_FAMILY == "0.5"`.
 - [x] 3.4 Add required branch/PR CI that builds, installs, and tests each supported wheel, runs the complete orchestration contract suite, inspects native linkage, and exercises a real WirePlumber 0.5 runtime where supported.
 - [x] 3.5 Harden the tag workflow to reuse equivalent gates and publish wheels/source with SHA-256 files and portable commit/workflow/target provenance.
@@ -34,7 +34,7 @@
 - [x] 4.2 Add required branch/PR CI for formatting, Clippy, locked tests, offline fixture behavior, and release builds in the declared Debian Trixie targets.
 - [x] 4.3 Rework the tag workflow to build natively on Trixie x86_64 and AArch64 runners/containers with `--locked`, eliminate duplicate and PulseAudio build dependencies, and emit unambiguous target-qualified archives.
 - [x] 4.4 Make Cargo metadata, lock data, the binary's `--version`, archive names, release title, and Git tag agree, with a workflow check that rejects mismatches.
-- [ ] 4.5 Inspect release linkage and the minimum runtime contract, requiring system PipeWire/FFmpeg libraries, rejecting `libpulse`, and testing the AArch64 binary on Debian Trixie before publication acceptance.
+- [x] 4.5 Inspect release linkage and the minimum runtime contract, requiring system PipeWire/FFmpeg libraries, rejecting `libpulse`, and testing the AArch64 binary on Debian Trixie before publication acceptance.
 - [x] 4.6 Publish and verify per-archive SHA-256 and portable provenance, plus a downloaded-artifact smoke that exercises version output and a bounded looping offline decode fixture.
 - [x] 4.7 Update the decoder README with its stable adaptive output contract, supported codecs/layouts, native PipeWire ownership, Trixie build/runtime dependencies, devcontainer and validation commands, release assets, installation, and version convention.
 
@@ -52,8 +52,8 @@
 ## 6. Curate Reviewable Source History
 
 - [ ] 6.1 Recheck all four worktrees against the inclusion map after release-readiness edits, inspect every staged diff for secrets/generated/local/deferred content, and update the map for newly created files before committing.
-- [ ] 6.2 Stage, review, and commit Open Cinema application/API/orchestration implementation and tests in coherent conventional commits without including deployment, documentation, or release metadata merely for convenience.
-- [ ] 6.3 Stage, review, and commit Open Cinema deployment, contracts, documentation, OpenSpec history, and release-readiness work in separately understandable conventional commits.
+- [x] 6.2 Stage, review, and commit Open Cinema application/API/orchestration implementation and tests in coherent conventional commits without including deployment, documentation, or release metadata merely for convenience.
+- [x] 6.3 Stage, review, and commit Open Cinema deployment, contracts, documentation, OpenSpec history, and release-readiness work in separately understandable conventional commits.
 - [x] 6.4 Stage, review, and commit WyrePlumber binding/runtime/tests and release-readiness work in coherent conventional commits, preserving unrelated user paths.
 - [x] 6.5 Stage, review, and commit PCM Auto Decoder runtime/tests and release-readiness work in coherent conventional commits, preserving unrelated user paths.
 - [x] 6.6 Stage, review, and commit Open Cinema UI application/shared/tests and release-readiness work in coherent conventional commits, preserving deferred UI/UX work as explicitly documented rather than silently dropping it.
@@ -61,28 +61,28 @@
 
 ## 7. Publish and Verify Runtime Dependencies
 
-- [ ] 7.1 Bump every WyrePlumber version surface to `0.2.0`, regenerate derived metadata, run its complete gates, review and create the conventional release-preparation commit, then push through the repository's normal integration path and wait for CI success.
-- [ ] 7.2 Verify the accepted remote WyrePlumber commit and version surfaces, create and push `v0.2.0`, wait for its release workflow, and stop without reusing the tag if publication fails irrecoverably.
-- [ ] 7.3 Download WyrePlumber `v0.2.0` assets from the public release into a clean directory; verify filenames, hashes, provenance, metadata, clean installation, native linkage, WirePlumber 0.5 reporting, and the Debian Trixie AArch64 wheel on the Pi.
-- [ ] 7.4 Record the accepted WyrePlumber tag, commit, workflow run, artifact URLs, target selectors, and hashes for the coordinated manifest.
-- [ ] 7.5 Bump Cargo, lock, runtime, and release metadata to PCM Auto Decoder `0.2.0`, run its complete gates, review and create the conventional release-preparation commit, then push through the normal integration path and wait for CI success.
-- [ ] 7.6 Verify the accepted decoder commit and version surfaces, create and push `v0.2.0`, wait for its release workflow, and stop without reusing the tag if publication fails irrecoverably.
-- [ ] 7.7 Download decoder `v0.2.0` assets from the public release; verify filenames, hashes, provenance, `--version`, native linkage, absence of PulseAudio, offline decoding, and execution of the AArch64 artifact on Debian Trixie.
-- [ ] 7.8 Record the accepted decoder tag, commit, workflow run, artifact URLs, target selectors, and hashes for the coordinated manifest.
+- [x] 7.1 Bump every WyrePlumber version surface to `0.2.0`, regenerate derived metadata, run its complete gates, review and create the conventional release-preparation commit, then push through the repository's normal integration path and wait for CI success.
+- [x] 7.2 Verify the accepted remote WyrePlumber commit and version surfaces, create and push `v0.2.0`, wait for its release workflow, and stop without reusing the tag if publication fails irrecoverably.
+- [x] 7.3 Download WyrePlumber `v0.2.0` assets from the public release into a clean directory; verify filenames, hashes, provenance, metadata, clean installation, native linkage, WirePlumber 0.5 reporting, and the Debian Trixie AArch64 wheel on the Pi.
+- [x] 7.4 Record the accepted WyrePlumber tag, commit, workflow run, artifact URLs, target selectors, and hashes for the coordinated manifest.
+- [x] 7.5 Bump Cargo, lock, runtime, and release metadata to corrective PCM Auto Decoder `0.2.2`; retain failed `v0.2.0` and published-but-rejected `v0.2.1` without moving or reusing either tag; run the complete gates, review and create the conventional release-preparation/fix commits, then push through the normal integration path and wait for CI success.
+- [x] 7.6 Verify the accepted decoder commit and version surfaces, create and push `v0.2.2`, wait for its release workflow, and stop without reusing the tag if publication fails irrecoverably.
+- [x] 7.7 Download decoder `v0.2.2` assets from the public release; verify filenames, hashes, provenance, `--version`, native linkage, absence of PulseAudio, offline decoding, and execution of the AArch64 artifact on Debian Trixie.
+- [x] 7.8 Record the accepted decoder tag, commit, workflow run, artifact URLs, target selectors, and hashes for the coordinated manifest.
 
 ## 8. Publish and Verify Open Cinema UI
 
-- [ ] 8.1 Apply the deterministic `2.0.0` workspace bump, regenerate the lockfile, run audit/type/lint/unit/build/E2E and version-consistency gates, review and commit the release preparation, then push through the normal integration path and wait for CI.
-- [ ] 8.2 Verify the accepted remote UI commit and all version surfaces, create and push `v2.0.0`, wait for the release workflow, and stop without reusing the tag if publication fails irrecoverably.
-- [ ] 8.3 Download both `v2.0.0` archives and their integrity/provenance records; verify hashes, contents, contract asset, version identity, and served admin/on-box smoke tests from the downloaded bytes.
-- [ ] 8.4 Record the accepted UI tag, commit, workflow run, artifact URLs, application roles, and hashes for the coordinated manifest.
+- [x] 8.1 Apply the deterministic `2.0.0` workspace bump, regenerate the lockfile, run audit/type/lint/unit/build/E2E and version-consistency gates, review and commit the release preparation, then push through the normal integration path and wait for CI.
+- [x] 8.2 Verify the accepted remote UI commit and all version surfaces, create and push `v2.0.0`, wait for the release workflow, and stop without reusing the tag if publication fails irrecoverably.
+- [x] 8.3 Download both `v2.0.0` archives and their integrity/provenance records; verify hashes, contents, contract asset, version identity, and served admin/on-box smoke tests from the downloaded bytes.
+- [x] 8.4 Record the accepted UI tag, commit, workflow run, artifact URLs, application roles, and hashes for the coordinated manifest.
 
 ## 9. Publish Open Cinema and the Coordinated Manifest
 
-- [ ] 9.1 Replace backend release resolution with verified WyrePlumber `0.2.0` artifacts/metadata while retaining an explicit local-directory override only for development, and update decoder/UI compatibility references to their verified releases.
-- [ ] 9.2 Materialize and verify the previous known-good manifest or its documented replacement baseline, ensuring all rollback inputs are immutable, downloadable, digest-valid, and retained before candidate promotion.
-- [ ] 9.3 Convert `deployment/release-manifest.yml` into the candidate immutable template with exact dependency tags, commits, artifact URLs, hashes, provenance, platform selectors, and contract versions; remove all dirty-tree, floating, editable, and mutable release inputs.
-- [ ] 9.4 Implement and run manifest validation for schema completeness, version/tag agreement, hashes, provenance, platform/ABI selection, compatibility constraints, previous-manifest identity, and the absence of mutable sources.
+- [x] 9.1 Replace backend release resolution with verified WyrePlumber `0.2.0` artifacts/metadata while retaining an explicit local-directory override only for development, and update decoder/UI compatibility references to their verified releases.
+- [x] 9.2 Materialize and verify the previous known-good manifest or its documented replacement baseline, ensuring all rollback inputs are immutable, downloadable, digest-valid, and retained before candidate promotion.
+- [x] 9.3 Convert `deployment/release-manifest.yml` into the candidate immutable template with exact dependency tags, commits, artifact URLs, hashes, provenance, platform selectors, and contract versions; remove all dirty-tree, floating, editable, and mutable release inputs.
+- [x] 9.4 Implement and run manifest validation for schema completeness, version/tag agreement, hashes, provenance, platform/ABI selection, compatibility constraints, previous-manifest identity, and the absence of mutable sources.
 - [ ] 9.5 Bump every Open Cinema version surface to `0.3.0`, regenerate lock/package data, run the complete backend suite and isolated builds using released dependencies, review and commit the release preparation, then push through the normal integration path and wait for CI.
 - [ ] 9.6 Verify the accepted remote backend commit, candidate manifest, and version surfaces; create and push `v0.3.0`, then wait for the workflow to publish the backend distributions and finalized coordinated manifest without reusing a failed tag.
 - [ ] 9.7 Download the `v0.3.0` backend artifacts, finalized manifest, checksums, and provenance; verify clean installation/version/contracts, validate every manifest entry and published byte, and record the accepted backend and manifest identities.

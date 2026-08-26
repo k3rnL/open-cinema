@@ -183,8 +183,10 @@ Ansible supports two intentionally distinct inputs:
   and provenance. Mutable branches, editable installs, and adjacent worktrees
   are not valid release inputs.
 
-The repository manifest currently records the experimental development
-fixture; it must not be presented as an immutable product release. Follow the
+The repository keeps the mutable local fixture in
+`deployment/development-manifest.yml`; it must not be presented as an immutable
+product release. `deployment/release-manifest.yml` is reserved for the
+coordinated release candidate and tag-workflow finalization. Follow the
 [deployment guide](deployment/README.md) for inventory, authentication,
 preflight, readiness, diagnostics, backup, and coordinated rollback.
 

@@ -27,18 +27,18 @@ jobs:
         with:
           path: open-cinema
 
-      - name: Check out WyrePlumber candidate
+      - name: Check out the accepted WyrePlumber release
         uses: actions/checkout@v4
         with:
           repository: k3rnL/wyreplumber
-          ref: pipewire-object-refactor
+          ref: v0.2.0
           path: wyreplumber
 
-      - name: Check out decoder fixtures
+      - name: Check out the accepted decoder fixtures
         uses: actions/checkout@v4
         with:
           repository: k3rnl/pcm-auto-decoder
-          ref: master
+          ref: v0.2.2
           path: pcm-auto-decoder
 
       - name: Build the Debian Trixie native-audio environment
@@ -78,12 +78,20 @@ jobs:
               uv run pytest -q
               uv build --out-dir /tmp/open-cinema-dist --quiet
               uv build --project /wyreplumber --out-dir /tmp/wyreplumber-dist --wheel --quiet
+              git clone --quiet --branch v4.0.0 --depth 1 \
+                https://github.com/HEnquist/pycamilladsp.git \
+                /tmp/pycamilladsp-source
+              test "$(git -C /tmp/pycamilladsp-source rev-parse HEAD)" = \
+                fdc0d163e02dd73206a493402b43c83502ad83d7
+              uv build --project /tmp/pycamilladsp-source \
+                --out-dir /tmp/pycamilladsp-dist --wheel --quiet
               uv run python scripts/verify_release_dist.py \
                 --dist-dir /tmp/open-cinema-dist \
                 --expected-version "$(uv run python -c "from opencinema.version import __version__; print(__version__)")"
               uv venv /tmp/open-cinema-release-venv
               uv pip install \
                 --python /tmp/open-cinema-release-venv/bin/python \
+                /tmp/pycamilladsp-dist/camilladsp-*.whl \
                 /tmp/wyreplumber-dist/wyreplumber-*.whl \
                 /tmp/open-cinema-dist/open_cinema-*.whl
               cd /tmp

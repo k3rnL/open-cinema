@@ -33,7 +33,7 @@ The current production fixture is Debian 13 (Trixie), AArch64, on a Raspberry Pi
 
 ### 1. Treat the release as a versioned tuple, not a shared version number
 
-The coordinated release record will name four independent versions: Open Cinema `0.3.0`, WyrePlumber `0.2.0`, PCM Auto Decoder `0.2.0`, and Open Cinema UI `2.0.0`. Each repository keeps its existing `v<project-version>` tag convention, while the Open Cinema deployment manifest binds the four tags and their contract versions into one release identifier.
+The coordinated release record will name four independent versions: Open Cinema `0.3.0`, WyrePlumber `0.2.0`, PCM Auto Decoder `0.2.2`, and Open Cinema UI `2.0.0`. Decoder `v0.2.0` was created once but failed before publication because its tag workflow could not read the container-owned checkout. Corrective `v0.2.1` published its artifacts, but its AArch64 post-download gate exposed an incomplete minimum-runtime package list (`libavformat61` was omitted). Both failed tags remain immutable and excluded; `v0.2.2` corrects the verification environment and must pass the complete published-byte gate. Each repository keeps its existing `v<project-version>` tag convention, while the Open Cinema deployment manifest binds the four accepted tags and their contract versions into one release identifier.
 
 This avoids forcing unrelated repositories into lockstep SemVer while retaining one compatibility decision. A single shared version was considered, but would make future independent patch releases misleading and needlessly coupled.
 
@@ -64,20 +64,34 @@ For npm security findings, automated major-version remediation is not an accepta
 
 Publication will proceed in this order:
 
-1. WyrePlumber `0.2.0` and PCM Auto Decoder `0.2.0`, which are lower-level runtime components and can be released independently.
+1. WyrePlumber `0.2.0` and PCM Auto Decoder `0.2.2`, which are lower-level runtime components and can be released independently.
 2. Open Cinema UI `2.0.0`, whose contract assets must exist before the appliance manifest is finalized.
 3. Open Cinema `0.3.0`, after its dependency/version references and compatibility documents name the verified releases.
 4. The coordinated immutable manifest, only after all four published artifact sets pass download verification.
 
 Independent components may build in parallel, but no consuming tag or manifest promotion may point to an asset that is not already downloadable and verified. Tagging everything simultaneously was rejected because a failed dependency release could leave consumers permanently pointing at a nonexistent or invalid artifact.
 
-### 6. Promote `deployment/release-manifest.yml` from development record to an immutable release template
+### 6. Separate the development input before promoting `deployment/release-manifest.yml`
 
-The existing manifest will become the canonical source template for the coordinated record. Before the Open Cinema tag, it will pin every already-published dependency by repository, version/tag, source commit, artifact URL/name, SHA-256 digest, supported platform selector, and relevant API/ABI contract, while declaring the expected Open Cinema tag and commit identity.
+The existing mutable record will first be retained as the explicitly selected
+`deployment/development-manifest.yml` fixture. Local inventories may choose that
+file only together with development mode and explicit source directories. The
+canonical `deployment/release-manifest.yml` will then become the source template
+for the coordinated record. Before the Open Cinema tag, it will pin every
+already-published dependency by repository, version/tag, source commit, artifact
+URL/name, SHA-256 digest, supported platform selector, and relevant API/ABI
+contract, while declaring the expected Open Cinema tag and commit identity.
 
 The Open Cinema tag workflow will build its own distribution, compute the previously unknowable digest of those exact bytes, inject its artifact URL/digest and workflow provenance into a finalized manifest, and publish that manifest plus its checksum as release assets. This avoids a circular requirement to commit an artifact's digest into the source from which that artifact is built. Deployment consumes the finalized release asset; after verification, the exact finalized manifest is recorded with release-closure evidence and becomes the current deployment pin.
 
-Local-source modes, parent-only dirty-tree revisions, mutable URLs, and editable dependencies are forbidden in a finalized manifest. A validator will cross-check schema completeness, version/tag relationships, digest format, contract compatibility, and the absence of mutable inputs before Ansible consumes the file. Project release assets will also carry a small provenance record containing repository, tag, commit, workflow run, build target, and artifact digest; GitHub artifact attestations can supplement but not replace this portable record.
+Local-source modes, parent-only dirty-tree revisions, mutable URLs, and editable
+dependencies are forbidden in the candidate and finalized manifests. A validator
+will cross-check schema completeness, version/tag relationships, digest format,
+contract compatibility, and the absence of mutable inputs before Ansible consumes
+the file. Project release assets will also carry a small provenance record
+containing repository, tag, commit, workflow run, build target, and artifact
+digest; GitHub artifact attestations can supplement but not replace this portable
+record.
 
 Embedding whichever files happen to be present beside the playbook was rejected because it cannot prove what a later installation or rollback will retrieve.
 

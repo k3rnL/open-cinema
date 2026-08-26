@@ -42,6 +42,12 @@
     open_cinema_release_artifacts: >-
       {{ (open_cinema_preflight_manifest_validation_command.stdout | from_json).selectedArtifacts }}
 
+- name: Verify retained rollback input for standalone preflight runs
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/../tasks/private-rollback-preflight.yml"
+  vars:
+    open_cinema_private_rollback_manifest: "{{ open_cinema_preflight_manifest }}"
+  when: open_cinema_private_rollback_verification is not defined
+
 - name: Inspect the Raspberry Pi model
   ansible.builtin.command:
     argv: [cat, /proc/device-tree/model]
@@ -265,12 +271,30 @@
          if open_cinema_preflight_disk_command.rc == 0 and
             open_cinema_preflight_disk_command.stdout_lines | length > 1
          else 0 }}
-    open_cinema_preflight_production_models: >-
-      {{ open_cinema_compatibility.platform.production.raspberry_pi_models |
-         map(attribute='name') | list }}
-    open_cinema_preflight_experimental_models: >-
-      {{ open_cinema_compatibility.platform.experimental.raspberry_pi_models |
-         map(attribute='name') | list }}
+    open_cinema_preflight_matching_production_models: >-
+      {%- set matches = [] -%}
+      {%- for requirement in open_cinema_compatibility.platform.production.raspberry_pi_models -%}
+        {%- set minimum = requirement.minimum_memory_mb | default(0) | int -%}
+        {%- set maximum = requirement.maximum_memory_mb_exclusive | default(999999999) | int -%}
+        {%- if requirement.name in open_cinema_preflight_model and
+               (ansible_memtotal_mb | int) >= minimum and
+               (ansible_memtotal_mb | int) < maximum -%}
+          {%- set _ = matches.append(requirement.name) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ matches }}
+    open_cinema_preflight_matching_experimental_models: >-
+      {%- set matches = [] -%}
+      {%- for requirement in open_cinema_compatibility.platform.experimental.raspberry_pi_models -%}
+        {%- set minimum = requirement.minimum_memory_mb | default(0) | int -%}
+        {%- set maximum = requirement.maximum_memory_mb_exclusive | default(999999999) | int -%}
+        {%- if requirement.name in open_cinema_preflight_model and
+               (ansible_memtotal_mb | int) >= minimum and
+               (ansible_memtotal_mb | int) < maximum -%}
+          {%- set _ = matches.append(requirement.name) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ matches }}
     open_cinema_preflight_audio_versions: >-
       {%- set versions = {} -%}
       {%- for result in open_cinema_preflight_audio_version_commands.results -%}
@@ -287,13 +311,13 @@
         ansible_facts['architecture'] in open_cinema_compatibility.platform.production.architectures and
         ansible_facts['distribution_major_version'] | int in open_cinema_compatibility.platform.production.distribution_major_versions and
         ansible_facts['distribution_release'] in open_cinema_compatibility.platform.production.distribution_codenames and
-        open_cinema_preflight_production_models | select('in', open_cinema_preflight_model) | list | length > 0
+        open_cinema_preflight_matching_production_models | length > 0
       }}
     open_cinema_preflight_declared_experimental_platform: >-
       {{
         ansible_facts['architecture'] in open_cinema_compatibility.platform.production.architectures and
         (
-          open_cinema_preflight_experimental_models | select('in', open_cinema_preflight_model) | list | length > 0 or
+          open_cinema_preflight_matching_experimental_models | length > 0 or
           ansible_facts['distribution_major_version'] | int in open_cinema_compatibility.platform.experimental.distribution_major_versions or
           ansible_facts['distribution_release'] in open_cinema_compatibility.platform.experimental.distribution_codenames
         )
