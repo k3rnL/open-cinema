@@ -1,305 +1,218 @@
 # Open Cinema
 
-Audio processing control system with CamillaDSP integration.
+Open Cinema is the control plane for a configurable home-cinema and audio
+appliance. It stores versioned desired audio graphs, resolves them against the
+devices and signal formats that are present, and continuously reconciles the
+result with a native PipeWire session through WirePlumber.
 
-## Table of Contents
+The project is intended to make common policies simple—TV audio on the main
+speakers, Bluetooth sources taking over those speakers, and a connected
+headset taking priority—without preventing advanced users from composing
+reusable graphs, conditional routes, and processing stages.
 
-- [Features](#features)
-- [Quick Start](#quick-start)
-  - [Installation](#installation)
-  - [Using the API](#using-the-api)
-- [Development](#development)
-  - [Using the DevContainer](#using-the-devcontainer)
-  - [Running Tests](#running-tests)
-  - [API Testing](#api-testing)
-- [Architecture](#architecture)
-- [Plugin Development](#plugin-development)
-  - [Audio Backend Plugins](#audio-backend-plugins)
-  - [API Extension Plugins](#api-extension-plugins)
-- [Documentation](#documentation)
-- [Version](#version)
-- [License](#license)
-- [Contributing](#contributing)
+## System boundaries
 
-## Features
+Open Cinema owns desired state, policy, validation, reconciliation, and the
+management API. It does not replace PipeWire's media graph or WirePlumber's
+session model.
 
-- 🎵 **Plugin-based audio backend system** - Extensible architecture for multiple audio backends
-- 🔊 **PulseAudio integration** - Automatic device discovery and management
-- 🎛️ **CamillaDSP control** - Full control over CamillaDSP via websocket API
-- 📊 **Pipeline management** - Create, activate, and manage audio processing pipelines
-- 🔄 **Device tracking** - Real-time tracking of connected audio devices
-- 🌐 **REST API** - Complete HTTP API for all functionality
-- 🔌 **Plugin API extensions** - Plugins can register their own routes and models
+- **PipeWire and WirePlumber 0.5** expose devices, ports, routes, profiles, and
+  links. The native
+  [WyrePlumber](https://github.com/k3rnL/wyreplumber) binding is Open Cinema's
+  single audio-runtime integration.
+- **PCM Auto Decoder** observes an encoded/PCM input and exposes one stable,
+  adaptive native PipeWire PCM output. Format changes are reported to Open
+  Cinema without replacing the logical processor node.
+- **CamillaDSP 4** is an independently versioned native PipeWire process. Open
+  Cinema manages typed profiles and instance lifecycle while CamillaDSP owns
+  the real-time DSP engine.
+- **Open Cinema UI** is maintained in the separate
+  [open-cinema-ui](https://github.com/k3rnL/open-cinema-ui) repository. Its
+  `apps/admin` application is the end-user administration console; `apps/ui`
+  is the on-box display application and is currently a placeholder.
 
-## Quick Start
+CamillaDSP and the decoder are processors, not endpoints. They can be inserted
+between logical inputs and outputs in a desired graph. Application and
+processing plugins may extend Open Cinema, but plugins cannot introduce a
+second audio backend or take ownership of the PipeWire session.
 
-### Installation
+## Audio model
+
+The orchestration API keeps four states deliberately separate:
+
+1. A **draft graph** is editable and may refer to devices that are currently
+   absent.
+2. A **published revision** is immutable desired state that can be activated or
+   disabled.
+3. A **resolved plan** explains which endpoints, routes, processors, and
+   fallbacks match the current runtime facts.
+4. The **applied/runtime state** records the actions and live PipeWire objects
+   produced by reconciliation.
+
+Saving a draft never changes active audio. Applying performs save, validation,
+publication, activation, and reconciliation as one observable operation; a
+failure preserves the previous active graph. Reusable parameterized subgraphs
+allow a complex installation to expose a smaller end-user graph.
+
+The versioned API starts at `/api/audio/v1`. Useful discovery endpoints include:
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/open-cinema.git
-cd open-cinema
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run migrations
-python manage.py migrate
-
-# Start the development server
-python manage.py runserver
+curl -u admin:admin http://localhost:8000/api/audio/v1/schema
+curl -u admin:admin http://localhost:8000/api/audio/v1/endpoints
+curl -u admin:admin http://localhost:8000/api/audio/v1/runtime/readiness
+curl -u admin:admin http://localhost:8000/api/audio/v1/graphs
+curl -u admin:admin http://localhost:8000/api/audio/v1/plans/current
 ```
 
-### Using the API
+Browser clients should use the session/CSRF authentication flow implemented by
+the administration UI rather than HTTP basic authentication.
 
-```bash
-# Discover and populate audio devices
-curl -X POST http://localhost:8000/api/devices/update
+## Supported appliance
 
-# List known devices
-curl http://localhost:8000/api/devices
+The currently exercised fixture is a Raspberry Pi 5 with 8 GB RAM running
+Debian 13 (Trixie), using a dedicated headless PipeWire/WirePlumber service
+identity. Hardware acceptance has covered the GAB8 output, an SPDIF-to-I2S TV
+input, Bluetooth programme sources and headsets, one adaptive decoder, and one
+CamillaDSP instance. See [deployment/README.md](deployment/README.md) and
+[deployment/SUPPORTED_PLATFORMS.md](deployment/SUPPORTED_PLATFORMS.md) for the
+precise boundary and deferred campaigns.
 
-# Create a pipeline
-curl -X POST http://localhost:8000/api/camilladsp/pipelines/create \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "My Pipeline",
-    "input_device_id": 1,
-    "output_device_id": 2
-  }'
-
-# Activate a pipeline
-curl -X POST http://localhost:8000/api/camilladsp/pipelines/1/activate
-
-# Check CamillaDSP status
-curl http://localhost:8000/api/camilladsp/status
-```
+Other Raspberry Pi memory tiers and clean-image/upgrade qualification are not
+currently claimed. Performance characterization is tracked separately from
+functional deployment acceptance.
 
 ## Development
 
-### Using the DevContainer
+Python 3.12 or 3.13 and `uv` are supported. Native runtime development also
+requires WirePlumber 0.5. The repository's development source override expects
+the related projects beside it:
 
-How to start and use the DevContainer using the official CLI
+```text
+PyCharmProjects/
+├── open-cinema/
+└── wyreplumber/
+RustroverProjects/
+└── pcm-auto-decoder/
+```
+
+Clone those repositories, then create the environment from the lock file:
+
 ```bash
-# Build and bring up the containers
-devcontainer up --workspace-folder 
+uv sync --frozen --extra dev
+uv run python manage.py migrate
+uv run python manage.py ensure_default_admin
+```
 
-# Get into the main container
+The temporary development administrator is `admin` / `admin`. Override it with
+`--username`, `--password`, or `OPEN_CINEMA_DEFAULT_ADMIN_PASSWORD`; do not use
+the default credential on an exposed system.
+
+### Isolated native-audio container
+
+The recommended integration environment is the devcontainer. It runs Debian
+Trixie with private D-Bus, PipeWire, WirePlumber 0.5, Redis, and deterministic
+TV/main-speaker/headset fixtures. It does not attach to the host audio session.
+
+```bash
+devcontainer up --workspace-folder .
 devcontainer exec --workspace-folder . bash
 
-```
-
-Rebuilding the container can be done like this:
-```bash
-docker compose --project-name open-cinema_devcontainer -f .devcontainer/docker-compose.yml  build
-```
-
-The project includes a complete development environment with Redis, PipeWire, WirePlumber and CamillaDSP:
-
-```bash
-# Open in DevContainer (VS Code or compatible IDE)
-# Everything is pre-configured and will start automatically
-
-# Start the Django development server
-uv run manage.py runserver
-
-# Start the Celery worker (in a separate terminal)
-uv run celery -A opencinema worker -l info
-```
-
-If Celery fails to start, that's maybe because redis is not running.
-
-##### Redirect sound to your machine
-If you are on macOS or Linux with a pulseaudio backend installed, you can add the modules needed or run from scratch:
-```
-module-coreaudio-detect # Allow audio devices to be discovered on macOS
-module-native-protocol-tcp # Allow connections from your machine
-module-tunnel-sink server=<ip of rpi or container> sink_name=<remote tcp sink> # Send to receiver
-module-tunnel-source server=192.168.1.10 source_name=<remote source name> # To receive from sender
-```
-
-```bash
-pulseaudio -D -n \
-    -L module-coreaudio-detect \
-    -L "module-native-protocol-tcp auth-anonymous=true auth-cookie-enabled=false" \
-    -L module-native-protocol-unix \
-    --exit-idle-time=1000000
-```
-
-You can test the connection by running pulseaudio not daemonized, and use this to load the modules:
-```bash
-pactl load-module module-tunnel-source server=192.168.1.18 source=Channel_1__Channel_2.3
-pactl unload-module module-tunnel-source # Remove all tunnel sources
-```
-
-### Running Tests
-
-```bash
-pip install -r requirements-dev.txt
+uv sync --frozen --extra dev
+uv run python manage.py migrate
+uv run python manage.py ensure_default_admin
 uv run pytest
+wpctl status
 ```
 
-### API Testing
+See [.devcontainer/README.md](.devcontainer/README.md) for the private runtime
+paths and decoder/CamillaDSP test helpers.
 
-Use the included `api_tests.http` file with IntelliJ IDEA/PyCharm HTTP client.
+### Running the control plane
 
-## Architecture
-
-- **Django** - Web framework and REST API
-- **CamillaDSP** - Audio processing engine
-- **PulseAudio** - Audio backend (pluggable)
-- **SQLite** - Database (configurable)
-
-## Plugin Development
-
-Open Cinema supports two types of plugins that are automatically discovered at startup.
-
-### Audio Backend Plugins
-
-Create a new directory structure:
-
-```
-plugin/
-└── myplugin/
-    ├── __init__.py
-    └── audio/
-        ├── __init__.py
-        └── backend.py
-```
-
-In `backend.py`:
-
-```python
-from core.audio.audio_backend import AudioBackend
-from core.audio.audio_device import AudioDevice
-
-class MyAudioBackend(AudioBackend):
-    def get_name(self) -> str:
-        return "mybackend"
-
-    def discover_devices(self) -> list[AudioDevice]:
-        # Implementation
-        devices = []
-        # ... discover devices
-        return devices
-```
-
-Plugins are automatically discovered on Django startup.
-
-### API Extension Plugins
-
-API extension plugins allow you to add custom Django models and REST API endpoints to the application.
-
-Create a plugin with models and API routes:
-
-```
-plugin/
-└── myplugin/
-    ├── __init__.py
-    ├── models/
-    │   ├── __init__.py
-    │   └── mymodel.py
-    └── api/
-        ├── __init__.py
-        └── plugin.py
-```
-
-**Step 1: Define Django models** in `models/mymodel.py`:
-
-```python
-from django.db import models
-
-class MyModel(models.Model):
-    name = models.CharField(max_length=100)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        app_label = 'myplugin'
-```
-
-**Step 2: Create API plugin class** in `api/plugin.py`:
-
-```python
-from core.plugin_system.oc_plugin import OCPlugin
-from django.urls import path
-from django.http import JsonResponse
-from ..models.mymodel import MyModel
-
-
-def my_view(request):
-  """Standard Django view function"""
-  return JsonResponse({'status': 'ok'})
-
-
-def list_items(request):
-  """Example: Query your model and return JSON"""
-  items = MyModel.objects.all().values('id', 'name', 'created_at')
-  return JsonResponse({'items': list(items)})
-
-
-class MyAPIPlugin(OCPlugin):
-  @property
-  def plugin_name(self) -> str:
-    """URL namespace: routes will be /api/plugins/myplugin/*"""
-    return "myplugin"
-
-  def get_urls(self):
-    """Return list of Django URL patterns"""
-    return [
-      path('endpoint/', my_view, name='my-endpoint'),
-      path('items/', list_items, name='list-items'),
-    ]
-```
-
-**Step 3: Register as Django app** in `opencinema/settings.py`:
-
-```python
-INSTALLED_APPS = [
-    # ...
-    'plugin.myplugin',  # Required for Django to find models
-]
-```
-
-**Step 4: Create and apply database migrations:**
+Redis must be reachable through `OPEN_CINEMA_RUNTIME_REDIS_URL`,
+`CELERY_BROKER_URL`, and `CELERY_RESULT_BACKEND`. In separate shells run:
 
 ```bash
-python manage.py makemigrations myplugin
-python manage.py migrate
+uv run python manage.py runserver 0.0.0.0:8000
+uv run celery -A opencinema worker --loglevel=info
+uv run celery -A opencinema beat --loglevel=info
+uv run open-cinema-orchestrator
 ```
 
-**How it works:**
-- Plugin models are standard Django models that create database tables
-- The `APIPlugin` class uses Django's URL routing system via `get_urls()`
-- Views are standard Django view functions (can use `JsonResponse`, DRF, etc.)
-- Routes are automatically registered under `/api/plugins/{plugin_name}/` at Django startup
-- Plugin discovery happens in `api/apps.py` during the `ready()` lifecycle hook
+Use `uv run open-cinema-orchestrator --check` for a bounded startup/contract
+probe. Live reconciliation should only be enabled inside an audio session the
+developer intends Open Cinema to control.
 
-**Example**: See `plugin/counter/` for a complete working example with models, API routes, and CRUD operations.
+## Validation and distributions
 
-Your plugin routes will be available at:
-- `/api/plugins/myplugin/endpoint/`
-- `/api/plugins/myplugin/items/`
-
-## Documentation
-
-- [API Reference](api_tests.http) - HTTP test file with all endpoints
-- [Changelog](CHANGELOG.md) - Version history
-- [DevContainer Setup](.devcontainer/README.md) - Development environment
-- [Deployment Guide](deployment/README.md) - Ansible deployment for Raspberry Pi
-
-## Version
-
-Current version: **0.0.1**
+The complete local backend gate is:
 
 ```bash
-# Check version via API
-curl http://localhost:8000/api/version
+uv sync --frozen --extra dev
+uv run python manage.py check
+uv run python manage.py makemigrations --check --dry-run
+uv run pytest
+uv build
+uv run python scripts/verify_release_dist.py \
+  --dist-dir dist \
+  --expected-version "$(uv run python -c 'from opencinema.version import __version__; print(__version__)')"
 ```
+
+Deployment syntax checks are run from `deployment/`:
+
+```bash
+ansible-playbook -i inventories/example.yml playbooks/preflight.yml --syntax-check
+ansible-playbook -i inventories/example.yml playbooks/site.yml --syntax-check
+ansible-playbook -i inventories/example.yml playbooks/rollback.yml --syntax-check
+ansible-playbook -i inventories/example.yml playbooks/benchmark.yml --syntax-check
+```
+
+CI repeats the backend, archive, isolated-install, and deployment syntax gates
+on branches and pull requests. A wheel is not accepted merely because it
+builds: the distribution verifier requires the license, runtime version module,
+and versioned orchestration contracts in both wheel and source archive.
+
+## Deployment modes
+
+Ansible supports two intentionally distinct inputs:
+
+- **Development mode** synchronizes explicitly configured local source
+  directories. Diagnostics identify this input as mutable and non-release.
+- **Appliance/release mode** consumes a coordinated manifest whose components
+  are pinned by version, commit, platform/ABI selector, artifact URL, SHA-256,
+  and provenance. Mutable branches, editable installs, and adjacent worktrees
+  are not valid release inputs.
+
+The repository manifest currently records the experimental development
+fixture; it must not be presented as an immutable product release. Follow the
+[deployment guide](deployment/README.md) for inventory, authentication,
+preflight, readiness, diagnostics, backup, and coordinated rollback.
+
+## Versioning and releases
+
+`opencinema.version.__version__` is the authoritative backend version. Python
+package metadata and `/api/version` read that same value. Release tags use
+`v<major>.<minor>.<patch>` and must exactly match it.
+
+The tag workflow first runs the same required CI gates, then publishes a wheel,
+source archive, SHA-256 records, and portable provenance. A project tag alone
+does not make an appliance release: WyrePlumber, the decoder, both UI builds,
+and Open Cinema are published in dependency order and admitted only after their
+downloaded artifacts pass verification and are recorded in one immutable
+coordinated manifest.
+
+## Repository guide
+
+- [Audio API v1](docs/audio-orchestration/API_V1.md)
+- [Application and processing plugins](docs/audio-orchestration/PLUGINS.md)
+- [Deployment and operations](deployment/README.md)
+- [Version history](CHANGELOG.md)
+- [`contracts/`](contracts/) — packaged cross-project schemas and protocol data
+- [`core/orchestration/`](core/orchestration/) — desired-state resolver and
+  reconciler
+- [`api/audio_v1/`](api/audio_v1/) — public orchestration API
+- [`plugin/`](plugin/) — plugin contracts and bundled example
 
 ## License
 
-MIT License - see LICENSE file for details
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+Open Cinema is distributed under the [MIT License](LICENSE).

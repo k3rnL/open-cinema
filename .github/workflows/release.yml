@@ -9,9 +9,14 @@ permissions:
   contents: write
 
 jobs:
+  verify:
+    name: Verify release commit
+    uses: ./.github/workflows/ci.yml
+
   build:
-    name: Build distribution
+    name: Build release distributions
     runs-on: ubuntu-latest
+    needs: verify
 
     steps:
       - name: Checkout code
@@ -22,19 +27,51 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
-      - name: Build source distribution
+      - name: Build wheel and source distribution
         run: |
-          uv build --sdist
+          uv build
 
-      - name: Generate SHA256 checksums
+      - name: Verify tag, metadata, license, and runtime contracts
         run: |
+          release_version="${GITHUB_REF_NAME#v}"
+          python scripts/verify_release_dist.py \
+            --dist-dir dist \
+            --expected-version "$release_version" \
+            --tag "$GITHUB_REF_NAME"
+
+      - name: Generate provenance and finalize the coordinated manifest
+        run: |
+          workflow_run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          release_base_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
+          python scripts/write_release_provenance.py \
+            --dist-dir dist \
+            --output dist/provenance.json \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit "$GITHUB_SHA" \
+            --tag "$GITHUB_REF_NAME" \
+            --workflow-run "$workflow_run"
+          python scripts/finalize_release_manifest.py \
+            --template deployment/release-manifest.yml \
+            --output dist/open-cinema-coordinated-manifest.yml \
+            --dist-dir dist \
+            --provenance dist/provenance.json \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit "$GITHUB_SHA" \
+            --tag "$GITHUB_REF_NAME" \
+            --workflow-run "$workflow_run" \
+            --release-base-url "$release_base_url"
           cd dist
-          sha256sum *.tar.gz > checksums.sha256
+          sha256sum \
+            ./*.whl \
+            ./*.tar.gz \
+            ./provenance.json \
+            ./open-cinema-coordinated-manifest.yml \
+            > checksums.sha256
           cat checksums.sha256
 
       - name: Upload artifacts
@@ -42,8 +79,11 @@ jobs:
         with:
           name: python-dist
           path: |
+            dist/*.whl
             dist/*.tar.gz
             dist/*.sha256
+            dist/provenance.json
+            dist/open-cinema-coordinated-manifest.yml
 
   release:
     name: Create release
@@ -82,5 +122,8 @@ jobs:
         with:
           body: ${{ steps.git-cliff.outputs.content }}
           files: |
+            release_dist/*.whl
             release_dist/*.tar.gz
             release_dist/*.sha256
+            release_dist/provenance.json
+            release_dist/open-cinema-coordinated-manifest.yml

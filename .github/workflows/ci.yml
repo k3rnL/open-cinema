@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  workflow_call:
+  push:
+    branches:
+      - master
+      - pipewire
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: open-cinema-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Backend, deployment, and distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out Open Cinema
+        uses: actions/checkout@v4
+        with:
+          path: open-cinema
+
+      - name: Check out WyrePlumber candidate
+        uses: actions/checkout@v4
+        with:
+          repository: k3rnL/wyreplumber
+          ref: pipewire-object-refactor
+          path: wyreplumber
+
+      - name: Check out decoder fixtures
+        uses: actions/checkout@v4
+        with:
+          repository: k3rnl/pcm-auto-decoder
+          ref: master
+          path: pcm-auto-decoder
+
+      - name: Build the Debian Trixie native-audio environment
+        run: >-
+          docker build
+          --tag open-cinema-ci-base
+          open-cinema/.devcontainer
+
+      - name: Add the exact candidate sources
+        run: >-
+          docker build
+          --file open-cinema/.github/ci/Dockerfile
+          --tag open-cinema-ci
+          .
+
+      - name: Start isolated Redis
+        run: |
+          docker network create open-cinema-ci
+          docker run --detach --rm \
+            --name open-cinema-ci-redis \
+            --network open-cinema-ci \
+            redis:7.4.2-alpine
+
+      - name: Run project and packaging gates
+        run: |
+          docker run --rm \
+            --network open-cinema-ci \
+            --env OPEN_CINEMA_RUNTIME_REDIS_URL=redis://open-cinema-ci-redis:6379/0 \
+            --env CELERY_BROKER_URL=redis://open-cinema-ci-redis:6379/0 \
+            --env CELERY_RESULT_BACKEND=redis://open-cinema-ci-redis:6379/0 \
+            open-cinema-ci \
+            bash -lc '
+              set -euo pipefail
+              uv sync --frozen --extra dev
+              uv run python manage.py check
+              uv run python manage.py makemigrations --check --dry-run
+              uv run pytest -q
+              uv build --out-dir /tmp/open-cinema-dist --quiet
+              uv build --project /wyreplumber --out-dir /tmp/wyreplumber-dist --wheel --quiet
+              uv run python scripts/verify_release_dist.py \
+                --dist-dir /tmp/open-cinema-dist \
+                --expected-version "$(uv run python -c "from opencinema.version import __version__; print(__version__)")"
+              uv venv /tmp/open-cinema-release-venv
+              uv pip install \
+                --python /tmp/open-cinema-release-venv/bin/python \
+                /tmp/wyreplumber-dist/wyreplumber-*.whl \
+                /tmp/open-cinema-dist/open_cinema-*.whl
+              cd /tmp
+              /tmp/open-cinema-release-venv/bin/python -c \
+                "from importlib.resources import files; from opencinema.version import __version__; assert files(\"contracts\").joinpath(\"desired-audio-graph-v1.schema.json\").is_file(); print(__version__)"
+              DJANGO_SETTINGS_MODULE=opencinema.settings \
+                /tmp/open-cinema-release-venv/bin/django-admin check
+              /tmp/open-cinema-release-venv/bin/open-cinema-orchestrator --check
+            '
+
+      - name: Verify Ansible syntax
+        run: |
+          docker run --rm \
+            --entrypoint bash \
+            open-cinema-ci \
+            -lc '
+              set -euo pipefail
+              sudo apt-get update
+              sudo apt-get install -y --no-install-recommends ansible-core
+              cd /workspace/deployment
+              ansible-playbook -i inventories/example.yml playbooks/site.yml --syntax-check
+              ansible-playbook -i inventories/example.yml playbooks/rollback.yml --syntax-check
+              ansible-playbook -i inventories/example.yml playbooks/benchmark.yml --syntax-check
+            '

@@ -1,0 +1,339 @@
+# Coordinated release inventory and safety boundary
+
+Date: 2026-08-26 UTC
+
+Scope: release-preparation tasks 1.1–1.6 for Open Cinema `0.3.0`,
+WyrePlumber `0.2.0`, PCM Auto Decoder `0.2.0`, and Open Cinema UI `2.0.0`.
+This is evidence only: no index entry, commit, branch, tag, release, or remote
+reference was changed while collecting it.
+
+## Outcome
+
+The four public repositories and their existing `v<version>` release paths are
+real and the authenticated GitHub identity has admin/push authority for each
+repository. All four default branches are `master`, but the candidate work is
+not yet on an accepted integration commit and none of the `master` branches is
+protected by required status checks. CI success therefore remains a manual
+promotion gate rather than a GitHub-enforced branch rule.
+
+The historical tuple `0.2.0 / 0.1.0 / 0.1.4 / 1.0.5` is still downloadable and
+all published checksum records validate. It is **not** a usable immutable
+rollback tuple for the current native PipeWire appliance: the Open Cinema tag
+contains a package identified as `0.0.1`, the WyrePlumber AArch64 wheel links
+WirePlumber 0.4, and the decoder AArch64 binary links PulseAudio. No published
+coordinated manifest exists for that tuple.
+
+The only demonstrated rollback baseline is the appliance-local transition
+bundle documented in
+`deployment/acceptance/2026-08-26-coordinated-rollback.md`. Its embedded
+manifest and nine checksummed recovery artifacts successfully restored the
+previous generation. That private bundle is suitable as the first coordinated
+release's operational fallback only if its live presence and checksums are
+reverified and it is retained; it is not a substitute for a downloadable
+previous coordinated release manifest.
+
+## Collection method and safety checks
+
+- Repository state came from `git status --short --untracked-files=all`, branch,
+  upstream, tag, log, index, and remote-reference queries. Status counts below
+  are a point-in-time snapshot and include this evidence file.
+- Public release metadata and assets came from read-only GitHub API/CLI calls.
+  Previous assets were downloaded to a temporary directory and their published
+  checksum files were verified. No token, credential, or tokenized URL is
+  recorded here.
+- Dirty filenames and text files were scanned for common private-key, GitHub
+  token, AWS access-key, and credential-bearing URL patterns. No match was
+  found. Binary UI screenshots were identified as generated review evidence;
+  they still require a visual privacy review before staging.
+- The tracked development inventory contains machine-specific LAN addresses,
+  usernames, and absolute source paths and is excluded below. Shared inventory
+  contains deliberately documented bootstrap placeholders, not discovered live
+  secrets; their literal values are not repeated here.
+- No blanket staging, reset, checkout, history rewrite, or cleanup is permitted.
+  Two pre-existing index states need explicit resolution: three Open Cinema
+  `plugin/pipewire/**` files are staged additions but absent from the worktree
+  (`AD`), and WyrePlumber's `oui.py` is staged as an addition.
+
+## Repository identity snapshot
+
+| Repository | Local branch and HEAD | Upstream / divergence | Remote integration state | Latest tag |
+|---|---|---|---|---|
+| Open Cinema | `pipewire` at `4a2ec1a3476e612977ec11e2408d3b85e2cb8ba4` | no upstream; local `master` is the same commit and is 4 commits ahead of its locally recorded `origin/master` | GitHub default `master`; live remote `master` is `b22569c00b1c21cf5fb063a650c9bd1be9a546f4`; no live `pipewire` branch | `v0.2.0` at `1f8ac45c2502c6eb2fafeada736e6da884e9ae1a` |
+| WyrePlumber | `pipewire-object-refactor` at `e58456fd9b1f94b778b39f5529ba10d16bdc68c3` | `origin/pipewire-object-refactor`, `0/0` | GitHub default `master` at `51c0cd195ab464601e85df5fd98a9fcf12c363bf`; feature branch exists remotely | `v0.1.0` at `97cc4f07b3d52e5afab12af1088c0aa9a3a95af6` |
+| PCM Auto Decoder | `master` at `e1be22be3759dd67b0a3bd21384eaab33f87c2c2` | `origin/master`, `0/0` | GitHub default/live `master` is the same commit | `v0.1.4` at the same commit |
+| Open Cinema UI | `master` at `a1933d5eccc63f7c9f811424cca5dc167967a0da` | `origin/master`, `0/0` | GitHub default/live `master` is the same commit | `v1.0.5` at `614dfb5bd058b8b9f9a3c41d8f37f68daf56d92f` |
+
+All remotes resolve to the public GitHub repositories under `k3rnL` (the
+decoder's existing references vary only in owner-name case, which GitHub treats
+case-insensitively). Fetch and push URLs identify the same repositories. GitHub
+reports `admin`, `maintain`, `push`, `triage`, and `pull` permission for the
+authenticated identity. There is no prior pull-request history in any of the
+four repositories and no protection on any `master` branch; prior history is
+consistent with direct conventional commits followed by `v*` tags.
+
+## Complete dirty-path classification
+
+The tables use disjoint path sets. Counts are Git status entries, not filesystem
+file counts. A directory pattern accounts for every dirty descendant matched
+by that set; exclusions are stated explicitly. `M`, `D`, `A`, `AD`, and `??`
+retain their normal Git meanings.
+
+### Open Cinema
+
+Snapshot at `2026-08-26T19:35:14Z`: 607 status entries (`M` 41, `D` 96,
+`AD` 3, `??` 467), status-stream SHA-256
+`b3deb68f92e8a4b49d697281a2612dea5195de07b790886eec6b8d0450707f82`.
+The disjoint classifications contain 406 intended-product, 171
+release/deployment-readiness, 22 generated-evidence, 1 machine-local, and 7
+deferred entries.
+
+Top-level accounting is: root 10, `.devcontainer` 11, `.github` 4, `api` 97,
+`contracts` 5, `core` 113, `deployment` 109, `docs` 18, `opencinema` 5,
+`openspec` 72, `plugin` 29, `scripts` 3, and `tests` 131. The largest groups
+break down as follows: `api` = admin 1, apps 1, `audio_v1` 16, auth 1,
+management 7, migrations 16, models 31, permissions 2, tasks 4, URLs 1, and
+views 17; `core` = legacy audio 13, legacy Camilla 6, orchestration 89, and
+plugin system 5; `tests` = factories 2, fixtures 8, and 121 top-level test
+modules; `plugin` = ALSA 4, counter 3, PCM decoder 7, staged PipeWire 3, and
+PulseAudio 12. `deployment` = root/readme/platform/config/manifest files 5,
+acceptance 17, audit 1, benchmark definitions 10, benchmark results 4,
+collections 1, filter plugins 1, inventories 2, playbooks 4, roles 62, and
+scripts 2. `openspec` = archived completed changes 40, approved active changes
+16, deferred proposals 4, main specs 11, and configuration 1.
+
+| Classification | Complete disjoint path inventory | Treatment |
+|---|---|---|
+| Intended product work | `.devcontainer/**`; `api/**`; `contracts/**`; `core/**`; `docs/audio-orchestration/**`; `opencinema/**`; `plugin/**` except `plugin/pipewire/**`; `tests/**`; deleted `api_tests.http` | Include through small implementation/test commits. The legacy model/backend/plugin deletions must stay coherent with migrations and replacement orchestration code. |
+| Release/deployment readiness | `.github/**`; `deployment/**` except the generated-evidence and local-inventory sets below; `openspec/**` except the four deferred proposal files below; `scripts/**`; `docs/release-readiness/2026-08-26-coordinated-release-inventory.md`; root `LICENSE`, `MANIFEST.in`, `README.md`, `VERSION`, `pyproject.toml`, `requirements-dev.txt`, `requirements.txt`, `uv.lock`, and `version.py` | Include in deployment, documentation/spec, and release-infrastructure commits, not in the application implementation commit. |
+| Generated/observed evidence | `deployment/acceptance/**`; `deployment/audits/**`; `deployment/benchmarks/results/**` | Retain as reviewable evidence after privacy/sanitization review; do not confuse these observations with source or release artifacts. |
+| Machine-local state | `deployment/inventories/local.yml` | Exclude from release commits. It identifies this workstation, LAN, Pi login, and adjacent worktrees. Preserve in place. |
+| Explicitly deferred user work | staged-but-worktree-deleted `plugin/pipewire/__init__.py`, `plugin/pipewire/audio/__init__.py`, `plugin/pipewire/audio/backend.py`; `openspec/changes/additional-managed-link-shapes/{.openspec.yaml,proposal.md}`; `openspec/changes/multi-instance-audio-processing/{.openspec.yaml,proposal.md}` | Do not stage with the release. Resolve the stale index entries explicitly after review; preserve both future-change proposals untouched. |
+| Secret-sensitive material | none detected | Re-run the scan against the staged diff immediately before each commit. |
+
+The large source inventory is completely covered by these current subtrees:
+`.devcontainer`, `.github`, `api`, `contracts`, `core`, `deployment`, `docs`,
+`opencinema`, `openspec`, `plugin`, `scripts`, `tests`, and the ten root-level
+status entries named above (nine release files plus `api_tests.http`). No dirty
+path falls outside those sets.
+
+### WyrePlumber
+
+Snapshot at `2026-08-26T19:35:14Z`: 95 status entries (`M` 28, staged `A` 1,
+`??` 66), status-stream SHA-256
+`476801e737c1affbb7b3e1c6a8f1123348eb818e6d23b59d3198208dffea2610`.
+The disjoint classifications contain 65 intended-product, 11
+release-readiness, 6 machine-local, and 13 deferred entries.
+
+| Classification | Complete disjoint path inventory | Treatment |
+|---|---|---|
+| Intended product work | `CMakeLists.txt`, `setup.py`, all `native/**`, all `src/wyreplumber/**` except `py.typed`, all `tests/**` except `tests/pipewire_container/Dockerfile` and `tests/test_release_tools.py`, `docs/runtime-contract-v1.md`, `examples/runtime_orchestration.py`, and all `openspec/**` | Include as native proxy/SPA work and the new runtime observation/control contract with its tests. |
+| Release readiness | `.github/workflows/release.yml`, `MANIFEST.in`, `README.md`, `pyproject.toml`, `uv.lock`, `docs/release-readiness/2026-08-26-wireplumber-0.5.md`, `scripts/__init__.py`, `scripts/release_contract.py`, `src/wyreplumber/py.typed`, `tests/pipewire_container/Dockerfile`, `tests/test_release_tools.py` | Include in a separate WirePlumber-0.5 packaging/CI commit. |
+| Machine-local state | all six `.codex/skills/**/SKILL.md` files | Exclude; these are local agent workflow copies, not binding source. |
+| Explicitly deferred user work | already-staged `oui.py`; `BEAUTIFUL_API_DEMO.md`, `EXAMPLE_SPA_PARSING.md`, `PARAM_USAGE_EXAMPLES.md`, `demo_new_api.py`, `example_beautiful_api.py`, `example_param_usage.py`, `test.py`, `test2.py`, `test3.py`, `test4.py`, `test_set_python_values.py`, `test_spa_types.py` | Preserve and exclude unless the user separately promotes an experiment into the supported examples/API. Do not alter the existing index entry silently. |
+| Generated output / secret-sensitive material | none detected | Recheck before staging. |
+
+### PCM Auto Decoder
+
+Snapshot at `2026-08-26T19:35:14Z`: 29 status entries (`M` 10, `D` 2, `??`
+17), status-stream SHA-256
+`68397f6c0e18ccb3d77cb0bee774802df0be09e90833485a0c49767c88e789af`.
+The disjoint classifications contain 14 intended-product and 15
+release-readiness entries.
+
+| Classification | Complete disjoint path inventory | Treatment |
+|---|---|---|
+| Intended product work | all seven `src/**` entries; all six `tests/**` entries, including deletion of `tests/pulseaudio_test.rs`; `docs/STATUS_PROTOCOL.md` | Include as the stable adaptive native PipeWire output/status-v2 implementation and tests. |
+| Release readiness | all three `.devcontainer/**` entries; both `.github/workflows/**` entries; `Cargo.toml`, `Cargo.lock`, `README.md`, `rust-toolchain.toml`; all six `scripts/**` entries | Include as Trixie native build, validation, packaging, and release infrastructure. |
+| Generated output / machine-local state / secret-sensitive material / deferred work | none detected | Recheck before staging. |
+
+### Open Cinema UI
+
+Snapshot at `2026-08-26T19:35:14Z`: 102 status entries (`M` 18, `D` 27,
+`??` 57), status-stream SHA-256
+`762dd314b4169a0f0c0d3b6c18ea751eb35a4afed73364bd30697b82bd7a032e`.
+The disjoint status classifications contain 71 intended-product, 22
+release-readiness, and 9 generated-evidence entries. Five `.idea/**` paths are
+now ignored machine-local state and therefore intentionally sit outside the
+102-entry Git status total.
+
+| Classification | Complete disjoint path inventory | Treatment |
+|---|---|---|
+| Intended product work | all `apps/**` except the seven release/build surfaces below; all `packages/**` except `packages/shared/package.json`; `contracts/audio-orchestration-client-v1.json`; `e2e/orchestration.spec.ts`; root `eslint.config.js` and `playwright.config.ts`; `docs/AUDIO_ORCHESTRATION_UI.md`, `docs/UI_BASELINE.md`, and `docs/ui-current/README.md` | Include as admin/orchestration, shared client contract, on-box placeholder, and product-test commits. The user has accepted this UI as a release base while deferring later UX details. |
+| Release readiness | `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.gitignore`, `README.md`, `package.json`, `package-lock.json`, all seven `scripts/**` files, `apps/admin/{index.html,package.json,vite.config.ts}`, `apps/ui/{index.html,package.json,tsconfig.json,vite.config.ts}`, `packages/shared/package.json`, `docs/SECURITY_AUDIT.md` | Include as deterministic workspace versioning, hard CI gates, build identity, audit evidence, and verified release packaging. |
+| Generated review evidence | all five `docs/ui-baseline/*.png` and all four `docs/ui-current/*.png` files | Include only after a visual privacy review; dimensions were inspected and no filesystem metadata is needed by the release. |
+| Machine-local state | five ignored paths under `.idea/**` (inspection profile directory, module metadata, project module, VCS settings, and workspace state) | Exclude and preserve; IDE project state is not release input or part of the status total. |
+| Secret-sensitive material / explicitly deferred user work | none detected beyond the machine-local and generated-review sets | Recheck before staging. |
+
+## Proposed selective conventional commits
+
+These are staging boundaries, not commands. Files shared by two concerns require
+interactive hunk review. Every commit starts from an explicit path list and an
+inspection of `git diff --cached`; never use `git add .`, `git add -A`, reset,
+or a history rewrite.
+
+### Open Cinema
+
+1. `feat(orchestration): add versioned desired graph control plane` — graph
+   models/migrations, contracts, resolver/planner/runtime, API representations,
+   orchestrator, and focused tests.
+2. `feat(audio): manage endpoint adapters and processing stages` — endpoint
+   inventory/adapters, CamillaDSP, adaptive decoder, speaker tester, driver and
+   reconciliation paths, with their API/tests.
+3. `refactor(audio): remove legacy backend and plugin models` — legacy
+   audio/Camilla backend deletions, final removal migration, route/plugin
+   cleanup, and removal tests. Keep this ordered after the replacement commits.
+4. `feat(deployment): provision the native PipeWire appliance` — shared
+   inventory, roles, templates, full-runtime playbook, readiness, and deployment
+   tests; explicitly omit `deployment/inventories/local.yml`.
+5. `feat(deployment): add coordinated recovery and benchmark tooling` — backup,
+   rollback, diagnostics, benchmark definitions/harness, and separately reviewed
+   acceptance/measurement evidence.
+6. `docs(openspec): record audio orchestration and appliance contracts` —
+   current docs, main specs, archived completed changes, and active approved
+   deployment/benchmark/release plans; omit the two deferred future proposals.
+7. `build(release): harden backend distributions and coordinated manifest` —
+   version/package inputs, lock data, license, CI/tag workflows, release scripts,
+   README release sections, and this inventory.
+
+### WyrePlumber
+
+1. `refactor(native): complete proxy and SPA value support` — existing proxy,
+   metadata/module/node and SPA-pod work with focused tests.
+2. `feat(runtime): add immutable orchestration observation and controls` — new
+   native capture/event/lifecycle/mutation code, `src/wyreplumber/runtime/**`,
+   contract docs/example/OpenSpec, and runtime tests.
+3. `build(release): publish WirePlumber 0.5 native artifacts` — build metadata,
+   typed marker, Trixie fixture, release contract, workflow, README, and evidence.
+4. Exclude `.codex/**`, staged `oui.py`, and all named scratch/demo files unless
+   the user makes an explicit separate decision.
+
+### PCM Auto Decoder
+
+1. `feat(pipewire): add one stable adaptive PCM output` — native I/O,
+   detection/decoder/status implementation, status contract, fixture/live tests,
+   and Pulse client/test removal.
+2. `build(ci): standardize native Debian Trixie gates` — devcontainer,
+   toolchain, CI gates, linkage/offline checks, and branch workflow.
+3. `build(release): publish verified target-qualified decoder archives` —
+   version surfaces, locked metadata, packaging/verifiers, tag workflow, and
+   release documentation.
+
+### Open Cinema UI
+
+1. `feat(admin): add authenticated orchestration management` — authentication,
+   dashboard/device discovery, graph editor, processors/adapters/speaker testing,
+   legacy page replacement, and component tests.
+2. `feat(shared): add the audio orchestration client contract` — versioned
+   client contract, API/state/rule/validation modules, legacy shared API removal,
+   and shared tests.
+3. `feat(on-box): retain the independent on-box placeholder` — on-box app
+   configuration and its boot test.
+4. `test(ui): preserve visual and browser acceptance baselines` — E2E contract,
+   Playwright configuration, reviewed screenshots, and baseline documentation.
+5. `build(release): make UI 2.0 gates and assets deterministic` — manifests and
+   lockfile, version/release scripts, runtime build metadata, CI/release
+   workflows, lint configuration, and README. Exclude `.idea/**`.
+
+## Integration, CI, tags, assets, and authority
+
+| Project | Integration decision before tagging | Candidate branch/PR CI | Tag release gate and assets | Authority result |
+|---|---|---|---|---|
+| Open Cinema | Development is on local `pipewire`, while GitHub integration is `master`. The accepted release SHA must become reachable from `master`; do not tag the unpushed local branch. | New local `ci.yml` covers backend tests, Django/migrations, distributions, isolated install and Ansible syntax on pushes to `master`/`pipewire` and PRs. It is not authoritative until committed and run remotely. | `v*`; local candidate release calls equivalent CI, builds wheel+sdist, verifies tag/package/contracts/license, and publishes checksums, provenance, and finalized coordinated manifest. | GitHub admin/push confirmed; no protected status checks, so record successful run IDs manually. |
+| WyrePlumber | Merge the remote `pipewire-object-refactor` candidate into default `master` after its all-branch workflow passes. | The combined candidate workflow runs on every branch/PR and builds/tests the WirePlumber-0.5 matrix. | `v*`; six target wheels plus one sdist, each with checksum/provenance, only after installed-wheel tests. | GitHub admin/push confirmed; no protected status checks. |
+| PCM Auto Decoder | Current integration branch is `master`; commit only after native local gates. | New local CI runs locked native Trixie x86_64/AArch64 gates on all branches/PRs. | `v*`; repeats native gates, publishes two target-qualified archives/checksums/provenance, then verifies published bytes. | GitHub admin/push confirmed; no protected status checks. |
+| Open Cinema UI | Current integration branch is `master`; commit only after audit/type/lint/unit/build/E2E gates. | Candidate CI makes installation, audit, type checks, lint, tests, both builds, version metadata, and bounded browser smoke hard failures. | `v*`; rejects tag mismatch, repeats gates, publishes separate admin/on-box archives with checksum/provenance, and verifies downloaded served builds. | GitHub admin/push confirmed; no protected status checks. |
+
+All repositories use conventional-style history (`feat:`, `fix:`, `refactor:`,
+`docs:`, `ci:`, `chore:`) and `v<project-version>` tags. Existing release notes
+are generated with `git-cliff`. No push or tag should occur until the candidate
+workflow files themselves are committed, the target integration SHA is known,
+and the corresponding branch run is green.
+
+## Version, dependency, contract, ABI, asset, and README surfaces
+
+| Project | Current source-of-truth surfaces | Required release state |
+|---|---|---|
+| Open Cinema | `opencinema/version.py` reports `0.2.0`; `pyproject.toml` derives package metadata from it; `/api/version` imports it. `pyproject.toml` and `uv.lock` still resolve WyrePlumber `0.1.0` through an adjacent editable development source. Shared inventory and the development manifest also identify Open Cinema `0.2.0`. | Set all backend/package/lock/deployment surfaces to `0.3.0`/`v0.3.0`; consume verified WyrePlumber `0.2.0` in release mode while keeping the adjacent path only as an explicit development override. README now accurately describes native PipeWire/WirePlumber, processor ownership, admin/on-box roles, Trixie appliance, validation, immutable deployment, and tag flow. |
+| WyrePlumber | `pyproject.toml` is `0.1.0`; installed `__version__` comes from package metadata. Build family is selected in `setup.py`/CMake, with candidate release workflow fixed to WirePlumber 0.5. Public native surfaces include `_core`, `_core.pyi`, `py.typed`, and runtime contract/value schema v1. | Set metadata/lock to `0.2.0` and tag `v0.2.0`; ship CPython 3.12/3.13/3.14 wheels for x86_64/AArch64 linked to `libwireplumber-0.5` and `libpipewire-0.3`. README's GitHub-release installation, no-PyPI statement, Trixie matrix, permission/runtime ownership, validation, and release claims match the candidate workflow. |
+| PCM Auto Decoder | `Cargo.toml` and `Cargo.lock` are `0.1.4`; Clap derives `--version` from Cargo metadata. `rust-toolchain.toml` pins 1.98.0 while package MSRV is 1.85. Status protocol is v2 and the one-output contract is implemented through native PipeWire 0.10 and system FFmpeg 8 crates/libraries. | Set Cargo/lock/binary/archive/title surfaces to `0.2.0`/`v0.2.0`; publish native Debian Trixie x86_64/AArch64 archives linked to PipeWire/FFmpeg and forbidden from linking libpulse. README's stable output, codecs/layouts, ownership, offline fixture, dependencies, validation, asset, and immutable-tag claims match the candidate. |
+| Open Cinema UI | Root, admin, on-box, shared manifests and corresponding lock entries are `1.0.5`; both internal shared dependencies are pinned to that version. Vite emits HTML and `open-cinema-release.json` identity and embeds the v1 client contract in admin. | Deterministically set every workspace/lock/runtime surface to `2.0.0` and tag `v2.0.0`. README correctly distinguishes the administration console from the on-box placeholder and documents environment, all hard gates, separate assets, workspace versioning, and immutable tag flow. The local release example must be updated or intentionally expressed as a version placeholder during the bump. |
+
+The coordinated manifest contracts currently inventoried are:
+
+- API `/api/audio/v1`; orchestration schema 1; desired graph schema 1; UI DTO
+  schema 1; processing plugin and driver contracts 1.
+- WyrePlumber orchestration contract 1, runtime value schema 1, WirePlumber ABI
+  family 0.5, PipeWire ABI 0.3.
+- Decoder status protocol 2 and one stable adaptive native-PipeWire PCM output.
+- Debian 13/Trixie AArch64 appliance target, Python 3.13, PipeWire
+  `>=1.4,<2`, WirePlumber `>=0.5.8,<0.6`, CamillaDSP 4.1.3 native PipeWire,
+  and pycamilladsp 4.0.0.
+
+Two current compatibility ranges are release blockers: `deployment/compatibility.yml`
+sets WyrePlumber `<0.2.0` and the decoder `<0.2.0`, so the planned releases
+would be rejected. The shared inventory still names WyrePlumber `0.1.0`, decoder
+`v0.1.4` with its legacy archive name/digest, and UI `v1.0.5`; the development
+manifest still declares local dirty sources. These surfaces must be replaced
+only after the new public bytes and digests exist.
+
+### Expected coordinated release matrix
+
+| Component | Version/tag | Required published assets and target identity |
+|---|---|---|
+| Open Cinema | `0.3.0` / `v0.3.0` | `open_cinema-0.3.0-py3-none-any.whl`, `open_cinema-0.3.0.tar.gz`, `checksums.sha256`, `provenance.json`, and `open-cinema-coordinated-manifest.yml` (plus its entry in the checksum file). |
+| WyrePlumber | `0.2.0` / `v0.2.0` | `wyreplumber-0.2.0.tar.gz` and six wheels `wyreplumber-0.2.0-cp{312,313,314}-cp{312,313,314}-linux_{x86_64,aarch64}.whl`; every primary artifact has adjacent `.sha256` and `.provenance.json`. Appliance selector: `cp313` + `aarch64` + Debian Trixie + WirePlumber 0.5. |
+| PCM Auto Decoder | `0.2.0` / `v0.2.0` | `pcm-auto-decoder-v0.2.0-debian-trixie-{x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu}.tar.gz`, each with `.sha256` and `.provenance.json`. Appliance selector: AArch64. |
+| Open Cinema UI | `2.0.0` / `v2.0.0` | `open-cinema-admin-v2.0.0.tar.gz`, `open-cinema-ui-v2.0.0.tar.gz`, one provenance JSON adjacent to each archive, and `checksums.sha256` covering both archives and both provenance files. |
+| CamillaDSP (external retained pin) | `4.1.3` / `v4.1.3` | `camilladsp-linux-pipewire-aarch64.tar.gz`, existing pinned SHA-256 `ca8b6cc32bda29bd7cb38f7bcda5fcc6f5e69690b3d0efaa23b6c3c05c45696c`. |
+
+The finalized Open Cinema manifest must add repository, exact tag/commit,
+immutable URL, size, SHA-256, target selector, and portable provenance for every
+component and point to a verified previous/replacement manifest. No editable
+path, branch, dirty-tree parent revision, mutable `latest` URL, or unverified
+adjacent worktree is permitted.
+
+## Previous tuple: public-byte verification and rollback decision
+
+GitHub still exposes all four releases as non-draft, non-prerelease public
+releases. Every listed asset downloaded successfully on 2026-08-26 and every
+published checksum record passed.
+
+| Release | Available verified primary assets (SHA-256) | Compatibility result |
+|---|---|---|
+| Open Cinema `v0.2.0` | `open_cinema-0.0.1.tar.gz` — `df150a9b1644fe9b459a24c57f1302e8b2f53d86ab5a5317fc57cfe0cf07155e` | **Reject as immutable `0.2.0`.** Tag-time `version.py`, sdist filename, and `PKG-INFO` all identify `0.0.1`; no wheel, provenance, contracts package, or coordinated manifest was published. |
+| WyrePlumber `v0.1.0` | sdist `ce45d199365893ee9820b8270d77a57c62de45e2999f51b64ae58e29f9469c8d`; Pi wheel `cp313/aarch64` `8396d1acbb21fc99c441f4a8e8e840cc2c11b2fdf50f20fd99014b18c7cec99b` (all six wheel checksums also passed) | **Reject for current appliance ABI.** The inspected Pi wheel's ELF dependency is `libwireplumber-0.4.so.0`, while the supported appliance runs WirePlumber 0.5. No portable provenance was published. |
+| PCM Auto Decoder `v0.1.4` | AArch64 `a7aef9e8313eee254c91768ab842f830b5a5efedde32e186f11c22bf405b3fb6`; x86_64 `e78e9d1b3f9cfcf0a9d5822f5c0df5bd7196a4a8ac9bdd5045a41b07e81c807d` | **Reject for current native graph.** The inspected Pi binary directly needs `libpulse-simple.so.0` and `libpulse.so.0`; it predates native PipeWire output/status v2 and has no Trixie qualifier or provenance. |
+| Open Cinema UI `v1.0.5` | admin `9e0ca015dba1e366b3651a4b92f1cb90978ae4232d1b516074a3aeffcc6e7d6e`; on-box `0947705bbc6ed46e56d23c5608e03b285638a0bd3e8b9a194967d9d09a8c88a8` | Downloadable static fallback; archives contain HTML/JS/CSS entry points. It lacks the new runtime identity, client-contract asset, and portable provenance, so it cannot make the full tuple suitable by itself. |
+
+There is no `deployment/release-manifest.yml` at the Open Cinema `v0.2.0` tag.
+The current repository manifest is explicitly `experimental`, `promotable:
+false`, and based on local dirty trees. It is development evidence, not the
+previous immutable manifest.
+
+The documented Pi transition bundle
+`transition-20260826T002452-ebd7b2b6d014` is therefore the only currently
+identified replacement baseline. Its last recorded state had nine validated
+artifacts and a successful exact rollback/forward rehearsal. Before candidate
+promotion, release task 9.2 must verify the bundle still exists, validate its
+manifest and checksums, preserve it from pruning, and record its identity as the
+first release's replacement previous baseline. If it cannot be verified, there
+is no safe previous baseline and publication/promotion must stop.
+
+## Remaining pre-mutation blockers
+
+1. Final dirty-state counts/digests in this file must match the worktrees after
+   concurrent release-readiness edits settle; rerun the inventory before any
+   staging.
+2. Resolve the two pre-existing index anomalies explicitly without discarding
+   work (`plugin/pipewire/**` in Open Cinema and `oui.py` in WyrePlumber).
+3. Decide and document how Open Cinema `pipewire` and WyrePlumber
+   `pipewire-object-refactor` reach default `master`; neither development state
+   may be tagged merely because it is local or has an upstream feature branch.
+4. Commit and remotely exercise every candidate CI/release workflow. Branch
+   protection does not enforce them, so successful run URLs and SHAs are
+   mandatory evidence.
+5. Bump/version-check only in dependency order, update the incompatible
+   compatibility ranges and stale deployment pins only from verified published
+   assets, and never reuse or retarget a failed published tag.
+6. Reverify and retain the appliance transition-bundle baseline before
+   promoting the new coordinated manifest.
