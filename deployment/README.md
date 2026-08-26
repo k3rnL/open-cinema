@@ -1,330 +1,282 @@
-# Open Cinema Deployment
+# Open Cinema appliance deployment
 
-Ansible playbooks for deploying the complete Open Cinema stack to Raspberry Pi.
+This directory installs the coordinated Open Cinema audio appliance on the
+supported Raspberry Pi platform. PipeWire provides the graph, WirePlumber owns
+the session and device lifecycle, and the dedicated Open Cinema orchestrator
+applies the saved desired graph through WyrePlumber.
 
-## Components Deployed
+The supported versions are defined once in `compatibility.yml` and enforced by
+deployment preflight. See `SUPPORTED_PLATFORMS.md` for the production and
+experimental platform policy.
 
-- **PulseAudio** - System-wide audio server
-- **CamillaDSP** - Audio processing with PulseAudio support (built from source)
-- **Open Cinema API** - Django REST API with Gunicorn
-- **nginx** - Web server and reverse proxy
-- **Open Cinema UI** - React-based user interface (served at `/ui`)
-- **Open Cinema Admin** - React-based admin interface (served at `/admin`)
-- **PCM Auto Decoder** (optional) - Existing decoder service
+## Installed components
 
-## Prerequisites
+- one persistent `opencinema` PipeWire/WirePlumber user session;
+- BlueZ roles for receiving programme audio and driving Bluetooth headsets;
+- the Django API, Redis, Gunicorn, and dedicated orchestration process;
+- orchestrator-owned CamillaDSP and PCM decoder instance templates;
+- nginx plus the simple and administration web interfaces.
 
-### Control Machine (Your Computer)
-- Ansible 2.10+
-- SSH access to Raspberry Pi
+CamillaDSP and decoder instances are not enabled by Ansible. The orchestrator
+starts an instance only after resolving a desired graph and writing its owned
+configuration beneath `/run/open-cinema`.
 
-### Target Machine (Raspberry Pi)
-- Raspberry Pi 3/4/5 with ARM64 processor
-- Raspberry Pi OS 64-bit (Bookworm or newer)
-- SSH enabled
-- Sudo access
-- Internet connection
+## Appliance prerequisites
 
-## Quick Start
+- the currently provisioned Raspberry Pi 5 8 GB fixture;
+- Raspberry Pi OS Lite 64-bit based on Debian 13 / Trixie;
+- SSH and sudo access from the controller;
+- Ansible Core 2.19 and the pinned collection from
+  `collections/requirements.yml`;
+- a finalized coordinated manifest containing immutable Open Cinema wheel and
+  source distributions, the target WyrePlumber and pycamilladsp wheels, both UI
+  archives, and native CamillaDSP and decoder archives.
 
-### 1. Prepare Inventory
+This deployment reproduces the already provisioned fixture. A clean-image
+installation and arbitrary upgrade-path qualification are intentionally
+deferred.
 
-Copy the example inventory and configure for your Pi:
+Install the controller dependency:
 
 ```bash
-cd deployment
-cp inventories/example.yml inventories/local.yml
+ansible-galaxy collection install -r collections/requirements.yml
 ```
 
-Edit `inventories/local.yml`:
+## Configure an appliance
+
+Copy `inventories/example.yml` to a private inventory and set the target host.
+Override secrets and appliance-specific values in inventory or Ansible Vault;
+do not deploy the example Django secret.
+
+For an appliance install, set `release_manifest.source_path` to the downloaded,
+finalized coordinated manifest and leave `install_from_local` false. The
+manifest is the only release-identity authority: each selected artifact carries
+its exact name, immutable HTTPS URL, SHA-256 digest, platform/ABI selector, and
+portable provenance reference. Deployment does not construct release URLs from
+inventory versions and does not clone a branch, tag, or repository.
+
+The checked-in `release-manifest.yml` is deliberately a development record. It
+has `input_mode: development`, identifies the four local projects as mutable,
+and cannot be used when `install_from_local` is false. No final hashes are
+represented by placeholders.
+
+For development, all edited repositories may be synchronized directly:
 
 ```yaml
 all:
   hosts:
     cinema_pi:
-      ansible_host: 192.168.1.100  # Your Pi's IP
-      ansible_user: pi              # Your SSH user
+      ansible_host: 192.168.1.37
+      ansible_user: pi
+      install_from_local: true
+      local_source_path: /home/me/projects/open-cinema
+      local_wyreplumber_source_path: /home/me/projects/wyreplumber
+      local_open_cinema_ui_source_path: /home/me/projects/open-cinema-ui
+      local_pcm_auto_decoder_source_path: /home/me/projects/pcm-auto-decoder
 ```
 
-### 2. Configure Variables
+Development mode fingerprints the synchronized backend, binding, built UI, and
+decoder inputs. The combined candidate digest and each individual SHA-256 are
+reported as mutable, non-release identities; they are never presented as
+published component provenance.
 
-Edit `group_vars/all.yml` to customize:
+## Validate and deploy
 
-- `open_cinema.repo`: Your GitHub repository for the API
-- `open_cinema.version`: API version to deploy
-- `open_cinema.django.secret_key`: Generate a secure key
-- `open_cinema_ui.version`: UI release version (from k3rnL/open-cinema-ui)
-- `camilladsp.build_from_source`: Set to `true` (required for ARM64 with PulseAudio)
+Run standalone platform/package preflight on an already prepared target:
 
-#### Installing from Local Sources
-
-To deploy from local source files instead of git:
-
-```yaml
-open_cinema:
-  install_from_local: true
-  local_source_path: "../.."  # Path relative to deployment directory (default)
-  # other settings...
+```bash
+ansible-playbook -i inventories/local.yml playbooks/preflight.yml
 ```
 
-This will use `rsync` to sync your local source code to the target machine, excluding `.git`, `__pycache__`, virtual environments, and other development files.
+The standalone result is retained as
+`/tmp/open-cinema-preflight-result.json`. It classifies the host as production,
+explicitly experimental, or unsupported and reports every detected platform,
+resource, repository, identity, audio-runtime, artifact, and manifest problem
+in one run. To audit an already installed appliance as well, enable its full
+runtime and schema-contract probes:
 
-### 3. Deploy
+```bash
+ansible-playbook -i inventories/local.yml playbooks/preflight.yml \
+  -e open_cinema_preflight_require_runtime=true \
+  -e open_cinema_preflight_require_full_runtime=true
+```
 
-Deploy the complete stack:
+Deploy the coordinated stack:
 
 ```bash
 ansible-playbook -i inventories/local.yml playbooks/site.yml
 ```
 
-Or deploy specific components:
+Before its first role, the site play validates that inventory mode matches the
+manifest, rejects local-directory/editable/floating/latest/unpinned appliance
+inputs, verifies artifact/provenance completeness, and resolves one compatible
+artifact of each required kind for Debian Trixie AArch64, Python 3.13, and
+WirePlumber 0.5. Only development mode permits local source directories.
+
+The site play then installs PipeWire/WirePlumber and reruns aggregate preflight
+with audio-session checks enabled, before any processor role, database
+migration, or live reconciliation. Its final readiness role requires:
+
+- the owned PipeWire socket and a healthy `wpctl status`;
+- WyrePlumber orchestration contract v1 and its native binding;
+- Redis, Django, the dedicated orchestrator, and the versioned API route;
+- the pinned CamillaDSP and decoder binaries and stable processor buses;
+- nginx and the API health endpoint;
+- both web interfaces and every referenced asset through the appliance LAN
+  address;
+- anonymous diagnostic rejection, native CSRF/session login, schema metadata,
+  authorized diagnostics, and SSE cursor-gap recovery through nginx.
+
+Before replacing candidate application files, the play compares the candidate
+content digest with the last passed contract-gate result. A changed candidate
+stops the previous orchestrator, installs with processor management and live
+reconciliation forced off, and probes the fully installed binding, backend,
+processing-plugin, decoder, processor, and management-UI DTO contracts. Only a
+zero-failure result at
+`/var/lib/open-cinema/deployment-diagnostics/contract-gate-result.json` enables
+the accepted full runtime for every active graph. An identical candidate reuses
+the passed digest, still reruns the probes, and does not interrupt audio.
+
+Set `readiness.verify_hardware_nodes: true` and list expected `wpctl status`
+patterns only for a hardware acceptance inventory. The default does not pretend
+that HDMI, USB, S/PDIF, or Bluetooth hardware exists on a generic target.
+
+## Runtime ownership and ordering
+
+The `opencinema` system user has a persistent systemd user manager through
+linger. Its session exports:
+
+```text
+XDG_RUNTIME_DIR=/run/user/<uid>
+DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus
+PIPEWIRE_REMOTE=pipewire-0
+```
+
+PipeWire and WirePlumber are user services. Django, the orchestrator,
+CamillaDSP instances, and decoder instances are system services running as the
+same identity. Every audio-attached system unit checks the exact user-session
+socket before starting and has bounded startup, restart, and graceful shutdown
+behavior.
+
+Distribution unit files and WirePlumber defaults are never edited. Open Cinema
+uses `/etc/systemd/user/*.service.d/90-open-cinema.conf` and
+`/etc/wireplumber/wireplumber.conf.d/9*-open-cinema-*.conf`, so package upgrades
+retain the appliance policy without replacing vendor configuration.
+
+## Upgrade backups and coordinated rollback
+
+Legacy audio rows are intentionally not migrated. Before replacing any
+previously accepted candidate, deployment creates a private
+`transition-<timestamp>-<candidate-digest>` directory under
+`/var/lib/open-cinema/rollback`. It is marked `READY` only after recording and
+checksumming the complete recovery boundary:
+
+- the stopped SQLite database and a digest of user-owned graph intent;
+- the complete application/virtual environment and WyrePlumber binding;
+- both packaged web applications;
+- CamillaDSP and decoder binaries plus their generated runtime configuration;
+- the installed release manifest, contract-gate result, and readiness result;
+- the controller inventory, group variables, compatibility contract, candidate
+  release manifest, and managed static configuration.
+
+An initial installation has no accepted generation to preserve and therefore
+does not manufacture an empty rollback bundle. An identical candidate reuses
+its passed contract gate and does not stop audio or create another bundle.
+
+Schema transitions also retain their migration plan and a bounded online
+SQLite backup. The plan, SQLite integrity check, Django migration-history
+check, backup, and migration apply all use declared timeouts. SQLite is copied
+with its `.backup` command after application writers stop, so WAL state is
+captured consistently. A migration failure writes one private correlated JSON
+result containing every command's output and timeout status plus matching
+service logs.
+
+If migration fails, deployment stops before restarting services and retains the
+bundle plus journal output under
+`/var/lib/open-cinema/deployment-diagnostics`. If final readiness fails, it also
+stops and retains the same rollback data. The entire candidate mutation phase
+has an outer failure boundary as well: install, handler/restart, contract, and
+readiness failures produce a private `candidate-<timestamp>.json` plus matching
+service log. That record names the failed task, candidate digest, retained
+rollback bundle, related detailed diagnostics, and observed service states.
+
+Rollback always requires the exact bundle ID; it never guesses the newest
+directory and never deletes another recovery point:
 
 ```bash
-# Only PulseAudio and CamillaDSP
-ansible-playbook -i inventories/local.yml playbooks/site.yml --tags audio
-
-# Only the Python application
-ansible-playbook -i inventories/local.yml playbooks/site.yml --tags opencinema
+ansible-playbook -i inventories/local.yml playbooks/rollback.yml \
+  -e open_cinema_rollback_bundle_id=transition-YYYYMMDDTHHMMSS-<digest>
 ```
 
-## Configuration Details
+The rollback play verifies every artifact checksum before mutation, checkpoints
+the failed candidate database, stops all database writers and managed
+processors, restores the application, binding, web builds, processor binaries,
+runtime configuration, managed static files, release evidence, and database as
+one generation, then runs the normal end-of-play readiness checks. It also
+requires the restored graph/endpoint/profile/activation/adapter/override digest
+to match the pre-transition digest. The result is written privately to
+`/var/lib/open-cinema/deployment-diagnostics/rollback-result.json`.
 
-### CamillaDSP Build
+Every readiness run publishes one machine-readable result at
+`/var/lib/open-cinema/deployment-diagnostics/readiness-result.json`. A passing
+result correlates the release-manifest digest and component identities with all
+readiness contracts, service states, controller ownership, and runtime/database
+convergence facts. A failure replaces that latest result and also retains a
+timestamped JSON copy plus its matching journal log. Failed loop items and any
+additional service, WirePlumber, Redis, orchestration, projection, or API probe
+failures are reported separately in `failedChecks`.
 
-The deployment builds CamillaDSP from source with PulseAudio support. This takes **30-45 minutes** on Raspberry Pi 4.
+The successful installed identity is also written to
+`/var/lib/open-cinema/deployment-diagnostics/installed-release.yml`. Appliance
+records include the selected artifact hashes and exact installed package/binary
+probes. Development records include the individual local source digests and an
+explicit `mutable_install: true`; both records retain the installed coordinated
+manifest SHA-256 for diagnostics and rollback.
 
-**Why build from source?**
-- No pre-built ARM64 binaries with PulseAudio support available
-- Ensures compatibility with your specific Raspberry Pi
+Experimental deployments retain every recovery bundle. Only a later explicitly
+accepted run with `open_cinema_close_rollback_window=true` may keep exactly the
+selected pre-deployment bundle, remove older recovery points, and write
+`/var/lib/open-cinema/rollback/rollback-window.yml`. A failed deployment never
+reaches that closure step.
 
-**Alternative:** Use the GitHub workflow (`.github/workflows/build-camilladsp-arm64.yml`) to build on CI/CD and download the binary.
-
-### Services
-
-After deployment, the following systemd services will be running:
+## Service and diagnostic commands
 
 ```bash
-# Check service status
-sudo systemctl status pulseaudio
-sudo systemctl status camilladsp
-sudo systemctl status open-cinema
-
-# View logs
-sudo journalctl -u open-cinema -f
-sudo journalctl -u camilladsp -f
+sudo systemctl status open-cinema open-cinema-orchestrator redis-server nginx
+sudo systemctl status 'camilladsp@*.service' 'pcm-auto-decoder@*.service'
+sudo -u opencinema XDG_RUNTIME_DIR=/run/user/$(id -u opencinema) \
+  systemctl --user status pipewire wireplumber
+sudo -u opencinema XDG_RUNTIME_DIR=/run/user/$(id -u opencinema) wpctl status
+sudo journalctl -u open-cinema-orchestrator -n 200 --no-pager
+sudo python3 -m json.tool /var/lib/open-cinema/deployment-diagnostics/readiness-result.json
+sudo python3 -m json.tool /var/lib/open-cinema/deployment-diagnostics/rollback-result.json
 ```
 
-### Network Access
+The appliance is served at `/ui/` and `/admin/`. The management console redirects
+anonymous browsers to its own `/admin/login` route and authenticates through a
+Django session; visiting Django admin first is not required. The experimental
+inventory currently provisions `admin` / `admin`. Replace that password through
+Ansible Vault, or disable `open_cinema.default_admin.enabled`, before exposing or
+promoting the appliance. `/api/audio/v1/` is the only audio configuration API;
+CamillaDSP loopback control ports and processor Unix sockets are internal
+implementation interfaces.
 
-After deployment, Open Cinema will be available at:
-- **User Interface**: `http://<raspberry-pi-ip>/ui`
-- **Admin Interface**: `http://<raspberry-pi-ip>/admin`
-- **API**: `http://<raspberry-pi-ip>/api/`
-- **Health Check**: `http://<raspberry-pi-ip>/health`
+Nginx also enforces `open_cinema_management_api_networks` before proxying any
+`/api/` request. The common default permits loopback only; each appliance
+inventory must add its bounded management LAN and cannot use `0.0.0.0/0` or
+`::/0`. The current private appliance permits `192.168.1.0/24`. UI assets may
+remain reachable while the API is degraded or denied, but configuration and
+diagnostic calls cannot cross this boundary.
 
-API endpoints (examples):
-- `http://<raspberry-pi-ip>/api/version`
-- `http://<raspberry-pi-ip>/api/devices`
-- `http://<raspberry-pi-ip>/api/camilladsp/status`
-- `http://<raspberry-pi-ip>/api/camilladsp/pipelines`
-- `http://<raspberry-pi-ip>/api/camilladsp/mixers`
+## Contract-gated runtime activation
 
-CamillaDSP websocket:
-- `ws://<raspberry-pi-ip>:1234`
+The appliance inventory declares one full runtime: API, observation, shadow
+resolution, processor management, and live reconciliation are the accepted
+capabilities, and live reconciliation covers every active graph. Deployment has
+no selectable stage or per-graph scope.
 
-**Note**: All web traffic goes through nginx on port 80. The Django API runs on port 8000 internally but is only accessible via `/api/` path.
-
-## Directory Structure
-
-```
-/opt/home-cinema/
-├── open-cinema/           # Django API application root
-│   ├── venv/             # Python virtual environment
-│   ├── manage.py
-│   ├── opencinema/
-│   ├── api/
-│   ├── core/
-│   ├── plugin/
-│   ├── db.sqlite3        # SQLite database
-│   ├── staticfiles/      # Django static files
-│   └── .env              # Environment configuration
-└── pcm-auto-decoder.yaml  # Optional decoder config
-
-/var/www/
-├── open-cinema-admin/     # React admin build
-│   ├── index.html
-│   ├── assets/
-│   └── ...
-└── open-cinema-ui/        # React user UI build
-    ├── index.html
-    ├── assets/
-    └── ...
-
-/etc/nginx/
-└── sites-available/
-    └── open-cinema        # nginx site configuration
-
-/etc/camilladsp/
-└── default.yml            # CamillaDSP configuration
-
-/usr/local/bin/
-├── camilladsp
-└── pcm-auto-decoder
-```
-
-## Updating
-
-To update to a new version:
-
-1. Update `open_cinema.version` in `group_vars/all.yml`
-2. Run the playbook again:
-
-```bash
-ansible-playbook -i inventories/local.yml playbooks/site.yml --tags opencinema
-```
-
-The application will be redeployed and services restarted automatically.
-
-## Troubleshooting
-
-### CamillaDSP Build Fails
-
-If CamillaDSP build fails due to memory constraints:
-
-```bash
-# On the Raspberry Pi, increase swap
-sudo dphys-swapfile swapoff
-sudo nano /etc/dphys-swapfile  # Set CONF_SWAPSIZE=2048
-sudo dphys-swapfile setup
-sudo dphys-swapfile swapon
-```
-
-Then re-run the playbook.
-
-### Audio Devices Not Detected
-
-```bash
-# On the Raspberry Pi
-pactl list sources short
-pactl list sinks short
-
-# If empty, check PulseAudio
-sudo systemctl status pulseaudio
-sudo journalctl -u pulseaudio
-```
-
-### Django Application Won't Start
-
-```bash
-# Check logs
-sudo journalctl -u open-cinema -n 100
-
-# Check database permissions
-sudo chown -R opencinema:opencinema /opt/home-cinema/open-cinema
-
-# Retry migrations manually
-sudo -u opencinema /opt/home-cinema/open-cinema/venv/bin/python \
-  /opt/home-cinema/open-cinema/manage.py migrate
-```
-
-## Development vs Production
-
-The current configuration is suitable for development/testing. For production:
-
-1. **Generate a secure SECRET_KEY**:
-```bash
-   python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'
-```
-
-2. **Set DEBUG=false** in `group_vars/all.yml`
-
-3. **Configure ALLOWED_HOSTS** properly
-
-4. **Use PostgreSQL** instead of SQLite (add postgres role)
-
-5. **Enable HTTPS** with Let's Encrypt (configure nginx with SSL)
-
-## Roles
-
-### common
-- Updates system packages
-- Creates project directories
-- Installs base dependencies
-
-### pulseaudio
-- Installs PulseAudio server
-- Configures system-wide daemon
-- Sets up systemd service
-
-### camilladsp
-- Installs Rust compiler
-- Builds CamillaDSP from source with PulseAudio support
-- Installs binary and configuration
-- Sets up systemd service with websocket
-
-### python-app
-- Creates application user
-- Clones application from GitHub
-- Creates Python virtual environment
-- Installs dependencies
-- Runs migrations
-- Collects static files
-- Sets up Gunicorn systemd service
-
-### nginx
-- Installs and configures nginx web server
-- Sets up reverse proxy for Django API
-- Serves React static files
-- Configures path-based routing (`/ui`, `/admin`, `/api`)
-- Enables gzip compression and security headers
-
-### react-apps
-- Downloads React builds from GitHub releases
-- Extracts admin and UI builds to web root
-- Configures proper permissions
-- Verifies deployment (checks index.html)
-
-### pcm-auto-decoder (optional)
-- Downloads and installs decoder from GitHub releases
-- Configures and starts service
-
-## Tags
-
-Use tags to run specific parts:
-
-- `common` - Base system setup
-- `pulseaudio` - Audio server
-- `audio` - Both PulseAudio and CamillaDSP
-- `camilladsp` - Audio processor
-- `opencinema` - Django API application
-- `python` - Python app (alias for opencinema)
-- `app` - Application layer (alias for opencinema)
-- `nginx` - Web server and reverse proxy
-- `react` - React frontend applications
-- `frontend` - Both nginx and react-apps
-- `web` - Web layer (nginx + react-apps)
-- `ui` - React applications (alias for react)
-- `decoder` - PCM decoder
-
-### Examples
-
-Deploy only the frontend:
-```bash
-ansible-playbook -i inventories/local.yml playbooks/site.yml --tags frontend
-```
-
-Update only React apps:
-```bash
-ansible-playbook -i inventories/local.yml playbooks/site.yml --tags react
-```
-
-Deploy API and frontend without audio components:
-```bash
-ansible-playbook -i inventories/local.yml playbooks/site.yml --tags opencinema,frontend
-```
-
-## Support
-
-For issues and questions:
-- GitHub Issues: https://github.com/yourusername/open-cinema/issues
-- Documentation: Project README.md
+A changed candidate starts with API, observation, and shadow diagnostics
+available while processor management and live reconciliation remain false. The
+contract gate enables those two mutation capabilities only after every binding,
+backend, processor, decoder, and UI contract probe passes. Failed probes retain
+the diagnosable non-live runtime and the coordinated rollback boundary.

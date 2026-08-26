@@ -1,0 +1,35 @@
+---
+- name: Inspect the currently deployed orchestration mutation flags
+  ansible.builtin.command:
+    argv:
+      - grep
+      - -Eq
+      - ^OPEN_CINEMA_AUDIO_(PROCESSOR_MANAGEMENT|LIVE_RECONCILIATION)=true$
+      - "{{ open_cinema.app_path }}/.env"
+  register: open_cinema_contract_gate_mutation_flags
+  changed_when: false
+  failed_when: false
+
+- name: Enter a diagnosable non-live runtime before compatibility probes
+  ansible.builtin.include_role:
+    name: open-cinema
+    tasks_from: enter-safe-runtime.yml
+  when:
+    - open_cinema_contract_gate_mutation_flags.rc == 0
+    - >-
+      not open_cinema_contract_gate_previously_passed | bool or
+      open_cinema_preflight_injected_failures | length > 0
+
+- name: Probe the fully installed coordinated runtime before activation
+  ansible.builtin.include_role:
+    name: preflight
+  vars:
+    open_cinema_preflight_require_runtime: true
+    open_cinema_preflight_require_full_runtime: true
+    open_cinema_preflight_result_path: "{{ open_cinema.diagnostics_root }}/contract-gate-result.json"
+    open_cinema_preflight_result_mode: "0600"
+
+- name: Activate the accepted full runtime only after every contract probe passes
+  ansible.builtin.include_role:
+    name: open-cinema
+    tasks_from: activate-runtime.yml

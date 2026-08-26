@@ -1,0 +1,9 @@
+---
+- name: Validate an Open Cinema appliance target
+  hosts: all
+  become: false
+  gather_facts: true
+
+  roles:
+    - role: preflight
+      tags: [always, preflight]

@@ -1,5 +1,3 @@
-- name: Restart decoder
+- name: Reload systemd for decoder
   ansible.builtin.systemd:
-    name: "{{ pcm-auto-decoder.bin_name }}"
-    state: restarted
     daemon_reload: true

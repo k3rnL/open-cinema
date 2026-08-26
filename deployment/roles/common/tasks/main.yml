@@ -4,26 +4,66 @@
     name:
       - ca-certificates
       - curl
+      - rsync
       - tar
     state: present
 
 - name: Create opencinema group
   ansible.builtin.group:
     name: "{{ open_cinema.group }}"
+    gid: "{{ open_cinema_service_gid }}"
     system: true
     state: present
 
 - name: Create opencinema user
   ansible.builtin.user:
     name: "{{ open_cinema.user }}"
+    uid: "{{ open_cinema_service_uid }}"
     group: "{{ open_cinema.group }}"
-    groups: audio,video  # Add to audio and video groups for hardware access
+    groups: "{{ audio_service.supplementary_groups | join(',') }}"
+    append: true
     system: true
     home: "/home/{{ open_cinema.user }}"
-    create_home: true  # Need home directory for PulseAudio config
+    create_home: true
     shell: /bin/bash
-    comment: "Open Cinema service user"
+    comment: "Open Cinema headless audio session owner"
     state: present
+
+- name: Resolve the Open Cinema service UID
+  ansible.builtin.command:
+    argv:
+      - id
+      - -u
+      - "{{ open_cinema.user }}"
+  register: open_cinema_uid_command
+  changed_when: false
+
+- name: Publish the Open Cinema service UID for audio roles
+  ansible.builtin.set_fact:
+    open_cinema_uid: "{{ open_cinema_uid_command.stdout | int }}"
+
+- name: Keep the headless audio user manager alive across reboots
+  ansible.builtin.command:
+    argv:
+      - loginctl
+      - enable-linger
+      - "{{ open_cinema.user }}"
+  args:
+    creates: "/var/lib/systemd/linger/{{ open_cinema.user }}"
+
+- name: Start the headless user manager and create its runtime directory
+  ansible.builtin.systemd:
+    name: "user@{{ open_cinema_uid }}.service"
+    enabled: true
+    state: started
+
+- name: Install least-privilege managed processor lifecycle authorization
+  ansible.builtin.template:
+    src: 49-open-cinema-processors.rules.j2
+    dest: /etc/polkit-1/rules.d/49-open-cinema-processors.rules
+    owner: root
+    group: root
+    mode: "0644"
 
 - name: Ensure project root exists
   ansible.builtin.file:
@@ -32,3 +72,45 @@
     owner: "{{ open_cinema.user }}"
     group: "{{ open_cinema.group }}"
     mode: "0755"
+
+- name: Create persistent rollback and deployment diagnostic directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0750"
+  loop:
+    - "{{ open_cinema.rollback_root }}"
+    - "{{ open_cinema.diagnostics_root }}"
+
+- name: Load the coordinated release manifest
+  ansible.builtin.include_vars:
+    file: "{{ release_manifest.source_path }}"
+    name: open_cinema_release_manifest
+
+- name: Create the coordinated release configuration directory
+  ansible.builtin.file:
+    path: "{{ release_manifest.install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the coordinated release manifest
+  ansible.builtin.copy:
+    src: "{{ release_manifest.source_path }}"
+    dest: "{{ release_manifest.install_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Compute the installed release-manifest digest
+  ansible.builtin.stat:
+    path: "{{ release_manifest.install_path }}"
+    checksum_algorithm: sha256
+  register: open_cinema_release_manifest_stat
+
+- name: Publish the installed release-manifest digest
+  ansible.builtin.set_fact:
+    open_cinema_release_manifest_digest: "{{ open_cinema_release_manifest_stat.stat.checksum }}"

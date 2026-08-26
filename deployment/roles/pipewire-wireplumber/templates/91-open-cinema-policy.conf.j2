@@ -1,0 +1,47 @@
+# Managed by Open Cinema. WirePlumber owns the session and device lifecycle;
+# Open Cinema owns desired routing decisions through WyrePlumber. In particular,
+# do not move streams merely because a new default target appeared.
+wireplumber.settings = {
+  device.restore-profile = true
+  device.restore-routes = true
+  node.restore-default-targets = false
+  linking.allow-moving-streams = false
+}
+
+# The Raspberry Pi I2S overlay exposes the WM8804 receiver PCM as an
+# eight-channel pro-audio node even though IEC 60958 carries a two-channel PCM
+# transport (including IEC 61937 encoded bursts). Restrict the capture node to
+# the physical FL/FR pair so graph signal negotiation and port routing see the
+# same contract as a direct two-channel ALSA open.
+monitor.alsa.rules = [
+  {
+    matches = [
+      {
+        device.name = "alsa_card.platform-soc_107c000000_sound"
+      }
+    ]
+    actions = {
+      update-props = {
+        # The fallback profile only exposes the overlay's playback PCM. The
+        # pro-audio profile is required to create capture PCM device 1.
+        device.profile = "pro-audio"
+        device.description = "TV SPDIF / I2S"
+      }
+    }
+  }
+  {
+    matches = [
+      {
+        object.path = "alsa:acp:I2Sout:1:capture"
+        media.class = "Audio/Source"
+      }
+    ]
+    actions = {
+      update-props = {
+        node.description = "TV SPDIF input"
+        audio.channels = 2
+        audio.position = [ FL FR ]
+      }
+    }
+  }
+]

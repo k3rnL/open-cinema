@@ -1,0 +1,528 @@
+---
+- name: Load the Open Cinema compatibility matrix
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../compatibility.yml"
+    name: open_cinema_compatibility
+
+- name: Load the candidate coordinated release manifest
+  ansible.builtin.include_vars:
+    file: "{{ release_manifest.source_path }}"
+    name: open_cinema_preflight_manifest
+
+- name: Validate and resolve the coordinated inputs without appliance mutation
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ playbook_dir }}/../scripts/validate_release_manifest.py"
+      - --manifest
+      - "{{ release_manifest.source_path }}"
+      - --mode
+      - "{{ (install_from_local | default(false) | bool) | ternary('development', 'appliance') }}"
+      - --distribution-family
+      - "{{ ansible_facts['os_family'] }}"
+      - --distribution-major
+      - "{{ ansible_facts['distribution_major_version'] }}"
+      - --distribution-codename
+      - "{{ ansible_facts['distribution_release'] }}"
+      - --architecture
+      - "{{ ansible_facts['architecture'] }}"
+      - --python-abi
+      - "cp{{ open_cinema.python_version | replace('.', '') }}"
+      - --wireplumber-api-family
+      - "{{ wireplumber.api_family }}"
+  delegate_to: localhost
+  become: false
+  register: open_cinema_preflight_manifest_validation_command
+  changed_when: false
+
+- name: Publish the validated preflight input identity
+  ansible.builtin.set_fact:
+    open_cinema_release_manifest_validation: >-
+      {{ open_cinema_preflight_manifest_validation_command.stdout | from_json }}
+    open_cinema_release_artifacts: >-
+      {{ (open_cinema_preflight_manifest_validation_command.stdout | from_json).selectedArtifacts }}
+
+- name: Inspect the Raspberry Pi model
+  ansible.builtin.command:
+    argv: [cat, /proc/device-tree/model]
+  register: open_cinema_preflight_model_command
+  changed_when: false
+  failed_when: false
+
+- name: Inspect root filesystem capacity
+  ansible.builtin.command:
+    argv: [df, -Pk, /]
+  register: open_cinema_preflight_disk_command
+  changed_when: false
+  failed_when: false
+
+- name: Inspect required package repository candidates
+  ansible.builtin.command:
+    argv: [apt-cache, policy, "{{ item }}"]
+  loop:
+    - "{{ open_cinema_compatibility.components.pipewire.package }}"
+    - "{{ open_cinema_compatibility.components.wireplumber.runtime_package }}"
+    - "{{ open_cinema_compatibility.components.wireplumber.development_package }}"
+    - "{{ open_cinema_compatibility.components.python.package }}"
+    - redis-server
+    - nginx
+    - bluez
+    - ffmpeg
+    - sqlite3
+    - build-essential
+    - cargo
+    - clang
+    - pkg-config
+    - rustc
+  register: open_cinema_preflight_repository_commands
+  changed_when: false
+  failed_when: false
+
+- name: Inspect configured UID and GID ownership
+  ansible.builtin.command:
+    argv: [getent, "{{ item.database }}", "{{ item.key }}"]
+  loop:
+    - database: passwd
+      key: "{{ open_cinema_service_uid }}"
+      expected: "{{ open_cinema.user }}"
+      field: uid
+    - database: group
+      key: "{{ open_cinema_service_gid }}"
+      expected: "{{ open_cinema.group }}"
+      field: gid
+    - database: passwd
+      key: "{{ open_cinema.user }}"
+      expected: "{{ open_cinema_service_uid }}"
+      field: name_uid
+    - database: group
+      key: "{{ open_cinema.group }}"
+      expected: "{{ open_cinema_service_gid }}"
+      field: name_gid
+  register: open_cinema_preflight_identity_commands
+  changed_when: false
+  failed_when: false
+
+- name: Read the installed PipeWire and WirePlumber versions
+  ansible.builtin.command:
+    argv: "{{ item.argv }}"
+  loop:
+    - component: pipewire
+      argv: [pipewire, --version]
+    - component: wireplumber
+      argv: [wireplumber, --version]
+  register: open_cinema_preflight_audio_version_commands
+  changed_when: false
+  failed_when: false
+
+- name: Check the WirePlumber development API used to build WyrePlumber
+  ansible.builtin.command:
+    argv:
+      - pkg-config
+      - --exists
+      - "{{ open_cinema_compatibility.components.wireplumber.pkg_config }}"
+  register: open_cinema_preflight_wireplumber_development
+  changed_when: false
+  failed_when: false
+  when: open_cinema_preflight_require_wireplumber_development | bool
+
+- name: Check the owned PipeWire graph through WirePlumber
+  ansible.builtin.command:
+    argv: [wpctl, status]
+  become: true
+  become_user: "{{ open_cinema.user }}"
+  environment:
+    XDG_RUNTIME_DIR: "{{ audio_service.runtime_dir }}"
+    DBUS_SESSION_BUS_ADDRESS: "{{ audio_service.dbus_address }}"
+    PIPEWIRE_REMOTE: pipewire-0
+  register: open_cinema_preflight_wpctl_status
+  changed_when: false
+  failed_when: false
+  when: open_cinema_preflight_require_runtime | bool
+
+- name: Probe every installed coordinated runtime version
+  ansible.builtin.command:
+    argv: "{{ item.argv }}"
+  loop:
+    - component: python
+      argv: [python3.13, --version]
+    - component: redis
+      argv: [redis-server, --version]
+    - component: sqlite
+      argv: [sqlite3, --version]
+    - component: nginx
+      argv: [/usr/sbin/nginx, -v]
+    - component: bluez
+      argv: [bluetoothctl, --version]
+    - component: ffmpeg
+      argv: [ffmpeg, -version]
+    - component: camilladsp
+      argv: ["{{ camilladsp.install_path }}", --version]
+    - component: pcm_auto_decoder
+      argv: ["{{ pcm_auto_decoder.install_path }}", --version]
+  register: open_cinema_preflight_runtime_version_commands
+  changed_when: false
+  failed_when: false
+  when: open_cinema_preflight_require_full_runtime | bool
+
+- name: Probe installed Python packages and orchestration contracts
+  ansible.builtin.command:
+    argv:
+      - "{{ open_cinema.venv_path }}/bin/python"
+      - manage.py
+      - shell
+      - --no-imports
+      - -c
+      - >-
+        import importlib.metadata as metadata, json;
+        from api.audio_v1 import API_VERSION;
+        from core.plugin_system import PLUGIN_CONTRACT_VERSION, PROCESSING_PLUGIN_ENTRY_POINT, PluginKind, PluginLifecycleState, PluginRegistry;
+        from core.orchestration.decoder_driver import DECODER_PROTOCOL_VERSION;
+        from core.orchestration.graph_schema import DESIRED_GRAPH_SCHEMA_VERSION;
+        from core.orchestration.schema_version import CURRENT_ORCHESTRATION_SCHEMA_VERSION;
+        from wyreplumber import WIREPLUMBER_BUILD_API_FAMILY;
+        from wyreplumber.runtime import ORCHESTRATION_CONTRACT_VERSION, RUNTIME_VALUE_SCHEMA_VERSION;
+        assert metadata.version('open-cinema') == '{{ open_cinema_preflight_manifest.components.open_cinema.version }}';
+        assert metadata.version('wyreplumber') == '{{ open_cinema_preflight_manifest.components.wyreplumber.version }}';
+        assert metadata.version('camilladsp') == '{{ open_cinema_preflight_manifest.components.pycamilladsp.version }}';
+        assert API_VERSION == {{ open_cinema_preflight_manifest.contracts.audio_api | regex_replace('^.*/v', '') | int }};
+        assert DESIRED_GRAPH_SCHEMA_VERSION == {{ open_cinema_preflight_manifest.contracts.desired_graph_schema }};
+        assert CURRENT_ORCHESTRATION_SCHEMA_VERSION == {{ open_cinema_preflight_manifest.contracts.orchestration_schema }};
+        assert ORCHESTRATION_CONTRACT_VERSION == {{ open_cinema_preflight_manifest.contracts.wyreplumber_orchestration }};
+        assert RUNTIME_VALUE_SCHEMA_VERSION == {{ open_cinema_preflight_manifest.contracts.wyreplumber_runtime_value_schema }};
+        assert WIREPLUMBER_BUILD_API_FAMILY == '{{ open_cinema_preflight_manifest.contracts.wireplumber_api_family }}';
+        assert DECODER_PROTOCOL_VERSION == {{ open_cinema_preflight_manifest.contracts.decoder_status_protocol }};
+        assert PLUGIN_CONTRACT_VERSION == {{ open_cinema_preflight_manifest.contracts.processing_plugin }};
+        registry = PluginRegistry();
+        registry.discover();
+        processing = [record for record in registry.records if record.manifest.kind is PluginKind.PROCESSING];
+        processing_discovery_failures = [item.to_document() for item in registry.diagnostics if item.details.get('group') == PROCESSING_PLUGIN_ENTRY_POINT];
+        assert not processing_discovery_failures, processing_discovery_failures;
+        assert all(record.state is PluginLifecycleState.AVAILABLE for record in processing), [record.to_document() for record in processing];
+        assert all(record.manifest.driver_contract_version == {{ open_cinema_preflight_manifest.contracts.processing_driver }} for record in processing), [record.to_document() for record in processing];
+        print(json.dumps({name: metadata.version(package) for name, package in {
+          'django': 'django', 'gunicorn': 'gunicorn', 'celery': 'celery',
+          'pycamilladsp': 'camilladsp', 'wyreplumber': 'wyreplumber'
+        }.items()}, sort_keys=True))
+  args:
+    chdir: "{{ open_cinema.app_path }}"
+  become: true
+  become_user: "{{ open_cinema.user }}"
+  register: open_cinema_preflight_application_contract_command
+  changed_when: false
+  failed_when: false
+  when: open_cinema_preflight_require_full_runtime | bool
+
+- name: Probe the installed management UI DTO contract
+  ansible.builtin.command:
+    argv:
+      - "{{ open_cinema.venv_path }}/bin/python"
+      - -c
+      - >-
+        import json, pathlib, sys;
+        contract = json.loads(pathlib.Path(sys.argv[1]).read_text());
+        expected = {
+          'documentType': 'open-cinema.audio-client-contract/v1',
+          'contractSet': 'open-cinema-audio-orchestration',
+          'contractSetVersion': {{ open_cinema_preflight_manifest.contracts.ui_dto_schema | int }},
+          'basePath': '{{ open_cinema_preflight_manifest.contracts.audio_api }}'};
+        mismatches = {key: {'expected': value, 'actual': contract.get(key)} for key, value in expected.items() if contract.get(key) != value};
+        supported = contract.get('supported', {});
+        expected_supported = {
+          'apiVersion': {{ open_cinema_preflight_manifest.contracts.audio_api | regex_replace('^.*/v', '') | int }},
+          'desiredGraphSchemaVersion': {{ open_cinema_preflight_manifest.contracts.desired_graph_schema | int }}};
+        mismatches.update({'supported.' + key: {'expected': value, 'actual': supported.get(key)} for key, value in expected_supported.items() if supported.get(key) != value});
+        assert not mismatches, json.dumps(mismatches, sort_keys=True);
+        print(json.dumps(contract, sort_keys=True))
+      - "{{ open_cinema_ui.admin.web_root }}/{{ open_cinema_ui.admin.contract_asset_name }}"
+  register: open_cinema_preflight_ui_contract_command
+  changed_when: false
+  failed_when: false
+  when: open_cinema_preflight_require_full_runtime | bool
+
+- name: Inspect the installed release manifest
+  ansible.builtin.stat:
+    path: "{{ release_manifest.install_path }}"
+    checksum_algorithm: sha256
+  register: open_cinema_preflight_installed_manifest
+  when: open_cinema_preflight_require_full_runtime | bool
+
+- name: Inspect the candidate release manifest on the controller
+  ansible.builtin.stat:
+    path: "{{ release_manifest.source_path }}"
+    checksum_algorithm: sha256
+  delegate_to: localhost
+  become: false
+  register: open_cinema_preflight_candidate_manifest
+  when: open_cinema_preflight_require_full_runtime | bool
+
+- name: Normalize host and component probe results
+  ansible.builtin.set_fact:
+    open_cinema_preflight_model: >-
+      {{ open_cinema_preflight_model_command.stdout | trim |
+         regex_replace('[^ -~]', '') }}
+    open_cinema_preflight_root_free_mb: >-
+      {{ ((open_cinema_preflight_disk_command.stdout_lines | last).split()[3] | int // 1024)
+         if open_cinema_preflight_disk_command.rc == 0 and
+            open_cinema_preflight_disk_command.stdout_lines | length > 1
+         else 0 }}
+    open_cinema_preflight_production_models: >-
+      {{ open_cinema_compatibility.platform.production.raspberry_pi_models |
+         map(attribute='name') | list }}
+    open_cinema_preflight_experimental_models: >-
+      {{ open_cinema_compatibility.platform.experimental.raspberry_pi_models |
+         map(attribute='name') | list }}
+    open_cinema_preflight_audio_versions: >-
+      {%- set versions = {} -%}
+      {%- for result in open_cinema_preflight_audio_version_commands.results -%}
+        {%- set _ = versions.update({result.item.component:
+          ((result.stdout | default('')) ~ ' ' ~ (result.stderr | default(''))) |
+          open_cinema_extract_version}) -%}
+      {%- endfor -%}
+      {{ versions }}
+
+- name: Classify the target platform
+  ansible.builtin.set_fact:
+    open_cinema_preflight_production_platform: >-
+      {{
+        ansible_facts['architecture'] in open_cinema_compatibility.platform.production.architectures and
+        ansible_facts['distribution_major_version'] | int in open_cinema_compatibility.platform.production.distribution_major_versions and
+        ansible_facts['distribution_release'] in open_cinema_compatibility.platform.production.distribution_codenames and
+        open_cinema_preflight_production_models | select('in', open_cinema_preflight_model) | list | length > 0
+      }}
+    open_cinema_preflight_declared_experimental_platform: >-
+      {{
+        ansible_facts['architecture'] in open_cinema_compatibility.platform.production.architectures and
+        (
+          open_cinema_preflight_experimental_models | select('in', open_cinema_preflight_model) | list | length > 0 or
+          ansible_facts['distribution_major_version'] | int in open_cinema_compatibility.platform.experimental.distribution_major_versions or
+          ansible_facts['distribution_release'] in open_cinema_compatibility.platform.experimental.distribution_codenames
+        )
+      }}
+
+- name: Publish the production experimental or unsupported classification
+  ansible.builtin.set_fact:
+    open_cinema_preflight_platform_classification: >-
+      {{ 'production'
+         if open_cinema_preflight_production_platform | bool
+         else ('experimental'
+               if open_cinema_allow_experimental_platform | bool and
+                  open_cinema_preflight_declared_experimental_platform | bool
+               else 'unsupported') }}
+
+- name: Collect platform and resource incompatibilities
+  ansible.builtin.set_fact:
+    open_cinema_preflight_platform_failures: >-
+      {%- set issues = [] -%}
+      {%- if open_cinema_preflight_platform_classification == 'unsupported' -%}
+        {%- set _ = issues.append('platform: ' ~ ansible_facts['distribution'] ~ ' ' ~
+          ansible_facts['distribution_release'] ~ ' ' ~ ansible_facts['architecture'] ~
+          ' on ' ~ (open_cinema_preflight_model | default('unknown model')) ~
+          ' is neither production nor an explicitly selected experimental matrix entry') -%}
+      {%- endif -%}
+      {%- if open_cinema_preflight_platform_classification == 'experimental' and
+             (open_cinema_preflight_manifest.status != 'experimental' or
+              open_cinema_preflight_manifest.promotable | bool) -%}
+        {%- set _ = issues.append('platform: experimental hosts require a non-promotable experimental release manifest') -%}
+      {%- endif -%}
+      {%- if ansible_memtotal_mb | int < open_cinema_preflight_minimum_memory_mb | int -%}
+        {%- set _ = issues.append('memory: ' ~ ansible_memtotal_mb ~ ' MB available; at least ' ~
+          open_cinema_preflight_minimum_memory_mb ~ ' MB is required') -%}
+      {%- endif -%}
+      {%- if open_cinema_preflight_root_free_mb | int < open_cinema_preflight_minimum_root_free_mb | int -%}
+        {%- set _ = issues.append('storage: ' ~ open_cinema_preflight_root_free_mb ~
+          ' MB free on /; at least ' ~ open_cinema_preflight_minimum_root_free_mb ~ ' MB is required') -%}
+      {%- endif -%}
+      {{ issues }}
+
+- name: Collect unavailable package repositories
+  ansible.builtin.set_fact:
+    open_cinema_preflight_repository_failures: >-
+      {%- set issues = [] -%}
+      {%- for result in open_cinema_preflight_repository_commands.results -%}
+        {%- if result.rc | int != 0 or 'Candidate:' not in result.stdout or 'Candidate: (none)' in result.stdout -%}
+          {%- set _ = issues.append('repository: no installable candidate for ' ~ result.item) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ issues }}
+
+- name: Collect service identity collisions
+  ansible.builtin.set_fact:
+    open_cinema_preflight_identity_failures: >-
+      {%- set issues = [] -%}
+      {%- for result in open_cinema_preflight_identity_commands.results -%}
+        {%- if result.rc | int == 0 -%}
+          {%- set fields = result.stdout.split(':') -%}
+          {%- if result.item.field in ['uid', 'gid'] and fields[0] != result.item.expected | string -%}
+            {%- set _ = issues.append('identity: ' ~ result.item.field ~ ' ' ~ result.item.key ~
+              ' belongs to ' ~ fields[0] ~ ', not ' ~ result.item.expected) -%}
+          {%- elif result.item.field == 'name_uid' and fields[2] != result.item.expected | string -%}
+            {%- set _ = issues.append('identity: user ' ~ result.item.key ~ ' has UID ' ~ fields[2] ~
+              ', expected ' ~ result.item.expected) -%}
+          {%- elif result.item.field == 'name_gid' and fields[2] != result.item.expected | string -%}
+            {%- set _ = issues.append('identity: group ' ~ result.item.key ~ ' has GID ' ~ fields[2] ~
+              ', expected ' ~ result.item.expected) -%}
+          {%- endif -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ issues }}
+
+- name: Collect audio runtime incompatibilities
+  ansible.builtin.set_fact:
+    open_cinema_preflight_audio_failures: >-
+      {%- set issues = [] -%}
+      {%- for component in ['pipewire', 'wireplumber'] -%}
+        {%- set version = open_cinema_preflight_audio_versions[component] | default('') -%}
+        {%- if open_cinema_preflight_require_runtime | bool and
+               (version | length == 0 or not (version | open_cinema_version_in_range(open_cinema_compatibility.components[component]))) -%}
+          {%- set _ = issues.append(component ~ ': installed version ' ~
+            (version if version | length > 0 else 'unavailable') ~ ' is outside [' ~
+            open_cinema_compatibility.components[component].minimum ~ ', ' ~
+            open_cinema_compatibility.components[component].maximum_exclusive ~ ')') -%}
+        {%- elif version | length > 0 and
+                 not (version | open_cinema_version_in_range(open_cinema_compatibility.components[component])) -%}
+          {%- set _ = issues.append(component ~ ': installed version ' ~ version ~
+            ' is incompatible even though runtime installation is optional in this preflight phase') -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {%- if open_cinema_preflight_require_wireplumber_development | bool and
+             open_cinema_preflight_wireplumber_development.rc | default(1) | int != 0 -%}
+        {%- set _ = issues.append('wireplumber: pkg-config cannot find ' ~
+          open_cinema_compatibility.components.wireplumber.pkg_config) -%}
+      {%- endif -%}
+      {%- if open_cinema_preflight_require_runtime | bool and
+             open_cinema_preflight_wpctl_status.rc | default(1) | int != 0 -%}
+        {%- set _ = issues.append('audio session: wpctl cannot inspect the dedicated ' ~ open_cinema.user ~ ' runtime') -%}
+      {%- endif -%}
+      {{ issues }}
+
+- name: Collect full runtime version and contract incompatibilities
+  ansible.builtin.set_fact:
+    open_cinema_preflight_runtime_failures: >-
+      {%- set issues = [] -%}
+      {%- if open_cinema_preflight_require_full_runtime | bool -%}
+        {%- for result in open_cinema_preflight_runtime_version_commands.results -%}
+          {%- set version = ((result.stdout | default('')) ~ ' ' ~ (result.stderr | default(''))) |
+              open_cinema_extract_version -%}
+          {%- set contract = open_cinema_compatibility.components[result.item.component] -%}
+          {%- if result.rc | int != 0 or version | length == 0 or
+                 not (version | open_cinema_version_in_range(contract)) -%}
+            {%- set _ = issues.append(result.item.component ~ ': installed version ' ~
+              (version if version | length > 0 else 'unavailable') ~ ' is outside [' ~
+              contract.minimum ~ ', ' ~ contract.maximum_exclusive ~ ')') -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- if open_cinema_preflight_application_contract_command.rc | default(1) | int != 0 -%}
+          {%- set _ = issues.append('application contracts: ' ~
+            (open_cinema_preflight_application_contract_command.stderr |
+             default('installed Python package or schema contract probe failed'))) -%}
+        {%- else -%}
+          {%- set packages = open_cinema_preflight_application_contract_command.stdout_lines | last | from_json -%}
+          {%- for component, version in packages.items() -%}
+            {%- set contract = open_cinema_compatibility.components[component] -%}
+            {%- if not (version | open_cinema_version_in_range(contract)) -%}
+              {%- set _ = issues.append(component ~ ': installed Python version ' ~ version ~
+                ' is outside [' ~ contract.minimum ~ ', ' ~ contract.maximum_exclusive ~ ')') -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {%- if open_cinema_preflight_ui_contract_command.rc | default(1) | int != 0 -%}
+          {%- set _ = issues.append('management UI DTO contract: ' ~
+            (open_cinema_preflight_ui_contract_command.stderr |
+             default('installed management UI contract probe failed'))) -%}
+        {%- endif -%}
+        {%- if not open_cinema_preflight_installed_manifest.stat.exists | default(false) -%}
+          {%- set _ = issues.append('release manifest: installed coordinated manifest is missing') -%}
+        {%- elif open_cinema_preflight_installed_manifest.stat.checksum !=
+                  open_cinema_preflight_candidate_manifest.stat.checksum -%}
+          {%- set _ = issues.append('release manifest: installed digest differs from the candidate manifest') -%}
+        {%- endif -%}
+      {%- endif -%}
+      {{ issues }}
+
+- name: Collect candidate release-manifest incompatibilities
+  ansible.builtin.set_fact:
+    open_cinema_preflight_manifest_failures: >-
+      {%- set issues = [] -%}
+      {%- if open_cinema_preflight_manifest.schema_version | int != 1 -%}
+        {%- set _ = issues.append('release manifest: schema_version must be 1') -%}
+      {%- endif -%}
+      {%- if open_cinema_preflight_manifest.platform.compatibility_matrix != open_cinema_compatibility.matrix_id -%}
+        {%- set _ = issues.append('release manifest: compatibility matrix identity does not match compatibility.yml') -%}
+      {%- endif -%}
+      {%- if open_cinema_preflight_manifest.contracts.wireplumber_api_family | string !=
+             open_cinema_compatibility.components.wireplumber.api_family | string -%}
+        {%- set _ = issues.append('release manifest: WirePlumber API family does not match the selected package family') -%}
+      {%- endif -%}
+      {%- if open_cinema_preflight_manifest.contracts.wyreplumber_orchestration | int !=
+             wyreplumber.required_contract | int -%}
+        {%- set _ = issues.append('release manifest: WyrePlumber orchestration contract does not match inventory') -%}
+      {%- endif -%}
+      {%- if open_cinema_preflight_manifest.contracts.decoder_status_protocol | int != 2 -%}
+        {%- set _ = issues.append('release manifest: decoder status protocol must be 2') -%}
+      {%- endif -%}
+      {{ issues }}
+
+- name: Build one actionable preflight compatibility result
+  ansible.builtin.set_fact:
+    open_cinema_preflight_result:
+      schemaVersion: 1
+      candidateDigest: >-
+        {{ open_cinema_deployment_candidate_digest | default('standalone-preflight') }}
+      status: >-
+        {{ 'passed' if
+           (open_cinema_preflight_platform_failures +
+            open_cinema_preflight_repository_failures +
+            open_cinema_preflight_identity_failures +
+            open_cinema_preflight_audio_failures +
+            open_cinema_preflight_runtime_failures +
+            open_cinema_preflight_manifest_failures +
+            open_cinema_preflight_injected_failures) | length == 0
+           else 'failed' }}
+      inputMode: "{{ open_cinema_release_manifest_validation.inputMode }}"
+      releaseInput: "{{ open_cinema_release_manifest_validation.release | bool }}"
+      mutableInput: "{{ open_cinema_release_manifest_validation.mutable | bool }}"
+      mutableComponents: "{{ open_cinema_release_manifest_validation.mutableComponents }}"
+      selectedArtifacts: "{{ open_cinema_release_artifacts }}"
+      classification: "{{ open_cinema_preflight_platform_classification }}"
+      host:
+        model: "{{ open_cinema_preflight_model }}"
+        architecture: "{{ ansible_facts['architecture'] }}"
+        distribution: "{{ ansible_facts['distribution'] }}"
+        release: "{{ ansible_facts['distribution_release'] }}"
+        memoryMb: "{{ ansible_memtotal_mb }}"
+        rootFreeMb: "{{ open_cinema_preflight_root_free_mb }}"
+      detectedAudioVersions: "{{ open_cinema_preflight_audio_versions }}"
+      failures: >-
+        {{ open_cinema_preflight_platform_failures +
+           open_cinema_preflight_repository_failures +
+           open_cinema_preflight_identity_failures +
+           open_cinema_preflight_audio_failures +
+           open_cinema_preflight_runtime_failures +
+           open_cinema_preflight_manifest_failures +
+           open_cinema_preflight_injected_failures }}
+
+- name: Retain the aggregate preflight result on the target
+  ansible.builtin.copy:
+    content: "{{ open_cinema_preflight_result | to_nice_json }}\n"
+    dest: "{{ open_cinema_preflight_result_path }}"
+    owner: "{{ open_cinema.user if open_cinema_preflight_result_mode == '0600' else omit }}"
+    group: "{{ open_cinema.group if open_cinema_preflight_result_mode == '0600' else omit }}"
+    mode: "{{ open_cinema_preflight_result_mode }}"
+  # This is a refreshed observation artifact, not a configuration mutation.
+  # Volatile capacity facts may update its content on an otherwise identical
+  # run and must not make the coordinated deployment non-idempotent.
+  changed_when: false
+
+- name: Report the aggregate preflight classification
+  ansible.builtin.debug:
+    var: open_cinema_preflight_result
+
+- name: Reject every incompatible component before deployment mutation
+  ansible.builtin.assert:
+    that:
+      - open_cinema_preflight_result.failures | length == 0
+    fail_msg: >-
+      Open Cinema preflight found {{ open_cinema_preflight_result.failures | length }}
+      incompatibilities. Correct every item in
+      {{ open_cinema_preflight_result_path }} before migration or live reconciliation:
+      {{ open_cinema_preflight_result.failures | to_json }}

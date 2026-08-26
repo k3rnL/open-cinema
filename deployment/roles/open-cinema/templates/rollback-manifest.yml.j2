@@ -1,0 +1,23 @@
+schema_version: 1
+created_at: "{{ ansible_date_time.iso8601 }}"
+host: "{{ ansible_facts['hostname'] }}"
+release_status: "{{ open_cinema_release_manifest.status }}"
+release_id: "{{ open_cinema_release_manifest.release_id }}"
+release_manifest_sha256: "{{ open_cinema_release_manifest_digest }}"
+release_manifest_path: "{{ release_manifest.install_path }}"
+runtime_profile: "{{ open_cinema_release_manifest.runtime_profile }}"
+input_mode: "{{ open_cinema_release_manifest.input_mode }}"
+database_present: {{ open_cinema_database_before_migration.stat.exists | lower }}
+components:
+{{ open_cinema_release_manifest.components | to_nice_yaml(indent=2) | indent(2, true) }}
+input_identity:
+{{ open_cinema_deployment_input_identity | default({}) | to_nice_yaml(indent=2) | indent(2, true) }}
+migration_policy: destructive-removal-of-legacy-audio-models
+migration_timeouts:
+  preflight_seconds: {{ open_cinema.migrations.preflight_timeout_seconds }}
+  apply_seconds: {{ open_cinema.migrations.apply_timeout_seconds }}
+  kill_grace_seconds: {{ open_cinema.migrations.timeout_kill_grace_seconds }}
+schema_preflight: |
+{{ open_cinema_migration_schema_preflight.stdout | default('schema preflight unavailable') | indent(2, true) }}
+migration_plan: |
+{{ open_cinema_migration_plan.stdout | default('no migration plan output') | indent(2, true) }}

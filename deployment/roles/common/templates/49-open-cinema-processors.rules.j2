@@ -1,0 +1,16 @@
+// Managed by Open Cinema. Permit only owned processor template lifecycle.
+polkit.addRule(function(action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units" ||
+        subject.user !== "{{ open_cinema.user }}") {
+        return polkit.Result.NOT_HANDLED;
+    }
+
+    var unit = action.lookup("unit");
+    var verb = action.lookup("verb");
+    var owned = /^(camilladsp|pcm-auto-decoder)@[A-Za-z0-9_.-]{1,80}\.service$/.test(unit || "");
+    var permitted = ["start", "stop", "restart"].indexOf(verb) !== -1;
+    if (owned && permitted) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

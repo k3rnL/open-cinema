@@ -1,0 +1,7 @@
+// Managed by Open Cinema. The appliance owner is a dedicated, non-login
+// service identity; allow only that identity to perform BlueZ actions.
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.bluez.") === 0 && subject.user === "{{ open_cinema.user }}") {
+        return polkit.Result.YES;
+    }
+});

@@ -1,32 +1,23 @@
 ---
-- name: Install CamillaDSP build dependencies
+- name: Resolve the audio service UID for independently tagged runs
+  ansible.builtin.command:
+    argv:
+      - id
+      - -u
+      - "{{ open_cinema.user }}"
+  register: open_cinema_camilladsp_uid_command
+  changed_when: false
+
+- name: Publish the audio service UID
+  ansible.builtin.set_fact:
+    open_cinema_uid: "{{ open_cinema_camilladsp_uid_command.stdout | int }}"
+
+- name: Install CamillaDSP native PipeWire runtime dependencies
   ansible.builtin.apt:
     update_cache: true
     name:
-      - curl
-      - git
-      - build-essential
-      - pkg-config
-      - libasound2-dev
-      - libpulse-dev
+      - libpipewire-0.3-0
     state: present
-  when: camilladsp.build_from_source
-
-- name: Check if Rust is installed
-  ansible.builtin.command: rustc --version
-  register: rust_check
-  failed_when: false
-  changed_when: false
-  when: camilladsp.build_from_source
-
-- name: Install Rust for root user
-  ansible.builtin.shell: |
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-  args:
-    creates: /root/.cargo/bin/rustc
-  when:
-    - camilladsp.build_from_source
-    - rust_check.rc != 0
 
 - name: Check if CamillaDSP is already installed
   ansible.builtin.stat:
@@ -40,84 +31,88 @@
   changed_when: false
   when: camilladsp_binary.stat.exists
 
-- name: Determine if rebuild is needed
+- name: Determine if CamillaDSP installation is needed
   ansible.builtin.set_fact:
-    camilladsp_needs_rebuild: >-
+    camilladsp_needs_install: >-
       {{
         not camilladsp_binary.stat.exists or
         (camilladsp_installed_version.stdout is defined and
-         camilladsp.version | replace('v', '') not in camilladsp_installed_version.stdout)
+         open_cinema_release_manifest.components.camilladsp.version | replace('v', '') not in camilladsp_installed_version.stdout)
       }}
 
-- name: Clone CamillaDSP repository
-  ansible.builtin.git:
-    repo: "https://github.com/{{ camilladsp.repo }}.git"
-    dest: /tmp/camilladsp
-    version: "{{ camilladsp.version }}"
-    depth: 1
-    force: yes
-  when:
-    - camilladsp.build_from_source
-    - camilladsp_needs_rebuild | bool
-  register: camilladsp_clone
+- name: Download the pinned CamillaDSP native PipeWire release
+  ansible.builtin.get_url:
+    url: "{{ open_cinema_release_artifacts.camilladsp.url }}"
+    dest: "/tmp/{{ open_cinema_release_artifacts.camilladsp.name }}"
+    checksum: "sha256:{{ open_cinema_release_artifacts.camilladsp.sha256 }}"
+    mode: '0644'
+  when: camilladsp_needs_install | bool
 
-- name: Build CamillaDSP with PulseAudio support
-  ansible.builtin.shell: |
-    source /root/.cargo/env
-    cargo build --release --features {{ camilladsp.features }}
-  args:
-    chdir: /tmp/camilladsp
-  environment:
-    PATH: "/root/.cargo/bin:{{ ansible_facts['env']['PATH'] }}"
-  when:
-    - camilladsp.build_from_source
-    - camilladsp_clone.changed
-  register: build_result
+- name: Create a temporary CamillaDSP extraction directory
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: open-cinema-camilladsp-
+  register: open_cinema_camilladsp_extract
+  when: camilladsp_needs_install | bool
+
+- name: Extract the CamillaDSP native PipeWire release
+  ansible.builtin.unarchive:
+    src: "/tmp/{{ open_cinema_release_artifacts.camilladsp.name }}"
+    dest: "{{ open_cinema_camilladsp_extract.path }}"
+    remote_src: true
+  when: camilladsp_needs_install | bool
 
 - name: Install CamillaDSP binary
   ansible.builtin.copy:
-    src: /tmp/camilladsp/target/release/camilladsp
+    src: "{{ open_cinema_camilladsp_extract.path }}/camilladsp"
     dest: "{{ camilladsp.install_path }}"
     remote_src: true
     mode: '0755'
-  when:
-    - camilladsp.build_from_source
-    - build_result.changed
-  notify: Restart camilladsp
+  when: camilladsp_needs_install | bool
 
-- name: Clean up build directory
+- name: Clean up the CamillaDSP extraction directory
   ansible.builtin.file:
-    path: /tmp/camilladsp
+    path: "{{ open_cinema_camilladsp_extract.path }}"
     state: absent
-  when: camilladsp.build_from_source and build_result.changed
+  when: camilladsp_needs_install | bool
 
-- name: Create CamillaDSP config directory
-  ansible.builtin.file:
-    path: /etc/camilladsp
-    state: directory
-    owner: "{{ open_cinema.user }}"
-    group: "{{ open_cinema.group }}"
-    mode: '0755'
-
-- name: Install default CamillaDSP configuration
+- name: Install CamillaDSP runtime directory policy
   ansible.builtin.template:
-    src: default.yml.j2
-    dest: "{{ camilladsp.config_path }}"
-    owner: "{{ open_cinema.user }}"
-    group: "{{ open_cinema.group }}"
+    src: open-cinema-camilladsp.tmpfiles.j2
+    dest: /etc/tmpfiles.d/open-cinema-camilladsp.conf
+    owner: root
+    group: root
     mode: '0644'
-  notify: Restart camilladsp
 
-- name: Install CamillaDSP systemd service
+- name: Create CamillaDSP runtime directory
+  ansible.builtin.command: systemd-tmpfiles --create /etc/tmpfiles.d/open-cinema-camilladsp.conf
+  changed_when: false
+
+- name: Install managed CamillaDSP instance template
   ansible.builtin.template:
-    src: camilladsp.service.j2
-    dest: /etc/systemd/system/camilladsp.service
+    src: camilladsp@.service.j2
+    dest: /etc/systemd/system/camilladsp@.service
+    owner: root
+    group: root
     mode: '0644'
-  notify: Restart camilladsp
+  notify: Reload systemd units
 
-- name: Enable and start CamillaDSP
+- name: Stop and disable obsolete singleton CamillaDSP service
   ansible.builtin.systemd:
-    name: camilladsp
-    enabled: true
-    state: started
-    daemon_reload: true
+    name: camilladsp.service
+    enabled: false
+    state: stopped
+  failed_when: false
+
+- name: Remove obsolete singleton CamillaDSP unit
+  ansible.builtin.file:
+    path: /etc/systemd/system/camilladsp.service
+    state: absent
+  notify: Reload systemd units
+
+- name: Verify CamillaDSP instance unit
+  ansible.builtin.command: systemd-analyze verify /etc/systemd/system/camilladsp@.service
+  changed_when: false
+
+# The orchestrator starts only instances with owned runtime configuration.
+# No unconfigured template instance is enabled or started by Ansible.

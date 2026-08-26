@@ -1,0 +1,9 @@
+# Managed by Open Cinema. Keep appliance limits in a named vendor-unit drop-in.
+[Service]
+ExecStart=
+ExecStart=/usr/bin/redis-server /etc/redis/redis.conf --supervised systemd --daemonize no --maxmemory {{ redis_policy.maxmemory_mb }}mb --maxmemory-policy {{ redis_policy.maxmemory_policy }} --maxclients {{ redis_policy.maxclients }} --save "" --appendonly no
+Restart=on-failure
+RestartSec=2s
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+MemoryMax={{ redis_policy.systemd_memory_max_mb }}M

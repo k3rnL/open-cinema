@@ -5,6 +5,34 @@
     state: present
     update_cache: true
 
+- name: Require an explicit bounded management API network policy
+  ansible.builtin.assert:
+    that:
+      - open_cinema_management_api_networks | length > 0
+      - "'0.0.0.0/0' not in open_cinema_management_api_networks"
+      - "'::/0' not in open_cinema_management_api_networks"
+    fail_msg: >-
+      Configure one or more bounded loopback/LAN sources in
+      open_cinema_management_api_networks; an all-address API boundary is not
+      accepted.
+
+- name: Create the nginx service override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/nginx.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the Open Cinema nginx lifecycle policy
+  ansible.builtin.template:
+    src: dependency.service.conf.j2
+    dest: /etc/systemd/system/nginx.service.d/90-open-cinema.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart nginx
+
 - name: Create web root directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -45,3 +73,6 @@
     name: nginx
     enabled: true
     state: started
+
+- name: Apply nginx configuration before UI deployment
+  ansible.builtin.meta: flush_handlers

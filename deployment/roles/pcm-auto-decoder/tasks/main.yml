@@ -1,32 +1,166 @@
+- name: Resolve the audio service UID for independently tagged runs
+  ansible.builtin.command:
+    argv:
+      - id
+      - -u
+      - "{{ open_cinema.user }}"
+  register: open_cinema_decoder_uid_command
+  changed_when: false
+  tags: [decoder-runtime]
+
+- name: Publish the audio service UID
+  ansible.builtin.set_fact:
+    open_cinema_uid: "{{ open_cinema_decoder_uid_command.stdout | int }}"
+  tags: [decoder-runtime]
+
+- name: Install decoder runtime-directory policy
+  ansible.builtin.template:
+    src: open-cinema-decoder.tmpfiles.j2
+    dest: /etc/tmpfiles.d/open-cinema-decoder.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd for decoder
+  tags: [decoder-runtime]
+
+- name: Create decoder runtime directory now
+  ansible.builtin.command:
+    cmd: systemd-tmpfiles --create /etc/tmpfiles.d/open-cinema-decoder.conf
+  changed_when: false
+  tags: [decoder-runtime]
+
+- name: Install managed decoder systemd template
+  ansible.builtin.template:
+    src: pcm-auto-decoder@.service.j2
+    dest: /etc/systemd/system/pcm-auto-decoder@.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd for decoder
+  tags: [decoder-runtime]
+
+- name: Validate managed decoder systemd template
+  ansible.builtin.command:
+    cmd: systemd-analyze verify /etc/systemd/system/pcm-auto-decoder@.service
+  changed_when: false
+  tags: [decoder-runtime]
+
+- name: Flush decoder unit installation handlers
+  ansible.builtin.meta: flush_handlers
+  tags: [decoder-runtime]
+
 - name: Install runtime deps for pcm-auto-decoder
   ansible.builtin.apt:
     update_cache: true
     name:
-      - libpulse0
-      - libavutil59
+      - libpipewire-0.3-0
+      - libavcodec61
       - libavformat61
-      - libavdevice61
-      - libavfilter10
+      - libavutil59
+      - libswresample5
     state: present
 
-- name: Download decoder tarball from GitHub release (pinned + checksum)
+- name: Install local decoder build dependencies
+  ansible.builtin.apt:
+    update_cache: true
+    name:
+      - build-essential
+      - cargo
+      - clang
+      - libavcodec-dev
+      - libavformat-dev
+      - libavutil-dev
+      - libclang-dev
+      - libpipewire-0.3-dev
+      - libswresample-dev
+      - pkg-config
+      - rustc
+    state: present
+  when: install_from_local | default(false) | bool
+
+- name: Create the local decoder source directory
+  ansible.builtin.file:
+    path: "{{ project_root }}/pcm-auto-decoder"
+    state: directory
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0755"
+  when: install_from_local | default(false) | bool
+
+- name: Synchronize local decoder source for development
+  ansible.posix.synchronize:
+    src: "{{ local_pcm_auto_decoder_source_path }}/"
+    dest: "{{ project_root }}/pcm-auto-decoder/"
+    delete: true
+    checksum: true
+    owner: false
+    group: false
+    perms: false
+    times: false
+    rsync_path: "sudo rsync"
+    mode: push
+    rsync_opts:
+      - "--chown={{ open_cinema.user }}:{{ open_cinema.group }}"
+      - "--chmod=D755,F644"
+      - "--exclude=.git"
+      - "--exclude=target"
+  register: open_cinema_decoder_source_sync
+  when: install_from_local | default(false) | bool
+
+- name: Set ownership of local decoder source
+  ansible.builtin.file:
+    path: "{{ project_root }}/pcm-auto-decoder"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    recurse: true
+  when: install_from_local | default(false) | bool
+
+- name: Build the current local decoder release
+  ansible.builtin.command:
+    argv:
+      - cargo
+      - build
+      - --release
+      - --locked
+  args:
+    chdir: "{{ project_root }}/pcm-auto-decoder"
+  become_user: "{{ open_cinema.user }}"
+  when:
+    - install_from_local | default(false) | bool
+    - open_cinema_decoder_source_sync.changed
+
+- name: Install the current local decoder binary
+  ansible.builtin.copy:
+    src: "{{ project_root }}/pcm-auto-decoder/target/release/{{ pcm_auto_decoder.bin_name }}"
+    dest: "{{ pcm_auto_decoder.install_path }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  when: install_from_local | default(false) | bool
+  notify: Reload systemd for decoder
+
+- name: Download the manifest-selected decoder archive
   ansible.builtin.get_url:
-    url: "https://github.com/{{ pcm_auto_decoder.repo }}/releases/download/{{ pcm_auto_decoder.version }}/{{ pcm_auto_decoder.tarball }}"
-    dest: "/tmp/{{ pcm_auto_decoder.tarball }}"
+    url: "{{ open_cinema_release_artifacts.pcm_auto_decoder.url }}"
+    dest: "/tmp/{{ open_cinema_release_artifacts.pcm_auto_decoder.name }}"
     mode: "0644"
-    checksum: "sha256:{{ pcm_auto_decoder.sha256 }}"
+    checksum: "sha256:{{ open_cinema_release_artifacts.pcm_auto_decoder.sha256 }}"
+  when: not (install_from_local | default(false) | bool)
 
 - name: Create extraction directory
   ansible.builtin.file:
     path: "/tmp/pcm-auto-decoder_extract"
     state: directory
     mode: "0755"
+  when: not (install_from_local | default(false) | bool)
 
 - name: Extract decoder
   ansible.builtin.unarchive:
-    src: "/tmp/{{ pcm_auto_decoder.tarball }}"
+    src: "/tmp/{{ open_cinema_release_artifacts.pcm_auto_decoder.name }}"
     dest: "/tmp/pcm-auto-decoder_extract"
     remote_src: true
+  when: not (install_from_local | default(false) | bool)
 
 - name: Install decoder binary
   ansible.builtin.copy:
@@ -34,25 +168,29 @@
     dest: "{{ pcm_auto_decoder.install_path }}"
     remote_src: true
     mode: "0755"
-  notify: Restart pcm-auto-decoder
+  when: not (install_from_local | default(false) | bool)
+  notify: Reload systemd for decoder
 
-#- name: Install pcm-auto-decoder config
-#  ansible.builtin.template:
-#    src: decoder.yaml.j2
-#    dest: "{{ pcm_auto_decoder.config_path }}"
-#    mode: "0644"
-#  notify: Restart pcm-auto-decoder
-#
-#- name: Install systemd service
-#  ansible.builtin.template:
-#    src: pcm-auto-decoder.service.j2
-#    dest: "/etc/systemd/system/{{ pcm_auto_decoder.bin_name }}.service"
-#    mode: "0644"
-#  notify: Restart decoder
-#
-#- name: Enable and start pcm-auto-decoder
-#  ansible.builtin.systemd:
-#    name: "{{ pcm_auto_decoder.bin_name }}"
-#    enabled: true
-#    state: started
-#    daemon_reload: true
+- name: Verify the installed decoder version and managed status options
+  ansible.builtin.command:
+    argv:
+      - "{{ pcm_auto_decoder.install_path }}"
+      - "{{ item }}"
+  loop:
+    - --version
+    - --help
+  register: open_cinema_decoder_contract_commands
+  changed_when: false
+
+- name: Require the selected decoder version and managed status protocol
+  ansible.builtin.assert:
+    that:
+      - open_cinema_release_manifest.components.pcm_auto_decoder.version | replace('v', '') in open_cinema_decoder_contract_commands.results[0].stdout
+      - "'--status-socket' in open_cinema_decoder_contract_commands.results[1].stdout"
+      - "'--instance-id' in open_cinema_decoder_contract_commands.results[1].stdout"
+      - "'--capture-layout' in open_cinema_decoder_contract_commands.results[1].stdout"
+      - "'--output-layout' in open_cinema_decoder_contract_commands.results[1].stdout"
+    fail_msg: >-
+      The installed decoder does not match
+      {{ open_cinema_release_manifest.components.pcm_auto_decoder.version }} or
+      does not expose the managed status protocol required by Open Cinema.

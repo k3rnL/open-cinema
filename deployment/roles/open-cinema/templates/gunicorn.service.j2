@@ -1,8 +1,10 @@
 [Unit]
 Description=Open Cinema Django Application
-Documentation=https://github.com/{{ open_cinema.repo }}
-After=network.target redis-server.service
-Wants=redis-server.service
+Documentation=https://github.com/{{ open_cinema_release_manifest.components.open_cinema.repository }}
+After=network.target redis-server.service user@{{ open_cinema_service_uid }}.service
+Wants=redis-server.service user@{{ open_cinema_service_uid }}.service
+StartLimitBurst=5
+StartLimitIntervalSec=60
 
 [Service]
 Type=exec
@@ -10,6 +12,13 @@ User={{ open_cinema.user }}
 Group={{ open_cinema.group }}
 WorkingDirectory={{ open_cinema.app_path }}
 EnvironmentFile={{ open_cinema.app_path }}/.env
+Environment="XDG_RUNTIME_DIR={{ audio_service.runtime_dir }}"
+Environment="DBUS_SESSION_BUS_ADDRESS={{ audio_service.dbus_address }}"
+Environment="PIPEWIRE_REMOTE=pipewire-0"
+RuntimeDirectory=open-cinema
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+UMask=0027
 
 ExecStart={{ open_cinema.venv_path }}/bin/gunicorn \
     --workers {{ open_cinema.gunicorn_workers }} \
@@ -23,12 +32,19 @@ ExecStart={{ open_cinema.venv_path }}/bin/gunicorn \
 
 Restart=on-failure
 RestartSec=5
-StartLimitBurst=5
-StartLimitIntervalSec=60
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+KillMode=mixed
 
 # Security hardening
 NoNewPrivileges=true
 PrivateTmp=true
+ProtectSystem=strict
+# ProtectHome also hides /run/user, which contains the owned PipeWire socket.
+ProtectHome=false
+InaccessiblePaths=/home /root
+ReadWritePaths={{ open_cinema.app_path }} /run/open-cinema /var/log/open-cinema
 
 [Install]
 WantedBy=multi-user.target

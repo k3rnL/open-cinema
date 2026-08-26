@@ -5,25 +5,252 @@
   hosts: all
   become: true
 
+  pre_tasks:
+    - name: Load the coordinated release manifest
+      ansible.builtin.include_vars:
+        file: "{{ release_manifest.source_path }}"
+        name: open_cinema_release_manifest
+      tags: [always]
+
+    - name: Validate and resolve every deployment input before appliance mutation
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ playbook_dir }}/../scripts/validate_release_manifest.py"
+          - --manifest
+          - "{{ release_manifest.source_path }}"
+          - --mode
+          - "{{ (install_from_local | default(false) | bool) | ternary('development', 'appliance') }}"
+          - --distribution-family
+          - "{{ ansible_facts['os_family'] }}"
+          - --distribution-major
+          - "{{ ansible_facts['distribution_major_version'] }}"
+          - --distribution-codename
+          - "{{ ansible_facts['distribution_release'] }}"
+          - --architecture
+          - "{{ ansible_facts['architecture'] }}"
+          - --python-abi
+          - "cp{{ open_cinema.python_version | replace('.', '') }}"
+          - --wireplumber-api-family
+          - "{{ wireplumber.api_family }}"
+      delegate_to: localhost
+      become: false
+      register: open_cinema_release_manifest_validation_command
+      changed_when: false
+      tags: [always]
+
+    - name: Publish the validated input mode and target artifact selection
+      ansible.builtin.set_fact:
+        open_cinema_release_manifest_validation: >-
+          {{ open_cinema_release_manifest_validation_command.stdout | from_json }}
+        open_cinema_release_artifacts: >-
+          {{ (open_cinema_release_manifest_validation_command.stdout | from_json).selectedArtifacts }}
+      tags: [always]
+
+    - name: Hash the candidate release manifest on the controller
+      ansible.builtin.stat:
+        path: "{{ release_manifest.source_path }}"
+        checksum_algorithm: sha256
+      delegate_to: localhost
+      become: false
+      register: open_cinema_candidate_manifest_stat
+      tags: [always]
+
+    - name: Fingerprint locally synchronized candidate source trees
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ['python3', playbook_dir ~ '/../scripts/source-tree-digest.py', item.path] +
+            (item.includes | default([]) |
+             map('regex_replace', '^', '--include=') | list)
+          }}
+      loop:
+        - name: open_cinema
+          path: "{{ local_source_path }}"
+        - name: wyreplumber
+          path: "{{ local_wyreplumber_source_path }}"
+        - name: management_ui
+          path: "{{ local_open_cinema_ui_source_path }}"
+          includes:
+            - apps/admin/dist
+            - apps/ui/dist
+            - packages/shared/src/orchestration/types.ts
+        - name: pcm_auto_decoder
+          path: "{{ local_pcm_auto_decoder_source_path }}"
+      delegate_to: localhost
+      become: false
+      register: open_cinema_candidate_source_digests
+      changed_when: false
+      when: install_from_local | default(false) | bool
+      tags: [always]
+
+    - name: Record mutable development source identities explicitly
+      ansible.builtin.set_fact:
+        open_cinema_development_source_identities: >-
+          {{ open_cinema_development_source_identities | default({}) |
+             combine({item.item.name: {
+               'sourceType': 'local-directory',
+               'mutable': true,
+               'sha256': item.stdout
+             }}) }}
+      loop: "{{ open_cinema_candidate_source_digests.results | default([]) }}"
+      when:
+        - install_from_local | default(false) | bool
+        - not item.skipped | default(false) | bool
+      tags: [always]
+
+    - name: Publish the deployment input identity for diagnostics and rollback
+      ansible.builtin.set_fact:
+        open_cinema_deployment_input_identity:
+          schemaVersion: 1
+          inputMode: "{{ open_cinema_release_manifest_validation.inputMode }}"
+          release: "{{ open_cinema_release_manifest_validation.release | bool }}"
+          mutable: "{{ open_cinema_release_manifest_validation.mutable | bool }}"
+          mutableComponents: >-
+            {{ open_cinema_release_manifest_validation.mutableComponents }}
+          developmentSources: >-
+            {{ open_cinema_development_source_identities | default({}) }}
+          selectedArtifacts: "{{ open_cinema_release_artifacts }}"
+      tags: [always]
+
+    - name: Publish the coordinated candidate content digest
+      ansible.builtin.set_fact:
+        open_cinema_deployment_candidate_digest: >-
+          {{
+            ([open_cinema_candidate_manifest_stat.stat.checksum] +
+             (open_cinema_candidate_source_digests.results |
+              default([]) | rejectattr('skipped', 'defined') |
+              map(attribute='stdout') | list)) |
+            join(':') | hash('sha256')
+          }}
+      tags: [always]
+
+    - name: Check whether this exact candidate already passed the contract gate
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - >-
+            import json, pathlib, sys;
+            result = json.loads(pathlib.Path(sys.argv[1]).read_text());
+            raise SystemExit(0 if result.get('status') == 'passed' and
+            result.get('candidateDigest') == sys.argv[2] else 1)
+          - "{{ open_cinema.diagnostics_root }}/contract-gate-result.json"
+          - "{{ open_cinema_deployment_candidate_digest }}"
+      register: open_cinema_previous_contract_gate
+      changed_when: false
+      failed_when: false
+      tags: [always]
+
+    - name: Publish the previous contract-gate decision
+      ansible.builtin.set_fact:
+        open_cinema_contract_gate_previously_passed: >-
+          {{ open_cinema_previous_contract_gate.rc == 0 }}
+        open_cinema_contract_gate_complete: >-
+          {{ open_cinema_previous_contract_gate.rc == 0 }}
+      tags: [always]
+
+    - name: Validate the manifest release status and runtime profile
+      ansible.builtin.assert:
+        that:
+          - open_cinema_release_manifest.status in ['experimental', 'supported']
+          - open_cinema_release_manifest.runtime_profile == 'full'
+        fail_msg: >-
+          Coordinated manifest release status {{ open_cinema_release_manifest.status }}
+          must be experimental or supported; runtime profile must be full.
+      tags: [always]
+
   roles:
     - role: common
       tags: [common]
 
-    - role: pulseaudio
-      tags: [pulseaudio, audio]
+    - role: pipewire-wireplumber
+      tags: [pipewire, wireplumber, audio]
 
-    - role: camilladsp
-      tags: [camilladsp, audio]
+    - role: preflight
+      tags: [preflight, audio]
+      vars:
+        open_cinema_preflight_require_runtime: true
 
-    - role: open-cinema
-      tags: [python, app, opencinema]
+    - role: transition-backup
+      tags: [transition-backup, app, audio]
 
-    - role: nginx
-      tags: [nginx, web, frontend]
+  tasks:
+    - name: Install, gate, and verify one coordinated candidate generation
+      block:
+        - name: Enter candidate deployment safety
+          ansible.builtin.include_role:
+            name: deployment-safety
+            apply:
+              tags: [deployment-safety, app, audio]
+          tags: [deployment-safety, app, audio]
 
-    - role: react-apps
-      tags: [react, frontend, web, ui]
+        - name: Install the coordinated CamillaDSP runtime
+          ansible.builtin.include_role:
+            name: camilladsp
+            apply:
+              tags: [camilladsp, audio]
+          tags: [camilladsp, audio]
 
-    - role: pcm-auto-decoder
-      tags: [decoder]
-      when: pcm_auto_decoder is defined
+        - name: Install the Open Cinema application generation
+          ansible.builtin.include_role:
+            name: open-cinema
+            apply:
+              tags: [python, app, opencinema]
+          tags: [python, app, opencinema]
+
+        - name: Install the coordinated nginx configuration
+          ansible.builtin.include_role:
+            name: nginx
+            apply:
+              tags: [nginx, web, frontend]
+          tags: [nginx, web, frontend]
+
+        - name: Install both coordinated web applications
+          ansible.builtin.include_role:
+            name: react-apps
+            apply:
+              tags: [react, frontend, web, ui]
+          tags: [react, frontend, web, ui]
+
+        - name: Install the coordinated native decoder runtime
+          ansible.builtin.include_role:
+            name: pcm-auto-decoder
+            apply:
+              tags: [decoder]
+          tags: [decoder]
+          when: pcm_auto_decoder is defined
+
+        - name: Probe all installed candidate contracts
+          ansible.builtin.include_role:
+            name: contract-gate
+            apply:
+              tags: [contract-gate, verify]
+          tags: [contract-gate, verify]
+
+        - name: Verify aggregate coordinated readiness
+          ansible.builtin.include_role:
+            name: readiness
+            apply:
+              tags: [readiness, verify]
+          tags: [readiness, verify]
+
+      rescue:
+        - name: Preserve the original candidate-stage failure identity
+          ansible.builtin.set_fact:
+            open_cinema_candidate_failure_task: >-
+              {{ ansible_failed_task.name | default('unknown candidate task') }}
+            open_cinema_candidate_failure_message: >-
+              {{ ansible_failed_result.msg |
+                 default(ansible_failed_result.stderr |
+                 default(ansible_failed_result | to_json)) }}
+            open_cinema_candidate_failure_rc: >-
+              {{ ansible_failed_result.rc | default(-1) }}
+          tags: [always]
+
+        - name: Retain the coordinated candidate-stage failure
+          ansible.builtin.include_role:
+            name: deployment-failure
+            apply:
+              tags: [always]
+          tags: [always]

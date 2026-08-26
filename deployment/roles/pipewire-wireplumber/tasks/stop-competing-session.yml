@@ -1,0 +1,76 @@
+---
+- name: Resolve competing audio-session user identity
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ open_cinema_competing_session_user }}"
+
+- name: Publish competing audio-session user paths
+  ansible.builtin.set_fact:
+    open_cinema_competing_session_uid: >-
+      {{ ansible_facts.getent_passwd[open_cinema_competing_session_user][1] }}
+    open_cinema_competing_session_home: >-
+      {{ ansible_facts.getent_passwd[open_cinema_competing_session_user][4] }}
+
+- name: Create competing user's systemd override directory
+  ansible.builtin.file:
+    path: "{{ open_cinema_competing_session_home }}/.config/systemd/user"
+    state: directory
+    owner: "{{ open_cinema_competing_session_user }}"
+    group: "{{ open_cinema_competing_session_user }}"
+    mode: "0755"
+
+- name: Mask competing PipeWire and WirePlumber units for the appliance login user
+  ansible.builtin.file:
+    src: /dev/null
+    dest: "{{ open_cinema_competing_session_home }}/.config/systemd/user/{{ item }}"
+    state: link
+    force: true
+    owner: "{{ open_cinema_competing_session_user }}"
+    group: "{{ open_cinema_competing_session_user }}"
+  loop:
+    - pipewire.service
+    - pipewire.socket
+    - wireplumber.service
+
+- name: Reload the competing user's unit masks
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - --user
+      - daemon-reload
+  become_user: "{{ open_cinema_competing_session_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ open_cinema_competing_session_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ open_cinema_competing_session_uid }}/bus"
+  changed_when: false
+  failed_when: false
+
+- name: Stop the competing audio session
+  ansible.builtin.systemd:
+    scope: user
+    name: "{{ item }}"
+    state: stopped
+  become_user: "{{ open_cinema_competing_session_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ open_cinema_competing_session_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ open_cinema_competing_session_uid }}/bus"
+  loop:
+    - wireplumber.service
+    - pipewire.socket
+    - pipewire.service
+  failed_when: false
+
+- name: Require the competing session to release audio ownership
+  ansible.builtin.command:
+    argv:
+      - pgrep
+      - -u
+      - "{{ open_cinema_competing_session_user }}"
+      - -x
+      - "{{ item }}"
+  loop:
+    - pipewire
+    - wireplumber
+  register: open_cinema_competing_session_processes
+  changed_when: false
+  failed_when: open_cinema_competing_session_processes.rc != 1

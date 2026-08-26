@@ -1,0 +1,24 @@
+---
+- name: Reload headless user units
+  ansible.builtin.systemd:
+    scope: user
+    daemon_reload: true
+  become_user: "{{ open_cinema.user }}"
+  environment:
+    XDG_RUNTIME_DIR: "{{ audio_service.runtime_dir }}"
+    DBUS_SESSION_BUS_ADDRESS: "{{ audio_service.dbus_address }}"
+
+- name: Restart headless WirePlumber
+  ansible.builtin.systemd:
+    scope: user
+    name: wireplumber.service
+    state: restarted
+  become_user: "{{ open_cinema.user }}"
+  environment:
+    XDG_RUNTIME_DIR: "{{ audio_service.runtime_dir }}"
+    DBUS_SESSION_BUS_ADDRESS: "{{ audio_service.dbus_address }}"
+
+- name: Restart Bluetooth
+  ansible.builtin.systemd:
+    name: bluetooth.service
+    state: restarted

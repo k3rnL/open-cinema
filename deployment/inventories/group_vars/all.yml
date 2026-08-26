@@ -1,14 +1,126 @@
 project_root: "/opt/home-cinema"
 
+# Rollback-window closure remains an explicit operator decision. Release status
+# is owned only by the coordinated manifest.
+open_cinema_close_rollback_window: false
+
+release_manifest:
+  source_path: "{{ playbook_dir }}/../release-manifest.yml"
+  install_dir: "/etc/open-cinema"
+  install_path: "/etc/open-cinema/release-manifest.yml"
+  installed_identity_path: "/var/lib/open-cinema/deployment-diagnostics/installed-release.yml"
+  artifact_cache_root: "/var/cache/open-cinema/artifacts"
+
+# One headless service identity owns the PipeWire graph and every process that
+# participates in it. Stable UID/GID values are explicit inventory data and may
+# be overridden only after preflight proves they do not identify another user.
+open_cinema_service_uid: 999
+open_cinema_service_gid: 985
+
+audio_service:
+  user: "opencinema"
+  group: "opencinema"
+  exclusive: true
+  # Appliance login accounts must not start a second session manager that can
+  # race the dedicated audio owner for ALSA or Bluetooth devices.
+  competing_session_users:
+    - "{{ ansible_user }}"
+  supplementary_groups:
+    - audio
+    - video
+  runtime_dir: "/run/user/{{ open_cinema_service_uid }}"
+  pipewire_socket: "/run/user/{{ open_cinema_service_uid }}/pipewire-0"
+  dbus_address: "unix:path=/run/user/{{ open_cinema_service_uid }}/bus"
+
+pipewire:
+  package: "pipewire"
+  minimum_version: "1.4.0"
+
+wireplumber:
+  package: "wireplumber"
+  minimum_version: "0.5.8"
+  api_family: "0.5"
+
+redis_policy:
+  maxmemory_mb: 128
+  systemd_memory_max_mb: 192
+  maxmemory_policy: noeviction
+  maxclients: 256
+
+wyreplumber:
+  app_path: "{{ project_root }}/wyreplumber"
+  local_source_path: "../wyreplumber"
+  required_contract: 1
+
+# API calls are rejected by nginx unless their source is in this explicit
+# boundary. Appliance inventories must add their management LAN.
+open_cinema_management_api_networks:
+  - 127.0.0.1
+
 # Open Cinema Application
 open_cinema:
-  version: "0.2.0"
-  repo: "k3rnL/open-cinema"  # Update with your GitHub username
   python_version: "3.13"
   app_path: "{{ project_root }}/open-cinema"
   venv_path: "{{ project_root }}/open-cinema/venv"
   user: "opencinema"
   group: "opencinema"
+  # Celery runs the bounded orchestration-retention task; it is not used for
+  # audio discovery, apply, or backend lifecycle work.
+  celery_enabled: true
+  orchestrator_enabled: true
+  rollback_root: "/var/lib/open-cinema/rollback"
+  # Exactly one pre-deployment coordinated release remains recoverable after a
+  # successful readiness pass. Failed deployments never run the pruning step.
+  rollback_releases_to_keep: 1
+  transition_timeout_seconds: 300
+  transition_timeout_kill_grace_seconds: 15
+  diagnostics_root: "/var/lib/open-cinema/deployment-diagnostics"
+  readiness_result_path: "/var/lib/open-cinema/deployment-diagnostics/readiness-result.json"
+  runtime_redis_key: "open-cinema:orchestration:runtime-world:v1"
+  orchestrator_lock_path: "/run/open-cinema/orchestrator.lock"
+  managed_static_paths:
+    - /etc/open-cinema
+    - /etc/nginx/sites-available/open-cinema
+    - /etc/nginx/sites-enabled/open-cinema
+    - /etc/polkit-1/rules.d/49-open-cinema-processors.rules
+    - /etc/systemd/system/open-cinema.service
+    - /etc/systemd/system/open-cinema-orchestrator.service
+    - /etc/systemd/system/celery.service
+    - /etc/systemd/system/celery-beat.service
+    - /etc/systemd/system/camilladsp@.service
+    - /etc/systemd/system/pcm-auto-decoder@.service
+    - /etc/systemd/system/redis-server.service.d/90-open-cinema.conf
+    - /etc/systemd/system/nginx.service.d/90-open-cinema.conf
+    - /etc/systemd/user/pipewire.service.d/90-open-cinema.conf
+    - /etc/systemd/user/wireplumber.service.d/90-open-cinema.conf
+    - /etc/tmpfiles.d/open-cinema-camilladsp.conf
+    - /etc/tmpfiles.d/open-cinema-decoder.conf
+    - /etc/udev/rules.d/49-open-cinema-processors.rules
+    - /etc/wireplumber/wireplumber.conf.d
+
+  sqlite:
+    busy_timeout_ms: 5000
+    wal_autocheckpoint_pages: 1000
+
+  migrations:
+    preflight_timeout_seconds: 30
+    apply_timeout_seconds: 120
+    timeout_kill_grace_seconds: 10
+
+  retention:
+    plan_days: 30
+    audit_days: 90
+    diagnostic_hours: 24
+    runtime_projection_hours: 24
+    batch_size: 1000
+
+  celery:
+    worker_concurrency: 1
+    prefetch_multiplier: 1
+    max_tasks_per_child: 100
+    worker_memory_max_mb: 256
+    beat_memory_max_mb: 128
+    result_expires_seconds: 3600
 
   # Django settings
   django:
@@ -17,63 +129,64 @@ open_cinema:
     allowed_hosts: "*"
     database: "{{ project_root }}/open-cinema/db.sqlite3"
 
+  # Temporary bootstrap credential for the experimental appliance. Replace the
+  # password through Ansible Vault before any supported or exposed deployment.
+  default_admin:
+    enabled: true
+    username: "admin"
+    password: "admin"
+
   # Service ports
   gunicorn_port: 8000
   gunicorn_workers: 2
+  gunicorn_version: "23.0.0"
+
+  # The appliance has one accepted full-runtime profile. The contract gate
+  # still withholds processor management and live reconciliation while probing
+  # a changed candidate.
+  orchestration_features:
+    orchestration_api: true
+    runtime_observation: true
+    shadow_resolution: true
+    processor_management: true
+    live_reconciliation: true
+  reconciliation_catchup:
+    max_passes: 8
+    retry_initial_seconds: 0.1
+    retry_max_seconds: 2.0
+    retry_multiplier: 2.0
 
 # CamillaDSP Configuration
 camilladsp:
-  version: "v3.0.1"
-  repo: "HEnquist/camilladsp"
   websocket_port: 1234
-  websocket_address: "0.0.0.0"
-  config_path: "/etc/camilladsp/default.yml"
+  websocket_address: "127.0.0.1"
+  runtime_dir: "/run/open-cinema/camilladsp"
+  instance_count: 1
+  bus_prefix: "opencinema.camilladsp"
+  conflict_policy: "priority"
+  sharing_policy: "exclusive"
+  reconfiguration_policy: "reconfigure-idle"
 
-  # Build from source (no ARM64 binaries with pulse support available)
-  build_from_source: true
-  features: "pulse-backend"
   install_path: "/usr/local/bin/camilladsp"
-
-# PulseAudio Configuration
-pulseaudio:
-  system_wide: true
-  default_sample_rate: 48000
-  # Pipe sources/sinks for testing
-  enable_pipes: false
-  pipes:
-    input:
-      file: "/tmp/pa.input"
-      rate: 48000
-      format: "S16LE"
-      channels: 2
-    output:
-      file: "/tmp/pa.output"
-      rate: 48000
-      format: "float32LE"
-      channels: 6
 
 # PCM Auto Decoder (existing)
 pcm_auto_decoder:
-  repo: "k3rnl/pcm-auto-decoder"
-  version: "v0.1.3"
-  target: "aarch64-unknown-linux-gnu"
   bin_name: "pcm-auto-decoder"
   install_path: "/usr/local/bin/pcm-auto-decoder"
-  tarball: "pcm-auto-decoder-v0.1.3-aarch64-unknown-linux-gnu.tar.gz"
-  sha256: "1bb42509b665aaa36e3c624f8ae80db0607cce2d44f5ec9af6d353f14307d541"
-  config_path: "/opt/home-cinema/pcm-auto-decoder.yaml"
+  runtime_dir: "/run/open-cinema/decoder"
+  instance_count: 1
 
 # Open Cinema UI (React Applications)
 open_cinema_ui:
-  version: "v1.0.5"  # Update with latest release version
-  repo: "k3rnL/open-cinema-ui"
-
   # Admin interface (for system configuration)
   admin:
-    asset_name: "open-cinema-admin-v1.0.5.tar.gz"
     web_root: "/var/www/open-cinema-admin"
+    contract_asset_name: "contracts/audio-orchestration-client-v1.json"
 
   # User interface (for end users)
   user_ui:
-    asset_name: "open-cinema-ui-v1.0.5.tar.gz"
     web_root: "/var/www/open-cinema-ui"
+
+readiness:
+  verify_hardware_nodes: false
+  expected_hardware_node_patterns: []

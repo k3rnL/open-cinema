@@ -1,0 +1,49 @@
+[Unit]
+Description=Open Cinema managed CamillaDSP processor (%i)
+Documentation=file://{{ open_cinema.app_path }}/docs/audio-orchestration/CAMILLADSP_DRIVER.md
+After=user@{{ open_cinema_uid }}.service open-cinema-orchestrator.service
+Wants=user@{{ open_cinema_uid }}.service
+ConditionPathExists=/run/open-cinema/camilladsp/%i.env
+
+[Service]
+Type=simple
+User={{ open_cinema.user }}
+Group={{ open_cinema.group }}
+SupplementaryGroups=audio
+UMask=0027
+EnvironmentFile=/run/open-cinema/camilladsp/%i.env
+Environment="XDG_RUNTIME_DIR={{ audio_service.runtime_dir }}"
+Environment="DBUS_SESSION_BUS_ADDRESS={{ audio_service.dbus_address }}"
+Environment="PIPEWIRE_REMOTE=pipewire-0"
+ExecStartPre=/usr/bin/test -S {{ audio_service.pipewire_socket }}
+ExecStart={{ camilladsp.install_path }} --wait --port ${CAMILLADSP_PORT} --address ${CAMILLADSP_ADDRESS} ${CAMILLADSP_CONFIG}
+Restart=on-failure
+RestartSec=2s
+TimeoutStartSec=20s
+TimeoutStopSec=10s
+KillSignal=SIGTERM
+KillMode=mixed
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+# ProtectHome also hides /run/user, which contains the owned PipeWire socket.
+ProtectHome=false
+InaccessiblePaths=/home /root
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+ReadWritePaths=/run/open-cinema/camilladsp
+
+[Install]
+WantedBy=multi-user.target

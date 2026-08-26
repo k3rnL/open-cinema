@@ -1,0 +1,1130 @@
+---
+- name: Load the coordinated release manifest for independently tagged runs
+  ansible.builtin.include_vars:
+    file: "{{ release_manifest.source_path }}"
+    name: open_cinema_release_manifest
+
+- name: Read the installed release-manifest digest for readiness records
+  ansible.builtin.stat:
+    path: "{{ release_manifest.install_path }}"
+    checksum_algorithm: sha256
+  register: open_cinema_readiness_release_manifest_stat
+
+- name: Require the coordinated release manifest to be installed
+  ansible.builtin.assert:
+    that:
+      - open_cinema_readiness_release_manifest_stat.stat.exists
+      - open_cinema_readiness_release_manifest_stat.stat.isreg
+      - open_cinema_readiness_release_manifest_stat.stat.checksum | length == 64
+    fail_msg: >-
+      The coordinated release manifest is missing or unreadable; run the common
+      role before readiness can record a release result.
+
+- name: Publish the installed release-manifest digest for readiness records
+  ansible.builtin.set_fact:
+    open_cinema_release_manifest_digest: >-
+      {{ open_cinema_readiness_release_manifest_stat.stat.checksum }}
+
+- name: Publish the effective deployment input identity for diagnostics
+  ansible.builtin.set_fact:
+    open_cinema_effective_deployment_input_identity: >-
+      {{ open_cinema_deployment_input_identity | default({
+        'schemaVersion': 1,
+        'inputMode': open_cinema_release_manifest.input_mode | default('unknown'),
+        'release': (open_cinema_release_manifest.input_mode | default('unknown')) == 'appliance',
+        'mutable': (open_cinema_release_manifest.input_mode | default('unknown')) != 'appliance',
+        'mutableComponents': [],
+        'developmentSources': {},
+        'selectedArtifacts': open_cinema_release_artifacts | default({})
+      }) }}
+
+- name: Find the retained rollback identity for independently tagged runs
+  ansible.builtin.find:
+    paths: "{{ open_cinema.rollback_root }}"
+    recurse: false
+    file_type: directory
+  register: open_cinema_readiness_rollback_bundles
+  when: open_cinema_rollback_id is not defined
+
+- name: Publish the retained rollback identity for readiness records
+  ansible.builtin.set_fact:
+    open_cinema_rollback_id: >-
+      {{
+        ((open_cinema_readiness_rollback_bundles.files
+           | map(attribute='path') | sort | last) | basename)
+        if open_cinema_readiness_rollback_bundles.matched | int > 0
+        else 'none'
+      }}
+  when: open_cinema_rollback_id is not defined
+
+- name: Resolve the audio service UID for independently tagged runs
+  ansible.builtin.command:
+    argv:
+      - id
+      - -u
+      - "{{ open_cinema.user }}"
+  register: open_cinema_readiness_uid_command
+  changed_when: false
+
+- name: Publish the audio service UID
+  ansible.builtin.set_fact:
+    open_cinema_uid: "{{ open_cinema_readiness_uid_command.stdout | int }}"
+    open_cinema_appliance_base_url: >-
+      http://{{ ansible_default_ipv4.address }}
+
+- name: Verify the coordinated Open Cinema deployment
+  block:
+    - name: Require the PipeWire runtime socket
+      ansible.builtin.stat:
+        path: "{{ audio_service.pipewire_socket }}"
+      register: open_cinema_readiness_pipewire_socket
+      failed_when: >-
+        not open_cinema_readiness_pipewire_socket.stat.exists or
+        not open_cinema_readiness_pipewire_socket.stat.issock
+
+    - name: Inspect the WirePlumber-owned graph
+      ansible.builtin.command:
+        argv:
+          - wpctl
+          - status
+      become_user: "{{ open_cinema.user }}"
+      environment: &audio_session_environment
+        XDG_RUNTIME_DIR: "{{ audio_service.runtime_dir }}"
+        DBUS_SESSION_BUS_ADDRESS: "{{ audio_service.dbus_address }}"
+        PIPEWIRE_REMOTE: pipewire-0
+      register: open_cinema_readiness_wpctl
+      changed_when: false
+
+    - name: Read the headless audio owner's supplemental groups
+      ansible.builtin.command:
+        argv:
+          - id
+          - -Gn
+          - "{{ open_cinema.user }}"
+      register: open_cinema_readiness_audio_groups
+      changed_when: false
+
+    - name: Require only the declared direct-device access groups
+      ansible.builtin.assert:
+        that:
+          - "'audio' in open_cinema_readiness_audio_groups.stdout.split()"
+          - "'video' in open_cinema_readiness_audio_groups.stdout.split()"
+          - "'root' not in open_cinema_readiness_audio_groups.stdout.split()"
+        fail_msg: >-
+          The headless audio owner must have audio/video device access without
+          membership in root.
+
+    - name: Discover ALSA character devices exposed to the appliance
+      ansible.builtin.command:
+        argv:
+          - find
+          - /dev/snd
+          - -maxdepth
+          - "1"
+          - -type
+          - c
+          - -print
+      register: open_cinema_readiness_alsa_devices
+      changed_when: false
+
+    - name: Require non-root read and write access to every ALSA device
+      ansible.builtin.command:
+        argv:
+          - test
+          - -r
+          - "{{ item }}"
+          - -a
+          - -w
+          - "{{ item }}"
+      become_user: "{{ open_cinema.user }}"
+      loop: "{{ open_cinema_readiness_alsa_devices.stdout_lines }}"
+      changed_when: false
+
+    - name: Probe PipeWire core parameters metadata and the user D-Bus
+      ansible.builtin.command:
+        argv: "{{ item }}"
+      become_user: "{{ open_cinema.user }}"
+      environment: *audio_session_environment
+      loop:
+        - [pw-cli, info, "0"]
+        - [pw-cli, list-objects, Metadata]
+        - [busctl, --user, --no-pager, status]
+      register: open_cinema_readiness_audio_session_access
+      changed_when: false
+
+    - name: Probe service-account visibility of BlueZ objects
+      ansible.builtin.command:
+        argv:
+          - busctl
+          - --system
+          - --no-pager
+          - tree
+          - org.bluez
+      become_user: "{{ open_cinema.user }}"
+      register: open_cinema_readiness_bluez_access
+      changed_when: false
+
+    - name: Verify the WyrePlumber orchestration contract and native binding
+      ansible.builtin.command:
+        argv:
+          - "{{ open_cinema.venv_path }}/bin/python"
+          - -c
+          - >-
+            import importlib.metadata as metadata, json;
+            import opencinema.version as open_cinema_version;
+            from wyreplumber import WIREPLUMBER_BUILD_API_FAMILY;
+            from wyreplumber._core import WPConnection;
+            from wyreplumber.runtime import capture_runtime_snapshot;
+            from wyreplumber.runtime import require_orchestration_contract;
+            contract = require_orchestration_contract({{ wyreplumber.required_contract }}, {{ wyreplumber.required_contract }});
+            assert contract.version == {{ wyreplumber.required_contract }};
+            expected = {
+              'open-cinema': '{{ open_cinema_release_manifest.components.open_cinema.version }}',
+              'wyreplumber': '{{ open_cinema_release_manifest.components.wyreplumber.version }}',
+              'camilladsp': '{{ open_cinema_release_manifest.components.pycamilladsp.version }}'};
+            actual = {name: metadata.version(name) for name in expected};
+            assert actual == expected, {'expected': expected, 'actual': actual};
+            assert open_cinema_version.__version__ == expected['open-cinema'];
+            assert WIREPLUMBER_BUILD_API_FAMILY == '{{ open_cinema_release_manifest.contracts.wireplumber_api_family }}';
+            connection = WPConnection();
+            connection.sync();
+            snapshot = capture_runtime_snapshot(connection);
+            assert snapshot.health.state.value == 'connected';
+            assert snapshot.generation > 0;
+            connection.stop();
+            print(json.dumps({'packages': actual,
+            'wirePlumberBuildApiFamily': WIREPLUMBER_BUILD_API_FAMILY,
+            'orchestrationContract': contract.version,
+            'runtimeGeneration': snapshot.generation,
+            'runtimeSequence': snapshot.sequence}, sort_keys=True))
+      args:
+        chdir: "{{ open_cinema.app_path }}"
+      become_user: "{{ open_cinema.user }}"
+      environment: *audio_session_environment
+      register: open_cinema_readiness_wyreplumber
+      changed_when: false
+
+    - name: Require Redis wake-up and projection storage
+      ansible.builtin.command:
+        argv:
+          - redis-cli
+          - -h
+          - 127.0.0.1
+          - ping
+      register: open_cinema_readiness_redis
+      changed_when: false
+      failed_when: open_cinema_readiness_redis.stdout != 'PONG'
+
+    - name: Require the Django application and orchestrator configuration
+      ansible.builtin.command:
+        argv:
+          - "{{ open_cinema.venv_path }}/bin/open-cinema-orchestrator"
+          - --check
+      args:
+        chdir: "{{ open_cinema.app_path }}"
+      become_user: "{{ open_cinema.user }}"
+      environment: *audio_session_environment
+      changed_when: false
+
+    - name: Require the versioned orchestration API route
+      ansible.builtin.command:
+        argv:
+          - "{{ open_cinema.venv_path }}/bin/python"
+          - manage.py
+          - shell
+          - -c
+          - >-
+            from django.urls import resolve;
+            match = resolve('/api/audio/v1/runtime/readiness');
+            assert match.url_name == 'readiness'
+      args:
+        chdir: "{{ open_cinema.app_path }}"
+      become_user: "{{ open_cinema.user }}"
+      changed_when: false
+
+    - name: Require core Open Cinema services
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ item }}"
+      loop:
+        - redis-server.service
+        - open-cinema.service
+        - open-cinema-orchestrator.service
+        - nginx.service
+      register: open_cinema_readiness_services
+      changed_when: false
+
+    - name: Inspect audio-participating system-service identities
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - "{{ item }}"
+          - --property=User
+          - --value
+      loop:
+        - open-cinema.service
+        - open-cinema-orchestrator.service
+        - camilladsp@camilladsp-0.service
+        - pcm-auto-decoder@decoder-0.service
+      register: open_cinema_readiness_audio_service_users
+      changed_when: false
+      failed_when: >-
+        open_cinema_readiness_audio_service_users.rc != 0 or
+        open_cinema_readiness_audio_service_users.stdout != open_cinema.user
+
+    - name: Require exactly one active orchestrator controller process
+      ansible.builtin.command:
+        argv:
+          - pgrep
+          - -u
+          - "{{ open_cinema.user }}"
+          - -x
+          - open-cinema-orc
+      register: open_cinema_readiness_orchestrator_process
+      changed_when: false
+      failed_when: >-
+        open_cinema_readiness_orchestrator_process.rc != 0 or
+        open_cinema_readiness_orchestrator_process.stdout_lines | length != 1
+
+    - name: Read the active controller lock identity
+      ansible.builtin.slurp:
+        src: "{{ open_cinema.orchestrator_lock_path }}"
+      register: open_cinema_readiness_controller_lock
+
+    - name: Require the controller lock to identify the singleton process
+      ansible.builtin.assert:
+        that:
+          - >-
+            (open_cinema_readiness_controller_lock.content | b64decode | from_json).pid | string ==
+            open_cinema_readiness_orchestrator_process.stdout_lines[0]
+        fail_msg: >-
+          The orchestrator process and its exclusive controller lock have
+          different owners.
+
+    - name: Require database schema and desired-to-applied orchestration progress
+      ansible.builtin.command:
+        argv:
+          - "{{ open_cinema.venv_path }}/bin/python"
+          - manage.py
+          - check_orchestration_readiness
+        chdir: "{{ open_cinema.app_path }}"
+      become_user: "{{ open_cinema.user }}"
+      register: open_cinema_readiness_orchestration_state
+      changed_when: false
+
+    - name: Require the configured retention worker and scheduler
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ item }}"
+      loop:
+        - celery.service
+        - celery-beat.service
+      register: open_cinema_readiness_workers
+      changed_when: false
+      when: open_cinema.celery_enabled | bool
+
+    - name: Read the orchestrator's bounded runtime snapshot from Redis
+      ansible.builtin.command:
+        argv:
+          - redis-cli
+          - -h
+          - 127.0.0.1
+          - --raw
+          - GET
+          - "{{ open_cinema.runtime_redis_key }}"
+      register: open_cinema_readiness_runtime_snapshot
+      changed_when: false
+      failed_when: open_cinema_readiness_runtime_snapshot.stdout | length == 0
+
+    - name: Decode the orchestrator runtime snapshot
+      ansible.builtin.set_fact:
+        open_cinema_runtime_snapshot: "{{ open_cinema_readiness_runtime_snapshot.stdout | from_json }}"
+
+    - name: Require a coherent current orchestrator snapshot
+      ansible.builtin.assert:
+        that:
+          - open_cinema_runtime_snapshot.schemaVersion == 1
+          - open_cinema_runtime_snapshot.worldVersion | int > 0
+          - open_cinema_runtime_snapshot.runtimeGeneration | int > 0
+          - open_cinema_runtime_snapshot.runtimeSequence | int >= 0
+          - open_cinema_runtime_snapshot.connection.state == 'connected'
+        fail_msg: >-
+          The dedicated orchestrator is active but did not publish a coherent,
+          connected runtime snapshot to Redis.
+
+    - name: Probe correlated native PipeWire processor resources
+      ansible.builtin.command:
+        argv:
+          - "{{ open_cinema.venv_path }}/bin/python"
+          - manage.py
+          - shell
+          - --no-imports
+          - -c
+          - >-
+            import json;
+            from api.models import RuntimeProjection;
+            resources = [item.payload for item in RuntimeProjection.objects.filter(is_current=True, projection_type='managed-resource').order_by('subject_key')];
+            health = [item.payload for item in RuntimeProjection.objects.filter(is_current=True, projection_type='processor-health').order_by('subject_key')];
+            assert all(item.get('ready') is True and item.get('error') is None for item in resources), resources;
+            assert all(item.get('ready') is True and item.get('health') == 'healthy' for item in health), health;
+            identities = [item.get('identity', {}) for item in resources];
+            assert all(identity.get('processorKind') in {'camilladsp', 'adaptive-decoder'} for identity in identities), identities;
+            assert all((identity.get('nodeName', '').startswith('opencinema.camilladsp.') if identity.get('processorKind') == 'camilladsp' else identity.get('nodeName', '').startswith('open-cinema.decoder.')) for identity in identities), identities;
+            print(json.dumps({'resources': identities, 'processorHealth': health}, sort_keys=True))
+      args:
+        chdir: "{{ open_cinema.app_path }}"
+      become_user: "{{ open_cinema.user }}"
+      environment: *audio_session_environment
+      register: open_cinema_readiness_native_processor_resources
+      changed_when: false
+
+    - name: Require the PipeWire and WirePlumber user services
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - --user
+          - is-active
+          - "{{ item }}"
+      become_user: "{{ open_cinema.user }}"
+      environment: *audio_session_environment
+      loop:
+        - pipewire.service
+        - wireplumber.service
+      register: open_cinema_readiness_audio_services
+      changed_when: false
+
+    - name: Require distribution PipeWire and WirePlumber files to remain unmodified
+      ansible.builtin.command:
+        argv:
+          - dpkg
+          - --verify
+          - pipewire
+          - wireplumber
+      register: open_cinema_readiness_vendor_audio_files
+      changed_when: false
+      failed_when: >-
+        open_cinema_readiness_vendor_audio_files.rc != 0 or
+        open_cinema_readiness_vendor_audio_files.stdout | trim | length > 0
+
+    - name: Require competing login sessions to have no audio runtime
+      ansible.builtin.command:
+        argv:
+          - pgrep
+          - -u
+          - "{{ item.0 }}"
+          - -x
+          - "{{ item.1 }}"
+      loop: >-
+        {{ (audio_service.competing_session_users | default([])) |
+           product(['pipewire', 'wireplumber']) | list }}
+      register: open_cinema_readiness_competing_audio_processes
+      changed_when: false
+      failed_when: open_cinema_readiness_competing_audio_processes.rc != 1
+      when:
+        - audio_service.exclusive | default(true) | bool
+        - item.0 != open_cinema.user
+
+    - name: Verify the pinned CamillaDSP binary
+      ansible.builtin.command:
+        argv:
+          - "{{ camilladsp.install_path }}"
+          - --version
+      register: open_cinema_readiness_camilladsp
+      changed_when: false
+      failed_when: >-
+        open_cinema_release_manifest.components.camilladsp.version | replace('v', '') not in
+        open_cinema_readiness_camilladsp.stdout
+
+    - name: Verify the installed CamillaDSP control client contract
+      ansible.builtin.command:
+        argv:
+          - "{{ open_cinema.venv_path }}/bin/python"
+          - -c
+          - >-
+            import camilladsp;
+            assert callable(camilladsp.CamillaClient);
+            print('CamillaDSP control client available')
+      become_user: "{{ open_cinema.user }}"
+      register: open_cinema_readiness_camilladsp_control
+      changed_when: false
+
+    - name: Find generated CamillaDSP configurations
+      ansible.builtin.find:
+        paths: "{{ camilladsp.runtime_dir }}"
+        patterns: '*.yml'
+        file_type: file
+      register: open_cinema_readiness_camilladsp_configs
+
+    - name: Validate every generated CamillaDSP configuration with the engine
+      ansible.builtin.command:
+        argv:
+          - "{{ camilladsp.install_path }}"
+          - --check
+          - "{{ item.path }}"
+      loop: "{{ open_cinema_readiness_camilladsp_configs.files }}"
+      register: open_cinema_readiness_camilladsp_config_checks
+      changed_when: false
+
+    - name: Verify the pinned decoder binary
+      ansible.builtin.command:
+        argv:
+          - "{{ pcm_auto_decoder.install_path }}"
+          - --version
+      register: open_cinema_readiness_decoder
+      changed_when: false
+      failed_when: >-
+        open_cinema_release_manifest.components.pcm_auto_decoder.version | replace('v', '') not in
+        open_cinema_readiness_decoder.stdout
+      when: pcm_auto_decoder is defined
+
+    - name: Verify the installed decoder exposes the managed status protocol
+      ansible.builtin.command:
+        argv:
+          - "{{ pcm_auto_decoder.install_path }}"
+          - --help
+      register: open_cinema_readiness_decoder_help
+      changed_when: false
+      failed_when: >-
+        '--status-socket' not in open_cinema_readiness_decoder_help.stdout or
+        '--instance-id' not in open_cinema_readiness_decoder_help.stdout or
+        '--capture-layout' not in open_cinema_readiness_decoder_help.stdout or
+        '--output-layout' not in open_cinema_readiness_decoder_help.stdout or
+        '--output-rate' not in open_cinema_readiness_decoder_help.stdout or
+        '--output-format' not in open_cinema_readiness_decoder_help.stdout or
+        open_cinema_release_manifest.contracts.decoder_status_protocol | int != 2 or
+        open_cinema_release_manifest.contracts.decoder_output !=
+        'one-stable-adaptive-native-pipewire-pcm-output'
+      when: pcm_auto_decoder is defined
+
+    - name: Verify exact installed management and on-box UI identities
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - >-
+            import json, pathlib, sys;
+            expected_version = sys.argv[1];
+            records = [json.loads(pathlib.Path(path).read_text()) for path in sys.argv[2:]];
+            expected = [('admin', expected_version), ('on-box', expected_version)];
+            actual = [(record.get('application'), record.get('version')) for record in records];
+            assert all(record.get('schemaVersion') == 1 and record.get('project') == 'open-cinema-ui' for record in records), records;
+            assert actual == expected, {'expected': expected, 'actual': actual};
+            print(json.dumps(records, sort_keys=True))
+          - "{{ open_cinema_release_manifest.components.management_ui.version }}"
+          - "{{ open_cinema_ui.admin.web_root }}/open-cinema-release.json"
+          - "{{ open_cinema_ui.user_ui.web_root }}/open-cinema-release.json"
+      register: open_cinema_readiness_ui_identities
+      changed_when: false
+
+    - name: Require the API proxy health endpoint
+      ansible.builtin.uri:
+        url: http://127.0.0.1/health
+        status_code: 200
+        return_content: true
+      register: open_cinema_readiness_http
+      failed_when: >-
+        open_cinema_readiness_http.status != 200 or
+        open_cinema_readiness_http.content | trim != 'healthy'
+
+    - name: Inspect the effective nginx management API boundary
+      ansible.builtin.command:
+        argv:
+          - nginx
+          - -T
+      register: open_cinema_readiness_nginx_configuration
+      changed_when: false
+
+    - name: Require every configured API source and the default deny rule
+      ansible.builtin.assert:
+        that:
+          - >-
+            ('allow ' ~ item ~ ';') in
+            open_cinema_readiness_nginx_configuration.stdout
+          - >-
+            'deny all;' in open_cinema_readiness_nginx_configuration.stdout
+      loop: "{{ open_cinema_management_api_networks }}"
+
+    - name: Require both web interfaces through the appliance network address
+      ansible.builtin.uri:
+        url: "{{ open_cinema_appliance_base_url }}{{ item }}"
+        status_code: 200
+        return_content: true
+      loop:
+        - /admin/
+        - /ui/
+      register: open_cinema_readiness_web_interfaces
+
+    - name: Discover static assets referenced by both web interfaces
+      ansible.builtin.set_fact:
+        open_cinema_readiness_static_assets: >-
+          {{ (open_cinema_readiness_web_interfaces.results |
+              map(attribute='content') | join('\n')) |
+             regex_findall('(?:src|href)="([^"]+\.(?:js|css|svg))"') |
+             unique | list }}
+
+    - name: Require referenced management and on-box static assets
+      ansible.builtin.uri:
+        url: "{{ open_cinema_appliance_base_url }}{{ item }}"
+        status_code: 200
+      loop: "{{ open_cinema_readiness_static_assets }}"
+      register: open_cinema_readiness_static_asset_responses
+      failed_when: >-
+        open_cinema_readiness_static_assets | length == 0 or
+        open_cinema_readiness_static_asset_responses.status != 200
+
+    - name: Reject anonymous access to administrative diagnostics
+      ansible.builtin.uri:
+        url: >-
+          {{ open_cinema_appliance_base_url }}/api/audio/v1/runtime/diagnostics?limit=1
+        status_code: 403
+        headers:
+          Open-Cinema-API-Version: "1"
+      register: open_cinema_readiness_anonymous_diagnostics
+
+    - name: Bootstrap the management session and CSRF cookie
+      ansible.builtin.uri:
+        url: "{{ open_cinema_appliance_base_url }}/api/auth/session"
+        status_code: 200
+        return_content: true
+      register: open_cinema_readiness_session_bootstrap
+      failed_when: >-
+        open_cinema_readiness_session_bootstrap.status != 200 or
+        open_cinema_readiness_session_bootstrap.json.authenticated | bool or
+        'csrftoken' not in open_cinema_readiness_session_bootstrap.cookies
+
+    - name: Authenticate the native management session
+      ansible.builtin.uri:
+        url: "{{ open_cinema_appliance_base_url }}/api/auth/login"
+        method: POST
+        status_code: 200
+        body_format: json
+        body:
+          username: "{{ open_cinema.default_admin.username }}"
+          password: "{{ open_cinema.default_admin.password }}"
+          remember: false
+        headers:
+          Cookie: "{{ open_cinema_readiness_session_bootstrap.cookies_string }}"
+          X-CSRFToken: >-
+            {{ open_cinema_readiness_session_bootstrap.cookies.csrftoken }}
+      register: open_cinema_readiness_login
+      no_log: true
+
+    - name: Require versioned API schema metadata through nginx
+      ansible.builtin.uri:
+        url: "{{ open_cinema_appliance_base_url }}/api/audio/v1/schema"
+        status_code: 200
+        return_content: true
+        headers: &authenticated_api_headers
+          Cookie: "{{ open_cinema_readiness_login.cookies_string }}"
+          Open-Cinema-API-Version: "1"
+      register: open_cinema_readiness_schema_metadata
+      failed_when: >-
+        open_cinema_readiness_schema_metadata.status != 200 or
+        open_cinema_readiness_schema_metadata.json.apiVersion | int != 1 or
+        open_cinema_readiness_schema_metadata.json.schemaVersion | int != 1 or
+        open_cinema_readiness_schema_metadata.json.conventions.eventResumption.requestHeader != 'Last-Event-ID' or
+        open_cinema_readiness_schema_metadata.json.conventions.eventResumption.gapEvent != 'snapshot'
+
+    - name: Require authorized administrative diagnostics through nginx
+      ansible.builtin.uri:
+        url: >-
+          {{ open_cinema_appliance_base_url }}/api/audio/v1/runtime/diagnostics?limit=1
+        status_code: 200
+        return_content: true
+        headers: *authenticated_api_headers
+      register: open_cinema_readiness_diagnostics_api
+      failed_when: >-
+        open_cinema_readiness_diagnostics_api.status != 200 or
+        open_cinema_readiness_diagnostics_api.json.schemaVersion | int != 1 or
+        not open_cinema_readiness_diagnostics_api.json.administrative | bool
+
+    - name: Select an event stream that can prove cursor-gap recovery
+      ansible.builtin.command:
+        argv:
+          - "{{ open_cinema.venv_path }}/bin/python"
+          - manage.py
+          - shell
+          - -c
+          - >-
+            from django.db.models import Min;
+            from api.models import GraphDefinition;
+            graph = GraphDefinition.objects.annotate(first_event=Min('orchestration_events__sequence')).filter(first_event__gt=1).order_by('first_event').first();
+            print(graph.pk if graph else '')
+      args:
+        chdir: "{{ open_cinema.app_path }}"
+      become_user: "{{ open_cinema.user }}"
+      register: open_cinema_readiness_sse_graph
+      changed_when: false
+      failed_when: >-
+        open_cinema_readiness_sse_graph.rc != 0 or
+        open_cinema_readiness_sse_graph.stdout_lines | last | length == 0
+
+    - name: Verify authenticated SSE connection and cursor-gap recovery
+      ansible.builtin.uri:
+        url: >-
+          {{ open_cinema_appliance_base_url }}/api/audio/v1/events?graphId={{ open_cinema_readiness_sse_graph.stdout_lines | last }}&after=0&follow=false
+        status_code: 200
+        return_content: true
+        timeout: 15
+        headers: *authenticated_api_headers
+      register: open_cinema_readiness_sse
+      failed_when: >-
+        open_cinema_readiness_sse.status != 200 or
+        not open_cinema_readiness_sse.content_type.startswith('text/event-stream') or
+        not open_cinema_readiness_sse.open_cinema_event_gap | bool or
+        'retry: 2000' not in open_cinema_readiness_sse.content or
+        'event: snapshot' not in open_cinema_readiness_sse.content or
+        '"replaceLocalState":true' not in open_cinema_readiness_sse.content
+
+    - name: Close the readiness management session
+      ansible.builtin.uri:
+        url: "{{ open_cinema_appliance_base_url }}/api/auth/logout"
+        method: POST
+        status_code: 200
+        body_format: json
+        body: {}
+        headers:
+          Cookie: "{{ open_cinema_readiness_login.cookies_string }}"
+          X-CSRFToken: "{{ open_cinema_readiness_login.cookies.csrftoken }}"
+      register: open_cinema_readiness_logout
+      failed_when: >-
+        open_cinema_readiness_logout.status != 200 or
+        open_cinema_readiness_logout.json.authenticated | bool
+
+    - name: Verify bounded control-plane persistence and memory policy
+      ansible.builtin.include_tasks: control-plane-limits.yml
+
+    - name: Verify deployment ownership and permission boundaries
+      ansible.builtin.include_tasks: permissions.yml
+
+    - name: Verify optional hardware nodes selected for this appliance
+      ansible.builtin.assert:
+        that:
+          - item in open_cinema_readiness_wpctl.stdout
+        fail_msg: "Expected hardware node pattern {{ item }} was not found in wpctl status."
+      loop: "{{ readiness.expected_hardware_node_patterns }}"
+      when: readiness.verify_hardware_nodes | bool
+
+  rescue:
+    - name: Name the failed aggregate readiness result
+      ansible.builtin.set_fact:
+        open_cinema_readiness_failure_id: >-
+          {{ ansible_date_time.iso8601_basic_short }}-readiness
+        open_cinema_readiness_failures: >-
+          {%- set failures = namespace(items=[]) -%}
+          {%- if ansible_failed_result.results is defined -%}
+            {%- for result in ansible_failed_result.results -%}
+              {%- if result.failed | default(false) | bool -%}
+                {%- set _ = failures.items.append({
+                  'name': (ansible_failed_task.name |
+                           default('unknown readiness check')) ~
+                          ' (' ~ (result.item | default('item') | string) ~ ')',
+                  'message': result.msg |
+                             default(result.stderr |
+                             default(result | to_json))
+                }) -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+          {%- if failures.items | length == 0 -%}
+            {%- set _ = failures.items.append({
+              'name': ansible_failed_task.name |
+                      default('unknown readiness check'),
+              'message': ansible_failed_result.msg |
+                         default(ansible_failed_result.stderr |
+                         default(ansible_failed_result | to_json))
+            }) -%}
+          {%- endif -%}
+          {{ failures.items }}
+        open_cinema_readiness_service_states: {}
+
+    - name: Probe every coordinated service after a readiness failure
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ item }}"
+      loop:
+        - redis-server.service
+        - open-cinema.service
+        - open-cinema-orchestrator.service
+        - celery.service
+        - celery-beat.service
+        - nginx.service
+      register: open_cinema_readiness_failure_services
+      changed_when: false
+      failed_when: false
+
+    - name: Correlate every failed service probe
+      ansible.builtin.set_fact:
+        open_cinema_readiness_service_states: >-
+          {{ open_cinema_readiness_service_states |
+             combine({item.item: item.stdout | default('unavailable')}) }}
+        open_cinema_readiness_failures: >-
+          {{ open_cinema_readiness_failures +
+             ([{'name': 'service ' ~ item.item,
+                'message': item.stderr | default(item.stdout | default('inactive'))}]
+              if item.rc | default(1) | int != 0 else []) }}
+      loop: "{{ open_cinema_readiness_failure_services.results }}"
+
+    - name: Probe WirePlumber after a readiness failure
+      ansible.builtin.command:
+        argv:
+          - wpctl
+          - status
+      become_user: "{{ open_cinema.user }}"
+      environment: *audio_session_environment
+      register: open_cinema_readiness_failure_wpctl
+      changed_when: false
+      failed_when: false
+
+    - name: Probe Redis after a readiness failure
+      ansible.builtin.command:
+        argv:
+          - redis-cli
+          - -h
+          - 127.0.0.1
+          - ping
+      register: open_cinema_readiness_failure_redis
+      changed_when: false
+      failed_when: false
+
+    - name: Probe persisted orchestration after a readiness failure
+      ansible.builtin.command:
+        argv:
+          - "{{ open_cinema.venv_path }}/bin/python"
+          - manage.py
+          - check_orchestration_readiness
+      args:
+        chdir: "{{ open_cinema.app_path }}"
+      become_user: "{{ open_cinema.user }}"
+      register: open_cinema_readiness_failure_orchestration
+      changed_when: false
+      failed_when: false
+
+    - name: Probe the runtime projection after a readiness failure
+      ansible.builtin.command:
+        argv:
+          - redis-cli
+          - -h
+          - 127.0.0.1
+          - --raw
+          - GET
+          - "{{ open_cinema.runtime_redis_key }}"
+      register: open_cinema_readiness_failure_runtime
+      changed_when: false
+      failed_when: false
+
+    - name: Probe API health after a readiness failure
+      ansible.builtin.uri:
+        url: http://127.0.0.1/health
+        status_code: 200
+        return_content: true
+      register: open_cinema_readiness_failure_http
+      failed_when: false
+
+    - name: Correlate every failed follow-up readiness probe
+      ansible.builtin.set_fact:
+        open_cinema_readiness_failures: >-
+          {{ open_cinema_readiness_failures +
+             ([{'name': item.name, 'message': item.message}]
+              if item.failed | bool else []) }}
+      loop:
+        - name: WirePlumber graph
+          failed: "{{ open_cinema_readiness_failure_wpctl.rc | int != 0 }}"
+          message: >-
+            {{ open_cinema_readiness_failure_wpctl.stderr |
+               default('wpctl status failed') }}
+        - name: Redis
+          failed: >-
+            {{ open_cinema_readiness_failure_redis.rc | int != 0 or
+               open_cinema_readiness_failure_redis.stdout != 'PONG' }}
+          message: >-
+            {{ open_cinema_readiness_failure_redis.stderr |
+               default(open_cinema_readiness_failure_redis.stdout) }}
+        - name: persisted orchestration
+          failed: "{{ open_cinema_readiness_failure_orchestration.rc | int != 0 }}"
+          message: >-
+            {{ open_cinema_readiness_failure_orchestration.stderr |
+               default(open_cinema_readiness_failure_orchestration.stdout) }}
+        - name: runtime projection
+          failed: >-
+            {{ open_cinema_readiness_failure_runtime.rc | int != 0 or
+               open_cinema_readiness_failure_runtime.stdout | length == 0 }}
+          message: >-
+            {{ open_cinema_readiness_failure_runtime.stderr |
+               default('runtime projection is unavailable') }}
+        - name: API health
+          failed: >-
+            {{ open_cinema_readiness_failure_http.status | default(-1) | int != 200 or
+               open_cinema_readiness_failure_http.content | default('') | trim != 'healthy' }}
+          message: >-
+            HTTP {{ open_cinema_readiness_failure_http.status | default('unavailable') }}:
+            {{ open_cinema_readiness_failure_http.msg |
+               default(open_cinema_readiness_failure_http.content | default('')) }}
+
+    - name: Capture coordinated service logs after a readiness failure
+      ansible.builtin.command:
+        argv:
+          - journalctl
+          - --no-pager
+          - --since=-30min
+          - --unit=open-cinema.service
+          - --unit=open-cinema-orchestrator.service
+          - --unit=redis-server.service
+          - --unit=nginx.service
+          - "_UID={{ open_cinema_uid }}"
+      register: open_cinema_readiness_logs
+      changed_when: false
+      failed_when: false
+
+    - name: Retain readiness diagnostics
+      ansible.builtin.copy:
+        content: "{{ open_cinema_readiness_logs.stdout | default('journal unavailable') }}\n"
+        dest: "{{ open_cinema.diagnostics_root }}/{{ open_cinema_readiness_failure_id }}.log"
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+
+    - name: Build the correlated failed readiness result
+      ansible.builtin.set_fact:
+        open_cinema_readiness_result:
+          schemaVersion: 1
+          status: failed
+          releaseId: "{{ open_cinema_release_manifest.release_id }}"
+          releaseManifestSha256: "{{ open_cinema_release_manifest_digest }}"
+          runtimeProfile: "{{ open_cinema_release_manifest.runtime_profile }}"
+          rollbackBundle: "{{ open_cinema_rollback_id }}"
+          components: "{{ open_cinema_release_manifest.components }}"
+          inputIdentity: "{{ open_cinema_effective_deployment_input_identity }}"
+          failedChecks: "{{ open_cinema_readiness_failures }}"
+          serviceLogs: >-
+            {{ open_cinema.diagnostics_root }}/{{ open_cinema_readiness_failure_id }}.log
+          runtimeFacts:
+            serviceStates: "{{ open_cinema_readiness_service_states }}"
+            wirePlumberStatus: >-
+              {{ open_cinema_readiness_failure_wpctl.stdout |
+                 default(open_cinema_readiness_failure_wpctl.stderr | default('unavailable')) }}
+            redis: >-
+              {{ open_cinema_readiness_failure_redis.stdout |
+                 default(open_cinema_readiness_failure_redis.stderr | default('unavailable')) }}
+            orchestration: >-
+              {{ open_cinema_readiness_failure_orchestration.stdout |
+                 default(open_cinema_readiness_failure_orchestration.stderr | default('unavailable')) }}
+            runtimeProjection: >-
+              {{ open_cinema_readiness_failure_runtime.stdout |
+                 default(open_cinema_readiness_failure_runtime.stderr | default('unavailable')) }}
+            apiHealthStatus: "{{ open_cinema_readiness_failure_http.status | default(-1) }}"
+
+    - name: Retain the timestamped failed readiness result
+      ansible.builtin.copy:
+        content: "{{ open_cinema_readiness_result | to_nice_json }}\n"
+        dest: >-
+          {{ open_cinema.diagnostics_root }}/{{ open_cinema_readiness_failure_id }}.json
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+
+    - name: Publish the latest failed end-of-play readiness result
+      ansible.builtin.copy:
+        content: "{{ open_cinema_readiness_result | to_nice_json }}\n"
+        dest: "{{ open_cinema.readiness_result_path }}"
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0640"
+
+    - name: Stop deployment without deleting the previous rollback release
+      ansible.builtin.fail:
+        msg: >-
+          Coordinated readiness failed. Deployment stopped; diagnostics and the
+          selected coordinated rollback bundle were retained for recovery.
+
+- name: Correlate successful coordinated service states
+  ansible.builtin.set_fact:
+    open_cinema_readiness_service_states: >-
+      {{ open_cinema_readiness_service_states | default({}) |
+         combine({item.item: item.stdout}) }}
+  loop: >-
+    {{ open_cinema_readiness_services.results +
+       (open_cinema_readiness_workers.results |
+        default([])) +
+       open_cinema_readiness_audio_services.results }}
+
+- name: Build the aggregate successful end-of-play readiness result
+  ansible.builtin.set_fact:
+    open_cinema_readiness_result:
+      schemaVersion: 1
+      status: passed
+      releaseId: "{{ open_cinema_release_manifest.release_id }}"
+      releaseManifestSha256: "{{ open_cinema_release_manifest_digest }}"
+      runtimeProfile: "{{ open_cinema_release_manifest.runtime_profile }}"
+      rollbackBundle: "{{ open_cinema_rollback_id }}"
+      components: "{{ open_cinema_release_manifest.components }}"
+      inputIdentity: "{{ open_cinema_effective_deployment_input_identity }}"
+      checks:
+        pipeWireAndWirePlumber: passed
+        nonRootAudioSessionAccess: passed
+        wyrePlumberContract: passed
+        redisAndDatabase: passed
+        orchestratorSingleton: passed
+        desiredToAppliedProgress: passed
+        workers: passed
+        camillaDsp: passed
+        pcmAutoDecoder: passed
+        apiAndReverseProxy: passed
+        managementInterfaces: passed
+        boundedControlPlaneState: passed
+        ownershipAndPermissions: passed
+        selectedHardware: passed
+      failedChecks: []
+      serviceLogs: null
+      runtimeFacts:
+        serviceStates: "{{ open_cinema_readiness_service_states }}"
+        orchestration: >-
+          {{ open_cinema_readiness_orchestration_state.stdout_lines |
+             last | from_json }}
+        runtimeProjection:
+          connectionState: "{{ open_cinema_runtime_snapshot.connection.state }}"
+          worldVersion: "{{ open_cinema_runtime_snapshot.worldVersion }}"
+          runtimeGeneration: "{{ open_cinema_runtime_snapshot.runtimeGeneration }}"
+          runtimeSequence: "{{ open_cinema_runtime_snapshot.runtimeSequence }}"
+        controllerLock: >-
+          {{ open_cinema_readiness_controller_lock.content |
+             b64decode | from_json }}
+        camillaDspVersion: "{{ open_cinema_readiness_camilladsp.stdout | trim }}"
+        camillaDspConfigurationCount: >-
+          {{ open_cinema_readiness_camilladsp_configs.matched }}
+        decoderVersion: >-
+          {{ open_cinema_readiness_decoder.stdout | default('not configured') | trim }}
+        apiHealthStatus: "{{ open_cinema_readiness_http.status }}"
+        applianceNetworkUrl: "{{ open_cinema_appliance_base_url }}"
+        staticAssetCount: "{{ open_cinema_readiness_static_assets | length }}"
+        apiSchemaVersion: "{{ open_cinema_readiness_schema_metadata.json.schemaVersion }}"
+        diagnosticsAuthorized: >-
+          {{ open_cinema_readiness_diagnostics_api.json.administrative | bool }}
+        sseGapRecovery: >-
+          {{ open_cinema_readiness_sse.open_cinema_event_gap | bool }}
+
+- name: Publish the aggregate end-of-play readiness result
+  ansible.builtin.copy:
+    content: "{{ open_cinema_readiness_result | to_nice_json }}\n"
+    dest: "{{ open_cinema.readiness_result_path }}"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0640"
+
+- name: Record successful readiness without closing rollback
+  ansible.builtin.copy:
+    content: |
+      schema_version: 1
+      status: "{{ open_cinema_release_manifest.status }}"
+      readiness: passed
+      release_id: "{{ open_cinema_release_manifest.release_id }}"
+      release_manifest_sha256: "{{ open_cinema_release_manifest_digest }}"
+      runtime_profile: "{{ open_cinema_release_manifest.runtime_profile }}"
+      rollback_bundle: "{{ open_cinema_rollback_id }}"
+      rollback_window_closed: false
+    dest: "{{ open_cinema.rollback_root }}/open-readiness.yml"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0600"
+  when: not open_cinema_close_rollback_window | bool
+
+- name: Record the installed coordinated component identity
+  ansible.builtin.copy:
+    content: |
+      schema_version: 1
+      host: "{{ ansible_facts['hostname'] }}"
+      release_id: "{{ open_cinema_release_manifest.release_id }}"
+      release_status: "{{ open_cinema_release_manifest.status }}"
+      promotable: {{ open_cinema_release_manifest.promotable | bool | lower }}
+      input_mode: "{{ open_cinema_effective_deployment_input_identity.inputMode }}"
+      release_install: {{ open_cinema_effective_deployment_input_identity.release | bool | lower }}
+      mutable_install: {{ open_cinema_effective_deployment_input_identity.mutable | bool | lower }}
+      release_manifest_path: "{{ release_manifest.install_path }}"
+      release_manifest_sha256: "{{ open_cinema_release_manifest_digest }}"
+      runtime_profile: "{{ open_cinema_release_manifest.runtime_profile }}"
+      rollback_bundle: "{{ open_cinema_rollback_id }}"
+      components:
+      {{ open_cinema_release_manifest.components | to_nice_yaml(indent=2) | indent(2, true) }}
+      input_identity:
+      {{ open_cinema_effective_deployment_input_identity | to_nice_yaml(indent=2) | indent(2, true) }}
+      installed_probes:
+        python_and_wyreplumber: {{ open_cinema_readiness_wyreplumber.stdout | from_json | to_json }}
+        camilladsp: {{ open_cinema_readiness_camilladsp.stdout | trim | to_json }}
+        pcm_auto_decoder: {{ open_cinema_readiness_decoder.stdout | default('not configured') | trim | to_json }}
+        user_interfaces: {{ open_cinema_readiness_ui_identities.stdout | from_json | to_json }}
+        native_pipewire_resources: {{ open_cinema_readiness_native_processor_resources.stdout_lines | last | from_json | to_json }}
+    dest: "{{ release_manifest.installed_identity_path }}"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0640"
+
+- name: Require the one-release rollback policy
+  ansible.builtin.assert:
+    that:
+      - open_cinema.rollback_releases_to_keep | int == 1
+      - open_cinema_rollback_id is defined
+    fail_msg: >-
+      A successful coordinated release must preserve exactly one known rollback
+      bundle created by this deployment.
+  when: open_cinema_close_rollback_window | bool
+
+- name: Find coordinated rollback release bundles after successful readiness
+  ansible.builtin.find:
+    paths: "{{ open_cinema.rollback_root }}"
+    file_type: directory
+    recurse: false
+  register: open_cinema_rollback_release_directories
+  when: open_cinema_close_rollback_window | bool
+
+- name: Identify rollback windows closed by this release
+  ansible.builtin.set_fact:
+    open_cinema_closed_rollback_paths: >-
+      {{ open_cinema_rollback_release_directories.files
+         | map(attribute='path')
+         | reject('equalto', open_cinema.rollback_root ~ '/' ~ open_cinema_rollback_id)
+         | sort
+         | list }}
+  when: open_cinema_close_rollback_window | bool
+
+- name: Record the successful one-release rollback boundary
+  ansible.builtin.copy:
+    content: |
+      schema_version: 1
+      updated_at: "{{ ansible_date_time.iso8601 }}"
+      retained_release_count: 1
+      open_bundle: "{{ open_cinema_rollback_id }}"
+      previous_windows_closed_at: "{{ ansible_date_time.iso8601 }}"
+      closed_bundle_paths: {{ open_cinema_closed_rollback_paths | to_json }}
+    dest: "{{ open_cinema.rollback_root }}/rollback-window.yml"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0600"
+  when: open_cinema_close_rollback_window | bool
+
+- name: Remove rollback bundles older than the accepted previous release
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ open_cinema_closed_rollback_paths }}"
+  when:
+    - open_cinema_close_rollback_window | bool
+    - open_cinema_closed_rollback_paths | length > 0
+
+- name: Verify exactly one rollback release remains
+  ansible.builtin.find:
+    paths: "{{ open_cinema.rollback_root }}"
+    file_type: directory
+    recurse: false
+  register: open_cinema_retained_rollback_releases
+  failed_when: >-
+    open_cinema_retained_rollback_releases.matched != 1 or
+    (open_cinema_retained_rollback_releases.files | map(attribute='path') | list) !=
+    [open_cinema.rollback_root ~ '/' ~ open_cinema_rollback_id]
+  when: open_cinema_close_rollback_window | bool

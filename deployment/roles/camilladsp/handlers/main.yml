@@ -1,6 +1,4 @@
 ---
-- name: Restart camilladsp
+- name: Reload systemd units
   ansible.builtin.systemd:
-    name: camilladsp
-    state: restarted
     daemon_reload: true

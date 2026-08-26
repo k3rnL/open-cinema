@@ -1,0 +1,153 @@
+---
+- name: Inspect fixed deployment ownership and permission boundaries
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+  loop:
+    - path: "{{ open_cinema.app_path }}/.env"
+      mode: "0600"
+      owner: "{{ open_cinema.user }}"
+      group: "{{ open_cinema.group }}"
+    - path: "{{ open_cinema.django.database }}"
+      mode: "0600"
+      owner: "{{ open_cinema.user }}"
+      group: "{{ open_cinema.group }}"
+    - path: "{{ audio_service.runtime_dir }}"
+      mode: "0700"
+      owner: "{{ open_cinema.user }}"
+      group: "{{ open_cinema.group }}"
+    - path: "{{ audio_service.pipewire_socket }}"
+      mode: "0666"
+      owner: "{{ open_cinema.user }}"
+      group: "{{ open_cinema.group }}"
+    - path: /run/open-cinema
+      mode: "0750"
+      owner: "{{ open_cinema.user }}"
+      group: "{{ open_cinema.group }}"
+    - path: "{{ camilladsp.runtime_dir }}"
+      mode: "0750"
+      owner: "{{ open_cinema.user }}"
+      group: "{{ open_cinema.group }}"
+    - path: "{{ pcm_auto_decoder.runtime_dir }}"
+      mode: "0750"
+      owner: "{{ open_cinema.user }}"
+      group: "{{ open_cinema.group }}"
+    - path: "{{ open_cinema.diagnostics_root }}"
+      mode: "0750"
+      owner: "{{ open_cinema.user }}"
+      group: "{{ open_cinema.group }}"
+    - path: "{{ open_cinema.rollback_root }}"
+      mode: "0750"
+      owner: "{{ open_cinema.user }}"
+      group: "{{ open_cinema.group }}"
+    - path: "{{ release_manifest.install_path }}"
+      mode: "0644"
+      owner: root
+      group: root
+    - path: /etc/systemd/system/open-cinema.service
+      mode: "0644"
+      owner: root
+      group: root
+    - path: /etc/systemd/system/open-cinema-orchestrator.service
+      mode: "0644"
+      owner: root
+      group: root
+    - path: /etc/systemd/system/celery.service
+      mode: "0644"
+      owner: root
+      group: root
+    - path: /etc/systemd/system/celery-beat.service
+      mode: "0644"
+      owner: root
+      group: root
+    - path: /etc/systemd/system/camilladsp@.service
+      mode: "0644"
+      owner: root
+      group: root
+    - path: /etc/systemd/system/pcm-auto-decoder@.service
+      mode: "0644"
+      owner: root
+      group: root
+    - path: "{{ open_cinema_ui.admin.web_root }}"
+      mode: "0755"
+      owner: www-data
+      group: www-data
+    - path: "{{ open_cinema_ui.user_ui.web_root }}"
+      mode: "0755"
+      owner: www-data
+      group: www-data
+  register: open_cinema_readiness_permission_paths
+
+- name: Require every fixed deployment permission boundary
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.mode == item.item.mode
+      - item.stat.pw_name == item.item.owner
+      - item.stat.gr_name == item.item.group
+    fail_msg: >-
+      {{ item.item.path }} must be {{ item.item.owner }}:{{ item.item.group }}
+      mode {{ item.item.mode }}, observed
+      {{ item.stat.pw_name | default('missing') }}:{{ item.stat.gr_name | default('missing') }}
+      mode {{ item.stat.mode | default('missing') }}.
+  loop: "{{ open_cinema_readiness_permission_paths.results }}"
+
+- name: Find retained rollback files and directories for permission validation
+  ansible.builtin.find:
+    paths: "{{ open_cinema.rollback_root }}"
+    recurse: true
+    file_type: "{{ item }}"
+  loop:
+    - file
+    - directory
+  register: open_cinema_readiness_rollback_paths
+
+- name: Require private retained rollback files
+  ansible.builtin.assert:
+    that:
+      - item.pw_name == open_cinema.user
+      - item.gr_name == open_cinema.group
+      - item.mode == '0600'
+  loop: "{{ open_cinema_readiness_rollback_paths.results[0].files }}"
+
+- name: Require private retained rollback directories
+  ansible.builtin.assert:
+    that:
+      - item.pw_name == open_cinema.user
+      - item.gr_name == open_cinema.group
+      - item.mode == '0750'
+  loop: "{{ open_cinema_readiness_rollback_paths.results[1].files }}"
+
+- name: Find diagnostic files for permission validation
+  ansible.builtin.find:
+    paths: "{{ open_cinema.diagnostics_root }}"
+    recurse: true
+    file_type: file
+  register: open_cinema_readiness_diagnostic_files
+
+- name: Require private diagnostic files
+  ansible.builtin.assert:
+    that:
+      - item.pw_name == open_cinema.user
+      - item.gr_name == open_cinema.group
+      - item.mode in ['0600', '0640']
+  loop: "{{ open_cinema_readiness_diagnostic_files.files }}"
+
+- name: Find managed processor runtime entries for permission validation
+  ansible.builtin.find:
+    paths:
+      - "{{ camilladsp.runtime_dir }}"
+      - "{{ pcm_auto_decoder.runtime_dir }}"
+    recurse: false
+    file_type: any
+  register: open_cinema_readiness_processor_runtime_entries
+
+- name: Require private processor runtime files and sockets
+  ansible.builtin.assert:
+    that:
+      - item.pw_name == open_cinema.user
+      - item.gr_name == open_cinema.group
+      - >-
+        (item.isreg and item.mode == '0600') or
+        (item.issock and item.mode == '0750')
+  loop: "{{ open_cinema_readiness_processor_runtime_entries.files }}"

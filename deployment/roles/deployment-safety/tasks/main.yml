@@ -1,0 +1,18 @@
+---
+- name: Stop the previous live controller before installing a candidate release
+  ansible.builtin.systemd:
+    name: open-cinema-orchestrator.service
+    state: stopped
+  register: open_cinema_deployment_safety_stop
+  failed_when: false
+  when: not open_cinema_contract_gate_previously_passed | bool
+
+- name: Report a missing previous controller without failing a clean installation
+  ansible.builtin.debug:
+    msg: >-
+      No previous Open Cinema orchestrator unit was running. The candidate will
+      still be installed with processor management and live reconciliation
+      disabled until its coordinated contract gate passes.
+  when:
+    - not open_cinema_contract_gate_previously_passed | bool
+    - open_cinema_deployment_safety_stop.failed | default(false)

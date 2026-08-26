@@ -1,0 +1,190 @@
+---
+- name: Resolve the audio service UID for independently tagged runs
+  ansible.builtin.command:
+    argv:
+      - id
+      - -u
+      - "{{ open_cinema.user }}"
+  register: open_cinema_audio_uid_command
+  changed_when: false
+
+- name: Publish the audio service UID
+  ansible.builtin.set_fact:
+    open_cinema_uid: "{{ open_cinema_audio_uid_command.stdout | int }}"
+
+- name: Install the selected PipeWire and WirePlumber stack
+  ansible.builtin.apt:
+    update_cache: true
+    name:
+      - "{{ pipewire.package }}"
+      - pipewire-alsa
+      - "{{ wireplumber.package }}"
+      - libspa-0.2-bluetooth
+      - bluez
+      - dbus-user-session
+      - libwireplumber-0.5-dev
+      - pkg-config
+    state: present
+
+- name: Disable competing per-user audio sessions
+  ansible.builtin.include_tasks: stop-competing-session.yml
+  loop: "{{ audio_service.competing_session_users | default([]) }}"
+  loop_control:
+    loop_var: open_cinema_competing_session_user
+  when:
+    - audio_service.exclusive | default(true) | bool
+    - open_cinema_competing_session_user != open_cinema.user
+
+- name: Create upgrade-safe WirePlumber configuration directory
+  ansible.builtin.file:
+    path: /etc/wireplumber/wireplumber.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Find previously managed WirePlumber configuration fragments
+  ansible.builtin.find:
+    paths: /etc/wireplumber/wireplumber.conf.d
+    patterns: "*-open-cinema-*.conf"
+    file_type: file
+  register: open_cinema_managed_wireplumber_fragments
+
+- name: Remove obsolete Open Cinema WirePlumber fragments
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: >-
+    {{ (open_cinema_managed_wireplumber_fragments.files |
+        map(attribute='path') | list) |
+       difference([
+         '/etc/wireplumber/wireplumber.conf.d/90-open-cinema-bluetooth.conf',
+         '/etc/wireplumber/wireplumber.conf.d/91-open-cinema-policy.conf'
+       ]) }}
+  notify: Restart headless WirePlumber
+
+- name: Install Open Cinema WirePlumber Bluetooth roles
+  ansible.builtin.template:
+    src: 90-open-cinema-bluetooth.conf.j2
+    dest: /etc/wireplumber/wireplumber.conf.d/90-open-cinema-bluetooth.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart headless WirePlumber
+
+- name: Install Open Cinema WirePlumber policy boundaries
+  ansible.builtin.template:
+    src: 91-open-cinema-policy.conf.j2
+    dest: /etc/wireplumber/wireplumber.conf.d/91-open-cinema-policy.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart headless WirePlumber
+
+- name: Enable automatic Bluetooth adapter power-on
+  ansible.builtin.lineinfile:
+    path: /etc/bluetooth/main.conf
+    regexp: '^#?AutoEnable='
+    line: 'AutoEnable=true'
+    insertafter: '^\[Policy\]$'
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Bluetooth
+
+- name: Permit the headless audio owner to manage BlueZ devices
+  ansible.builtin.template:
+    src: 49-open-cinema-bluez.rules.j2
+    dest: /etc/polkit-1/rules.d/49-open-cinema-bluez.rules
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create upgrade-safe user unit drop-in directories
+  ansible.builtin.file:
+    path: "/etc/systemd/user/{{ item }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - pipewire
+    - wireplumber
+
+- name: Install audio user-service restart policy
+  ansible.builtin.template:
+    src: 90-open-cinema-service.conf.j2
+    dest: "/etc/systemd/user/{{ item }}.service.d/90-open-cinema.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - pipewire
+    - wireplumber
+  notify:
+    - Reload headless user units
+    - Restart headless WirePlumber
+
+- name: Verify audio-session unit syntax and dependency graph before restart
+  ansible.builtin.command:
+    argv:
+      - systemd-analyze
+      - --user
+      - verify
+      - pipewire.service
+      - wireplumber.service
+  become_user: "{{ open_cinema.user }}"
+  environment:
+    XDG_RUNTIME_DIR: "{{ audio_service.runtime_dir }}"
+    DBUS_SESSION_BUS_ADDRESS: "{{ audio_service.dbus_address }}"
+  changed_when: false
+
+- name: Enable and start Bluetooth
+  ansible.builtin.systemd:
+    name: bluetooth.service
+    enabled: true
+    state: started
+
+- name: Enable and start the PipeWire socket
+  ansible.builtin.systemd:
+    scope: user
+    name: pipewire.socket
+    enabled: true
+    state: started
+    daemon_reload: true
+  become_user: "{{ open_cinema.user }}"
+  environment:
+    XDG_RUNTIME_DIR: "{{ audio_service.runtime_dir }}"
+    DBUS_SESSION_BUS_ADDRESS: "{{ audio_service.dbus_address }}"
+
+- name: Enable and start the WirePlumber session manager
+  ansible.builtin.systemd:
+    scope: user
+    name: wireplumber.service
+    enabled: true
+    state: started
+  become_user: "{{ open_cinema.user }}"
+  environment:
+    XDG_RUNTIME_DIR: "{{ audio_service.runtime_dir }}"
+    DBUS_SESSION_BUS_ADDRESS: "{{ audio_service.dbus_address }}"
+
+- name: Flush audio service handlers before checking sockets
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for the owned PipeWire socket
+  ansible.builtin.wait_for:
+    path: "{{ audio_service.pipewire_socket }}"
+    state: present
+    timeout: 30
+
+- name: Inspect the owned PipeWire socket
+  ansible.builtin.stat:
+    path: "{{ audio_service.pipewire_socket }}"
+  register: open_cinema_pipewire_socket_stat
+
+- name: Require the owned PipeWire socket to be ready
+  ansible.builtin.assert:
+    that:
+      - open_cinema_pipewire_socket_stat.stat.exists
+      - open_cinema_pipewire_socket_stat.stat.issock
+    fail_msg: "The opencinema PipeWire user session did not expose its runtime socket."

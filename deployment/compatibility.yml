@@ -1,0 +1,119 @@
+---
+schema_version: 1
+matrix_id: open-cinema-raspberry-audio-v1
+
+platform:
+  production:
+    distribution: Raspberry Pi OS
+    distribution_family: Debian
+    distribution_major_versions: [13]
+    distribution_codenames: [trixie]
+    architectures: [aarch64]
+    raspberry_pi_models:
+      - name: Raspberry Pi 4 Model B
+        minimum_memory_mb: 2048
+      - name: Raspberry Pi 5 Model B
+        minimum_memory_mb: 2048
+  experimental:
+    raspberry_pi_models:
+      - name: Raspberry Pi 3 Model B+
+        reason: Processor and memory limits require hardware acceptance measurements.
+    distribution_major_versions: [12]
+    distribution_codenames: [bookworm]
+    reason: >-
+      Bookworm's base WirePlumber 0.4 packages are outside the selected runtime
+      API family; an explicitly managed 0.5 backport is required.
+
+components:
+  pipewire:
+    minimum: "1.4.0"
+    maximum_exclusive: "2.0.0"
+    package: pipewire
+  wireplumber:
+    api_family: "0.5"
+    minimum: "0.5.8"
+    maximum_exclusive: "0.6.0"
+    runtime_package: wireplumber
+    development_package: libwireplumber-0.5-dev
+    pkg_config: wireplumber-0.5
+  wyreplumber:
+    minimum: "0.1.0"
+    maximum_exclusive: "0.3.0"
+    python_package: wyreplumber
+    required_api_contract: "1"
+  camilladsp:
+    minimum: "4.1.3"
+    maximum_exclusive: "5.0.0"
+    backend: pipewire
+  pycamilladsp:
+    minimum: "4.0.0"
+    maximum_exclusive: "5.0.0"
+    deployment_role: runtime-control
+  pcm_auto_decoder:
+    minimum: "0.1.4"
+    maximum_exclusive: "0.3.0"
+    status_protocol: 2
+    backend: pipewire
+  python:
+    minimum: "3.13.0"
+    maximum_exclusive: "3.14.0"
+    package: python3.13
+  django:
+    minimum: "6.0.0"
+    maximum_exclusive: "6.1.0"
+  gunicorn:
+    minimum: "23.0.0"
+    maximum_exclusive: "24.0.0"
+  celery:
+    minimum: "5.6.0"
+    maximum_exclusive: "6.0.0"
+  redis:
+    minimum: "8.0.0"
+    maximum_exclusive: "9.0.0"
+  sqlite:
+    minimum: "3.46.0"
+    maximum_exclusive: "4.0.0"
+  nginx:
+    minimum: "1.26.0"
+    maximum_exclusive: "2.0.0"
+  bluez:
+    minimum: "5.82.0"
+    maximum_exclusive: "6.0.0"
+  ffmpeg:
+    minimum: "7.1.0"
+    maximum_exclusive: "8.0.0"
+    deployment_role: decoder-runtime-libraries
+  uv:
+    minimum: "0.9.0"
+    maximum_exclusive: "1.0.0"
+    deployment_role: python-install-tool
+  rust:
+    minimum: "1.85.0"
+    maximum_exclusive: "2.0.0"
+    deployment_role: build-only
+  node:
+    minimum: "20.0.0"
+    maximum_exclusive: "23.0.0"
+    deployment_role: build-only
+  c_compiler:
+    minimum: "13.0.0"
+    maximum_exclusive: "15.0.0"
+    deployment_role: build-only
+  make:
+    minimum: "4.3.0"
+    maximum_exclusive: "5.0.0"
+    deployment_role: build-only
+  pkg_config:
+    minimum: "1.8.0"
+    maximum_exclusive: "2.0.0"
+    deployment_role: build-only
+
+processor_policy:
+  decoder_transport: pipewire-native
+  camilladsp_transport: pipewire-native
+  camilladsp_instances_default: 1
+  camilladsp_instance_maximum_configurable: 16
+  camilladsp_conflict_policy: priority
+  notes:
+    - Resource limits remain provisional until Raspberry Pi hardware benchmarks complete.
+    - Node.js and Rust are build tools; production runtime images need only the resulting artifacts.

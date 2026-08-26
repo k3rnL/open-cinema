@@ -1,61 +1,51 @@
-FROM ubuntu:latest
-LABEL authors="erwandaniel"
+FROM debian:trixie-slim
 
-ARG TARGETOS
 ARG TARGETARCH
-ARG BUILDPLATFORM
-ARG TARGETPLATFORM
+ARG UV_VERSION=0.9.28
 
-RUN apt update && apt install -y \
-    libpulse-dev libavutil-dev libavformat-dev \
-    libavfilter-dev libavdevice-dev libclang-dev \
-    ffmpeg wget pipewire dbus-user-session dbus-x11 sudo \
-    git curl build-essential pkg-config libasound2-dev python3-dev \
-    rsync libalsaplayer-dev librust-alsa-sys-dev \
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       bash ca-certificates curl sudo git build-essential pkg-config \
+       python3 python3-dev python3-venv python3-pip \
+       pipewire pipewire-alsa pipewire-bin wireplumber \
+       libpipewire-0.3-dev libwireplumber-0.5-dev libspa-0.2-bluetooth \
+       dbus-daemon dbus-user-session \
+       libavutil-dev libavformat-dev libavfilter-dev libavdevice-dev \
+       redis-tools \
     && rm -rf /var/lib/apt/lists/*
 
-RUN echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu \
-    && chmod 440 /etc/sudoers.d/ubuntu
+RUN useradd --create-home --shell /bin/bash --groups audio,video opencinema \
+    && echo "opencinema ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/opencinema \
+    && chmod 0440 /etc/sudoers.d/opencinema
 
-# Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-# Build CamillaDSP from source
-RUN mkdir -p ~/camilladsp ~/camilladsp/coeffs ~/camilladsp/configs && \
-    cd /tmp && \
-    wget https://github.com/HEnquist/camilladsp/releases/download/v4.0.0/camilladsp-linux-pipewire-${TARGETARCH}.tar.gz -O camilladsp.tar.gz && \
-    tar -xvf camilladsp.tar.gz -C /usr/bin && \
-    chmod +x /usr/bin/camilladsp
-
-RUN wget https://github.com/HEnquist/camillagui-backend/releases/download/v4.0.0/bundle_linux_${TARGETARCH}.tar.gz -O ~/camilladsp/bundle_linux_${TARGETARCH}.tar.gz && \
-    tar -xvf ~/camilladsp/bundle_linux_${TARGETARCH}.tar.gz -C /opt/
-
-# Optional: avoid systemctl during docker build unless you really run systemd in container
-RUN wget https://raw.githubusercontent.com/mdsimon2/RPi-CamillaDSP/main/camillagui.service \
-      -O /lib/systemd/system/camillagui.service
-
-# Install uv for the current arch
 RUN set -eux; \
     case "${TARGETARCH}" in \
-      arm64) UV_ARCH="aarch64-unknown-linux-gnu" ;; \
-      amd64) UV_ARCH="x86_64-unknown-linux-gnu" ;; \
+      arm64) uv_arch="aarch64-unknown-linux-gnu" ;; \
+      amd64) uv_arch="x86_64-unknown-linux-gnu" ;; \
       *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    cd /tmp && \
-    wget "https://github.com/astral-sh/uv/releases/download/0.9.28/uv-${UV_ARCH}.tar.gz" && \
-    tar -xzvf "uv-${UV_ARCH}.tar.gz" && \
-    mv "uv-${UV_ARCH}"/uv /usr/bin/uv && \
-    rm -rf /tmp/uv-*
+    curl -fsSLo /tmp/uv.tar.gz \
+      "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${uv_arch}.tar.gz"; \
+    tar -xzf /tmp/uv.tar.gz -C /tmp; \
+    install -m 0755 "/tmp/uv-${uv_arch}/uv" /usr/local/bin/uv; \
+    rm -rf /tmp/uv.tar.gz "/tmp/uv-${uv_arch}"
 
-RUN echo "export XDG_RUNTIME_DIR=/tmp/pipewire" >> /home/ubuntu/.bashrc
+COPY pipewire/90-open-cinema-dev.conf /etc/pipewire/pipewire.conf.d/90-open-cinema-dev.conf
+COPY wireplumber/91-open-cinema-policy.conf /etc/wireplumber/wireplumber.conf.d/91-open-cinema-policy.conf
+COPY entrypoint.sh start-pipewire.sh /usr/local/lib/open-cinema-dev/
+COPY fakes/ /usr/local/lib/open-cinema-dev/fakes/
+RUN chmod 0644 \
+      /etc/pipewire/pipewire.conf.d/90-open-cinema-dev.conf \
+      /etc/wireplumber/wireplumber.conf.d/91-open-cinema-policy.conf \
+    && chmod 0755 /usr/local/lib/open-cinema-dev/*.sh /usr/local/lib/open-cinema-dev/fakes/*.py
 
-COPY entrypoint.sh start-pipewire.sh /entrypoint/
-COPY camilladsp/default.yml /etc/camilladsp/default.yml
+ENV XDG_RUNTIME_DIR=/tmp/open-cinema-runtime
+ENV DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/open-cinema-runtime/bus
+ENV PIPEWIRE_REMOTE=pipewire-0
+ENV OPEN_CINEMA_DECODER_FIXTURES=/pcm-auto-decoder/tests/fixtures/codec_status.ndjson
 
-RUN chmod +x /entrypoint/*.sh && mkdir -p /etc/camilladsp
-
-EXPOSE 5005 1234
-
-USER ubuntu
-ENTRYPOINT ["/entrypoint/entrypoint.sh"]
+USER opencinema
+WORKDIR /workspace
+ENTRYPOINT ["/usr/local/lib/open-cinema-dev/entrypoint.sh"]
+CMD ["sleep", "infinity"]

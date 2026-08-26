@@ -1,0 +1,13 @@
+---
+- name: Render the gated Open Cinema runtime environment
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ open_cinema.app_path }}/.env"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0600"
+  notify:
+    - Restart open-cinema
+    - Restart celery
+    - Restart celery beat
+    - Restart open-cinema orchestrator

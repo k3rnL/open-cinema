@@ -1,0 +1,30 @@
+# Managed by Open Cinema. Keep this fragment separate from distribution files.
+# A2DP sink accepts programme audio from a phone; A2DP source sends programme
+# audio to a headset. HFP roles keep bidirectional headsets available.
+# The dedicated audio owner is a lingering headless user, not an active desktop
+# seat, so it must retain Bluetooth ownership independently of logind seats.
+wireplumber.profiles = {
+  main = {
+    monitor.bluez.seat-monitoring = disabled
+  }
+}
+
+monitor.bluez.properties = {
+  bluez5.roles = [ a2dp_sink a2dp_source hfp_hf hfp_ag ]
+  bluez5.auto-connect = [ a2dp_sink a2dp_source hfp_hf ]
+}
+
+# Treat programme audio received from phones and other A2DP sources as graph
+# input. WirePlumber otherwise treats incoming media as playback by default.
+monitor.bluez.rules = [
+  {
+    matches = [
+      { node.name = "~bluez_input.*" }
+    ]
+    actions = {
+      update-props = {
+        bluez5.media-source-role = "input"
+      }
+    }
+  }
+]

@@ -1,0 +1,37 @@
+[Unit]
+Description=Open Cinema Celery scheduler
+Documentation=https://github.com/{{ open_cinema_release_manifest.components.open_cinema.repository }}
+After=network.target redis-server.service
+Wants=redis-server.service
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=exec
+User={{ open_cinema.user }}
+Group={{ open_cinema.group }}
+WorkingDirectory={{ open_cinema.app_path }}
+EnvironmentFile={{ open_cinema.app_path }}/.env
+UMask=0027
+
+ExecStart={{ open_cinema.venv_path }}/bin/celery -A opencinema beat \
+    --loglevel=info \
+    --logfile=/var/log/open-cinema/celery-beat.log \
+    --schedule=/var/lib/open-cinema/celerybeat-schedule
+
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+KillMode=mixed
+MemoryMax={{ open_cinema.celery.beat_memory_max_mb }}M
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ open_cinema.app_path }} /var/log/open-cinema /var/lib/open-cinema
+
+[Install]
+WantedBy=multi-user.target

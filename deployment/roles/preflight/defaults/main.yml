@@ -1,0 +1,10 @@
+---
+open_cinema_allow_experimental_platform: false
+open_cinema_preflight_require_wireplumber_development: true
+open_cinema_preflight_require_runtime: false
+open_cinema_preflight_require_full_runtime: false
+open_cinema_preflight_minimum_memory_mb: 2048
+open_cinema_preflight_minimum_root_free_mb: 2048
+open_cinema_preflight_result_path: /tmp/open-cinema-preflight-result.json
+open_cinema_preflight_result_mode: "0644"
+open_cinema_preflight_injected_failures: []

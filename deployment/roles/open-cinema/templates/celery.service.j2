@@ -1,8 +1,10 @@
 [Unit]
 Description=Open Cinema Celery Worker
-Documentation=https://github.com/{{ open_cinema.repo }}
+Documentation=https://github.com/{{ open_cinema_release_manifest.components.open_cinema.repository }}
 After=network.target redis-server.service
 Wants=redis-server.service
+StartLimitBurst=5
+StartLimitIntervalSec=60
 
 [Service]
 Type=exec
@@ -10,19 +12,29 @@ User={{ open_cinema.user }}
 Group={{ open_cinema.group }}
 WorkingDirectory={{ open_cinema.app_path }}
 EnvironmentFile={{ open_cinema.app_path }}/.env
+UMask=0027
 
 ExecStart={{ open_cinema.venv_path }}/bin/celery -A opencinema worker \
     --loglevel=info \
-    --logfile=/var/log/open-cinema/celery.log
+    --logfile=/var/log/open-cinema/celery.log \
+    --concurrency={{ open_cinema.celery.worker_concurrency }} \
+    --prefetch-multiplier={{ open_cinema.celery.prefetch_multiplier }} \
+    --max-tasks-per-child={{ open_cinema.celery.max_tasks_per_child }}
 
 Restart=on-failure
 RestartSec=5
-StartLimitBurst=5
-StartLimitIntervalSec=60
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+KillMode=mixed
+MemoryMax={{ open_cinema.celery.worker_memory_max_mb }}M
 
 # Security hardening
 NoNewPrivileges=true
 PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ open_cinema.app_path }} /var/log/open-cinema
 
 [Install]
 WantedBy=multi-user.target

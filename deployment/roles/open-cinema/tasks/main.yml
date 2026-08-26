@@ -1,4 +1,17 @@
 ---
+- name: Resolve the audio service UID for independently tagged runs
+  ansible.builtin.command:
+    argv:
+      - id
+      - -u
+      - "{{ open_cinema.user }}"
+  register: open_cinema_application_uid_command
+  changed_when: false
+
+- name: Publish the audio service UID
+  ansible.builtin.set_fact:
+    open_cinema_uid: "{{ open_cinema_application_uid_command.stdout | int }}"
+
 - name: Add deadsnakes PPA for Python {{ open_cinema.python_version }}
   ansible.builtin.apt_repository:
     repo: ppa:deadsnakes/ppa
@@ -15,7 +28,6 @@
       - python{{ open_cinema.python_version }}-dev
       - python3-pip
       - git
-      - libpulse-dev
     state: present
   when: ansible_facts["distribution"] == 'Ubuntu'
 
@@ -27,7 +39,6 @@
       - python{{ open_cinema.python_version }}-venv
       - python3-pip
       - git
-      - libpulse-dev
       - python3-dev
     state: present
   when: ansible_facts["distribution"] in ['Debian', 'Raspbian']
@@ -48,33 +59,189 @@
     group: "{{ open_cinema.group }}"
     mode: '0755'
 
-- name: Clone Open Cinema repository
-  ansible.builtin.git:
-    repo: "https://github.com/{{ open_cinema.repo }}.git"
-    dest: "{{ open_cinema.app_path }}"
-    version: "v{{ open_cinema.version }}"
-    force: yes
-  become_user: "{{ open_cinema.user }}"
-  when: install_from_local is not defined or not install_from_local
+- name: Create the immutable coordinated artifact cache
+  ansible.builtin.file:
+    path: "{{ release_manifest.artifact_cache_root }}/{{ open_cinema_release_manifest.release_id }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: not (install_from_local | default(false) | bool)
+
+- name: Download every manifest-selected Python application artifact
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: >-
+      {{ release_manifest.artifact_cache_root }}/{{ open_cinema_release_manifest.release_id }}/{{ item.name }}
+    checksum: "sha256:{{ item.sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - "{{ open_cinema_release_artifacts.open_cinema_source }}"
+    - "{{ open_cinema_release_artifacts.open_cinema_wheel }}"
+    - "{{ open_cinema_release_artifacts.wyreplumber_wheel }}"
+    - "{{ open_cinema_release_artifacts.pycamilladsp_wheel }}"
+  when: not (install_from_local | default(false) | bool)
+
+- name: Compute the immutable Python wheel-set identity
+  ansible.builtin.set_fact:
+    open_cinema_release_wheel_set_sha256: >-
+      {{ [
+           open_cinema_release_artifacts.open_cinema_wheel.sha256,
+           open_cinema_release_artifacts.wyreplumber_wheel.sha256,
+           open_cinema_release_artifacts.pycamilladsp_wheel.sha256
+         ] | join(':') | hash('sha256') }}
+  when: not (install_from_local | default(false) | bool)
+
+- name: Inspect the installed Python wheel-set identity
+  ansible.builtin.slurp:
+    src: "{{ open_cinema.venv_path }}/.open-cinema-wheel-set-sha256"
+  register: open_cinema_installed_wheel_set
+  failed_when: false
+  when: not (install_from_local | default(false) | bool)
+
+- name: Decide whether the immutable Python wheel set changed
+  ansible.builtin.set_fact:
+    open_cinema_release_wheels_need_install: >-
+      {{
+        open_cinema_installed_wheel_set.content | default('') | b64decode | trim !=
+        open_cinema_release_wheel_set_sha256
+      }}
+  when: not (install_from_local | default(false) | bool)
+
+- name: Synchronize local WyrePlumber source for development
+  ansible.posix.synchronize:
+    src: "{{ local_wyreplumber_source_path | default(wyreplumber.local_source_path) }}/"
+    dest: "{{ wyreplumber.app_path }}"
+    delete: true
+    checksum: true
+    owner: false
+    group: false
+    perms: false
+    times: false
+    rsync_path: "sudo rsync"
+    mode: push
+    rsync_opts:
+      - "--chown={{ open_cinema.user }}:{{ open_cinema.group }}"
+      - "--chmod=D755,F644"
+      - "--exclude=.git"
+      - "--exclude=__pycache__"
+      - "--exclude=*.pyc"
+      - "--exclude=.venv*"
+      - "--exclude=target"
+      - "--exclude=build"
+      - "--exclude=*.egg-info"
+      # Native extension files are host-architecture build products. Preserve
+      # the Pi build and never copy a developer workstation binary over it.
+      - "--exclude=*.so"
+      - "--exclude=*.so.*"
+  register: open_cinema_local_wyreplumber_sync
+  when: install_from_local | default(false) | bool
+  notify:
+    - Restart open-cinema
+    - Restart celery
+    - Restart celery beat
+    - Restart open-cinema orchestrator
+
+- name: Remove any immutable wheel-set marker in development mode
+  ansible.builtin.file:
+    path: "{{ open_cinema.venv_path }}/.open-cinema-wheel-set-sha256"
+    state: absent
+  when: install_from_local | default(false) | bool
+
+- name: Set ownership of local WyrePlumber source
+  ansible.builtin.file:
+    path: "{{ wyreplumber.app_path }}"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    recurse: true
+  when: install_from_local | default(false) | bool
 
 - name: Synchronize local Open Cinema source
   ansible.posix.synchronize:
     src: "{{ local_source_path | default('/IdeaProjects/open-cinema') }}/"
     dest: "{{ open_cinema.app_path }}"
     delete: yes
+    checksum: true
+    owner: false
+    group: false
+    perms: false
+    times: false
     rsync_path: "sudo rsync"
     mode: push
     rsync_opts:
+      - "--chown={{ open_cinema.user }}:{{ open_cinema.group }}"
+      - "--chmod=D755,F644"
       - "--exclude=.git"
+      - "--exclude=.env"
+      - "--exclude=.hypothesis"
+      - "--exclude=.mypy_cache"
+      - "--exclude=.pytest_cache"
       - "--exclude=__pycache__"
       - "--exclude=*.pyc"
       - "--exclude=.venv*"
       - "--exclude=venv"
+      - "--exclude=build"
       - "--exclude=db.sqlite3"
+      - "--exclude=*.sqlite3-shm"
+      - "--exclude=*.sqlite3-wal"
+      - "--exclude=media"
+      - "--exclude=open_cinema.egg-info"
       - "--exclude=.ansible"
       - "--exclude=.idea"
       - "--exclude=.vscode"
+      - "--exclude=deployment"
+      - "--exclude=docs"
       - "--exclude=node_modules"
+      - "--exclude=openspec"
+      - "--exclude=target"
+      - "--exclude=tests"
+      - "--exclude=README.md"
+      - "--exclude=*.egg-info"
+      - "--exclude=*.so"
+      - "--exclude=*.so.*"
+  when: install_from_local is defined and install_from_local
+  notify:
+    - Restart open-cinema
+    - Restart celery
+    - Restart celery beat
+    - Restart open-cinema orchestrator
+
+- name: Remove mutable source packages before an appliance wheel install
+  ansible.builtin.file:
+    path: "{{ open_cinema.app_path }}/{{ item }}"
+    state: absent
+  loop:
+    - api
+    - contracts
+    - core
+    - opencinema
+    - plugin
+    - manage.py
+    - pyproject.toml
+    - uv.lock
+  when:
+    - not (install_from_local | default(false) | bool)
+    - open_cinema_release_wheels_need_install | bool
+
+- name: Remove the development WyrePlumber checkout in appliance mode
+  ansible.builtin.file:
+    path: "{{ wyreplumber.app_path }}"
+    state: absent
+  when:
+    - not (install_from_local | default(false) | bool)
+    - open_cinema_release_wheels_need_install | bool
+
+- name: Remove previously synchronized controller-only source trees
+  ansible.builtin.file:
+    path: "{{ open_cinema.app_path }}/{{ item }}"
+    state: absent
+  loop:
+    - deployment
+    - docs
+    - openspec
+    - tests
   when: install_from_local is defined and install_from_local
 
 - name: Set ownership of application directory
@@ -97,12 +264,14 @@
     state: latest
     virtualenv: "{{ open_cinema.venv_path }}"
   become_user: "{{ open_cinema.user }}"
+  when: install_from_local | default(false) | bool
 
 - name: Install uv in virtual environment
   ansible.builtin.pip:
     name: uv
     virtualenv: "{{ open_cinema.venv_path }}"
   become_user: "{{ open_cinema.user }}"
+  when: install_from_local | default(false) | bool
 
 - name: Install Redis server
   ansible.builtin.apt:
@@ -117,46 +286,499 @@
     enabled: true
     state: started
 
+- name: Create the Redis service override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/redis-server.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the Open Cinema Redis lifecycle policy
+  ansible.builtin.template:
+    src: redis.service.conf.j2
+    dest: /etc/systemd/system/redis-server.service.d/90-open-cinema.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Redis
+
 - name: Install Python dependencies with uv
   ansible.builtin.command:
-    cmd: "{{ open_cinema.venv_path }}/bin/uv pip install --python {{ open_cinema.venv_path }}/bin/python -e ."
+    cmd: "{{ open_cinema.venv_path }}/bin/uv sync --locked --no-dev --active --python {{ open_cinema.venv_path }}/bin/python"
     chdir: "{{ open_cinema.app_path }}"
+  environment:
+    VIRTUAL_ENV: "{{ open_cinema.venv_path }}"
   become_user: "{{ open_cinema.user }}"
+  register: open_cinema_uv_sync
+  changed_when: >-
+    'Installed ' in (open_cinema_uv_sync.stdout ~ open_cinema_uv_sync.stderr) or
+    'Uninstalled ' in (open_cinema_uv_sync.stdout ~ open_cinema_uv_sync.stderr) or
+    'Updated ' in (open_cinema_uv_sync.stdout ~ open_cinema_uv_sync.stderr)
   notify:
     - Restart open-cinema
     - Restart celery
+    - Restart celery beat
+    - Restart open-cinema orchestrator
+  when: install_from_local | default(false) | bool
 
-- name: Install Gunicorn
+- name: Install only manifest-selected Python wheels in appliance mode
   ansible.builtin.command:
-    cmd: "{{ open_cinema.venv_path }}/bin/uv pip install --python {{ open_cinema.venv_path }}/bin/python gunicorn"
-    chdir: "{{ open_cinema.app_path }}"
+    argv:
+      - "{{ open_cinema.venv_path }}/bin/pip"
+      - install
+      - --no-deps
+      - --force-reinstall
+      - "{{ release_manifest.artifact_cache_root }}/{{ open_cinema_release_manifest.release_id }}/{{ open_cinema_release_artifacts.pycamilladsp_wheel.name }}"
+      - "{{ release_manifest.artifact_cache_root }}/{{ open_cinema_release_manifest.release_id }}/{{ open_cinema_release_artifacts.wyreplumber_wheel.name }}"
+      - "{{ release_manifest.artifact_cache_root }}/{{ open_cinema_release_manifest.release_id }}/{{ open_cinema_release_artifacts.open_cinema_wheel.name }}"
   become_user: "{{ open_cinema.user }}"
+  register: open_cinema_release_wheel_install
+  changed_when: >-
+    'Successfully installed' in
+    (open_cinema_release_wheel_install.stdout ~ open_cinema_release_wheel_install.stderr)
+  when:
+    - not (install_from_local | default(false) | bool)
+    - open_cinema_release_wheels_need_install | bool
+  notify:
+    - Restart open-cinema
+    - Restart celery
+    - Restart celery beat
+    - Restart open-cinema orchestrator
 
-- name: Create Django environment file
-  ansible.builtin.template:
-    src: env.j2
-    dest: "{{ open_cinema.app_path }}/.env"
+- name: Record the installed immutable Python wheel-set identity
+  ansible.builtin.copy:
+    content: "{{ open_cinema_release_wheel_set_sha256 }}\n"
+    dest: "{{ open_cinema.venv_path }}/.open-cinema-wheel-set-sha256"
     owner: "{{ open_cinema.user }}"
     group: "{{ open_cinema.group }}"
-    mode: '0600'
-  notify: Restart open-cinema
+    mode: "0644"
+  when:
+    - not (install_from_local | default(false) | bool)
+    - open_cinema_release_wheels_need_install | bool
 
-- name: Run Django migrations
+- name: Verify exact installed application wheel identities
   ansible.builtin.command:
-    cmd: "{{ open_cinema.venv_path }}/bin/python manage.py migrate --noinput"
-    chdir: "{{ open_cinema.app_path }}"
-  become_user: "{{ open_cinema.user }}"
-  environment:
-    DJANGO_SETTINGS_MODULE: "opencinema.settings"
+    argv:
+      - "{{ open_cinema.venv_path }}/bin/python"
+      - -c
+      - >-
+        import importlib.metadata as metadata, json;
+        expected = {
+          'open-cinema': '{{ open_cinema_release_manifest.components.open_cinema.version }}',
+          'wyreplumber': '{{ open_cinema_release_manifest.components.wyreplumber.version }}',
+          'camilladsp': '{{ open_cinema_release_manifest.components.pycamilladsp.version }}'};
+        actual = {name: metadata.version(name) for name in expected};
+        assert actual == expected, {'expected': expected, 'actual': actual};
+        print(json.dumps(actual, sort_keys=True))
+  register: open_cinema_installed_application_identities
+  changed_when: false
+  when: not (install_from_local | default(false) | bool)
 
-- name: Collect static files
+- name: Install the wheel-based Django management entry point
+  ansible.builtin.copy:
+    content: |
+      #!/usr/bin/env python3
+      import os
+      import sys
+
+      os.environ.setdefault("DJANGO_SETTINGS_MODULE", "opencinema.settings")
+
+      from django.core.management import execute_from_command_line
+
+      execute_from_command_line(sys.argv)
+    dest: "{{ open_cinema.app_path }}/manage.py"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0755"
+  when: not (install_from_local | default(false) | bool)
+
+- name: Probe the Pi-native WyrePlumber extension after local synchronization
   ansible.builtin.command:
-    cmd: "{{ open_cinema.venv_path }}/bin/python manage.py collectstatic --noinput"
-    chdir: "{{ open_cinema.app_path }}"
-  become_user: "{{ open_cinema.user }}"
-  environment:
-    DJANGO_SETTINGS_MODULE: "opencinema.settings"
+    argv:
+      - "{{ open_cinema.venv_path }}/bin/python"
+      - -c
+      - >-
+        from wyreplumber.runtime import require_orchestration_contract;
+        require_orchestration_contract({{ wyreplumber.required_contract }}, 1)
+  register: open_cinema_local_wyreplumber_probe
+  changed_when: false
   failed_when: false
+  become_user: "{{ open_cinema.user }}"
+  when: install_from_local | default(false) | bool
+
+- name: Find stale WyrePlumber native extensions before a Pi rebuild
+  ansible.builtin.find:
+    paths: "{{ wyreplumber.app_path }}/src/wyreplumber"
+    patterns:
+      - "_core*.so"
+      - "_core*.so.*"
+    file_type: file
+  register: open_cinema_stale_wyreplumber_extensions
+  when:
+    - install_from_local | default(false) | bool
+    - >-
+      open_cinema_local_wyreplumber_sync.changed or
+      open_cinema_local_wyreplumber_probe.rc != 0
+
+- name: Remove stale WyrePlumber native extensions before a Pi rebuild
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ open_cinema_stale_wyreplumber_extensions.files | default([]) }}"
+  when:
+    - install_from_local | default(false) | bool
+    - >-
+      open_cinema_local_wyreplumber_sync.changed or
+      open_cinema_local_wyreplumber_probe.rc != 0
+
+- name: Rebuild the local WyrePlumber extension for the Pi architecture
+  ansible.builtin.command:
+    cmd: >-
+      {{ open_cinema.venv_path }}/bin/uv sync --locked --no-dev --active
+      --python {{ open_cinema.venv_path }}/bin/python
+      --reinstall-package wyreplumber
+    chdir: "{{ open_cinema.app_path }}"
+  environment:
+    VIRTUAL_ENV: "{{ open_cinema.venv_path }}"
+  become_user: "{{ open_cinema.user }}"
+  when:
+    - install_from_local | default(false) | bool
+    - >-
+      open_cinema_local_wyreplumber_sync.changed or
+      open_cinema_local_wyreplumber_probe.rc != 0
+  notify:
+    - Restart open-cinema
+    - Restart celery
+    - Restart celery beat
+    - Restart open-cinema orchestrator
+
+- name: Create the fail-closed Django environment file
+  ansible.builtin.include_tasks: render-runtime-environment.yml
+
+- name: Deploy the destructive schema with a retained rollback bundle
+  block:
+    - name: Inspect the current database
+      ansible.builtin.stat:
+        path: "{{ open_cinema.django.database }}"
+      register: open_cinema_database_before_migration
+
+    - name: Record the pending Django migration plan
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.migrations.timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.migrations.preflight_timeout_seconds }}s"
+          - "{{ open_cinema.venv_path }}/bin/python"
+          - manage.py
+          - migrate
+          - --plan
+      args:
+        chdir: "{{ open_cinema.app_path }}"
+      become_user: "{{ open_cinema.user }}"
+      environment:
+        DJANGO_SETTINGS_MODULE: "opencinema.settings"
+      register: open_cinema_migration_plan
+      changed_when: false
+
+    - name: Validate the current SQLite database before migration
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.migrations.timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.migrations.preflight_timeout_seconds }}s"
+          - sqlite3
+          - "{{ open_cinema.django.database }}"
+          - "PRAGMA quick_check;"
+      become_user: "{{ open_cinema.user }}"
+      register: open_cinema_migration_sqlite_preflight
+      changed_when: false
+      failed_when: >-
+        open_cinema_migration_sqlite_preflight.rc != 0 or
+        open_cinema_migration_sqlite_preflight.stdout | trim != 'ok'
+      when: open_cinema_database_before_migration.stat.exists
+
+    - name: Verify the installed code accepts the current migration history
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.migrations.timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.migrations.preflight_timeout_seconds }}s"
+          - "{{ open_cinema.venv_path }}/bin/python"
+          - manage.py
+          - shell
+          - --no-imports
+          - -c
+          - >-
+            import json;
+            from django.db import connection;
+            from django.db.migrations.executor import MigrationExecutor;
+            executor = MigrationExecutor(connection);
+            executor.loader.check_consistent_history(connection);
+            print(json.dumps({'appliedMigrations': len(executor.loader.applied_migrations),
+            'targetLeafMigrations': ['.'.join(item) for item in executor.loader.graph.leaf_nodes()]}, sort_keys=True))
+      args:
+        chdir: "{{ open_cinema.app_path }}"
+      become_user: "{{ open_cinema.user }}"
+      environment:
+        DJANGO_SETTINGS_MODULE: "opencinema.settings"
+      register: open_cinema_migration_schema_preflight
+      changed_when: false
+
+    - name: Determine whether a schema transition is pending
+      ansible.builtin.set_fact:
+        open_cinema_has_pending_migrations: >-
+          {{ 'No planned migration operations.' not in open_cinema_migration_plan.stdout }}
+
+    - name: Stop the current application generation before a schema transition
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - open-cinema.service
+        - open-cinema-orchestrator.service
+        - celery.service
+        - celery-beat.service
+      failed_when: false
+      when: open_cinema_has_pending_migrations | bool
+
+    - name: Name this rollback bundle
+      ansible.builtin.set_fact:
+        open_cinema_rollback_id: "{{ ansible_date_time.iso8601_basic_short }}"
+      when: open_cinema_has_pending_migrations | bool
+
+    - name: Create the rollback bundle
+      ansible.builtin.file:
+        path: "{{ open_cinema.rollback_root }}/{{ open_cinema_rollback_id }}"
+        state: directory
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0750"
+      when: open_cinema_has_pending_migrations | bool
+
+    - name: Back up the pre-migration SQLite database
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.migrations.timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.migrations.preflight_timeout_seconds }}s"
+          - sqlite3
+          - "{{ open_cinema.django.database }}"
+          - ".timeout {{ open_cinema.sqlite.busy_timeout_ms }}"
+          - ".backup '{{ open_cinema.rollback_root }}/{{ open_cinema_rollback_id }}/db.sqlite3'"
+      become_user: "{{ open_cinema.user }}"
+      register: open_cinema_migration_database_backup
+      changed_when: true
+      when:
+        - open_cinema_has_pending_migrations | bool
+        - open_cinema_database_before_migration.stat.exists
+
+    - name: Enforce private ownership of the pre-migration database backup
+      ansible.builtin.file:
+        path: "{{ open_cinema.rollback_root }}/{{ open_cinema_rollback_id }}/db.sqlite3"
+        state: file
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+      when:
+        - open_cinema_has_pending_migrations | bool
+        - open_cinema_database_before_migration.stat.exists
+
+    - name: Inspect processor runtime configuration directories
+      ansible.builtin.stat:
+        path: "{{ item.path }}"
+      loop:
+        - name: camilladsp
+          path: "{{ camilladsp.runtime_dir }}"
+        - name: decoder
+          path: "{{ pcm_auto_decoder.runtime_dir }}"
+      register: open_cinema_processor_config_directories
+      when: open_cinema_has_pending_migrations | bool
+
+    - name: Back up processor runtime configurations
+      ansible.builtin.copy:
+        src: "{{ item.item.path }}/"
+        dest: "{{ open_cinema.rollback_root }}/{{ open_cinema_rollback_id }}/{{ item.item.name }}/"
+        remote_src: true
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: preserve
+      loop: "{{ open_cinema_processor_config_directories.results | default([]) }}"
+      when:
+        - open_cinema_has_pending_migrations | bool
+        - item.stat.exists and item.stat.isdir
+
+    - name: Version the rollback bundle and migration plan
+      ansible.builtin.template:
+        src: rollback-manifest.yml.j2
+        dest: "{{ open_cinema.rollback_root }}/{{ open_cinema_rollback_id }}/manifest.yml"
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+      when: open_cinema_has_pending_migrations | bool
+
+    - name: Print the exact coordinated rollback boundary
+      ansible.builtin.debug:
+        msg: >-
+          Rollback boundary {{ open_cinema.rollback_root }}/{{ open_cinema_rollback_id }}:
+          Open Cinema {{ open_cinema_release_manifest.components.open_cinema.version }},
+          WyrePlumber {{ open_cinema_release_manifest.components.wyreplumber.version }},
+          CamillaDSP {{ open_cinema_release_manifest.components.camilladsp.version }},
+          decoder {{ open_cinema_release_manifest.components.pcm_auto_decoder.version }}, and the
+          pre-migration database/configuration recorded in manifest.yml.
+      when: open_cinema_has_pending_migrations | bool
+
+    - name: Apply Django migrations without preserving removed legacy audio data
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.migrations.timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.migrations.apply_timeout_seconds }}s"
+          - "{{ open_cinema.venv_path }}/bin/python"
+          - manage.py
+          - migrate
+          - --noinput
+      args:
+        chdir: "{{ open_cinema.app_path }}"
+      become_user: "{{ open_cinema.user }}"
+      environment:
+        DJANGO_SETTINGS_MODULE: "opencinema.settings"
+      register: open_cinema_migration_apply
+      when: open_cinema_has_pending_migrations | bool
+
+  rescue:
+    - name: Capture service logs after a failed schema deployment
+      ansible.builtin.command:
+        argv:
+          - journalctl
+          - --no-pager
+          - --since=-30min
+          - --unit=open-cinema.service
+          - --unit=open-cinema-orchestrator.service
+          - --unit=celery.service
+          - --unit=celery-beat.service
+          - --unit=redis-server.service
+      register: open_cinema_failed_deployment_logs
+      changed_when: false
+      failed_when: false
+
+    - name: Name the correlated migration failure diagnostics
+      ansible.builtin.set_fact:
+        open_cinema_migration_failure_id: >-
+          migration-{{ ansible_date_time.iso8601_basic_short }}
+
+    - name: Build the correlated migration failure result
+      ansible.builtin.set_fact:
+        open_cinema_migration_failure_result:
+          schemaVersion: 1
+          status: failed
+          releaseId: "{{ open_cinema_release_manifest.release_id }}"
+          releaseManifestSha256: "{{ open_cinema_release_manifest_digest }}"
+          rollbackBundle: "{{ open_cinema_rollback_id | default('not-created') }}"
+          timeoutPolicy:
+            preflightSeconds: "{{ open_cinema.migrations.preflight_timeout_seconds }}"
+            applySeconds: "{{ open_cinema.migrations.apply_timeout_seconds }}"
+            killGraceSeconds: "{{ open_cinema.migrations.timeout_kill_grace_seconds }}"
+          databaseExisted: >-
+            {{ open_cinema_database_before_migration.stat.exists | default(false) }}
+          migrationPlan:
+            rc: "{{ open_cinema_migration_plan.rc | default(-1) }}"
+            stdout: "{{ open_cinema_migration_plan.stdout | default('') }}"
+            stderr: "{{ open_cinema_migration_plan.stderr | default('') }}"
+          sqlitePreflight:
+            rc: "{{ open_cinema_migration_sqlite_preflight.rc | default(0) }}"
+            stdout: "{{ open_cinema_migration_sqlite_preflight.stdout | default('not-run') }}"
+            stderr: "{{ open_cinema_migration_sqlite_preflight.stderr | default('') }}"
+          schemaPreflight:
+            rc: "{{ open_cinema_migration_schema_preflight.rc | default(-1) }}"
+            stdout: "{{ open_cinema_migration_schema_preflight.stdout | default('') }}"
+            stderr: "{{ open_cinema_migration_schema_preflight.stderr | default('') }}"
+          databaseBackup:
+            rc: "{{ open_cinema_migration_database_backup.rc | default(-1) }}"
+            stderr: "{{ open_cinema_migration_database_backup.stderr | default('not-run') }}"
+          migrationApply:
+            rc: "{{ open_cinema_migration_apply.rc | default(-1) }}"
+            stdout: "{{ open_cinema_migration_apply.stdout | default('') }}"
+            stderr: "{{ open_cinema_migration_apply.stderr | default('not-run') }}"
+          serviceLogs: >-
+            {{ open_cinema.diagnostics_root }}/{{ open_cinema_migration_failure_id }}.log
+
+    - name: Retain failed migration service logs
+      ansible.builtin.copy:
+        content: "{{ open_cinema_failed_deployment_logs.stdout | default('journal unavailable') }}\n"
+        dest: "{{ open_cinema.diagnostics_root }}/{{ open_cinema_migration_failure_id }}.log"
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+
+    - name: Retain the correlated migration failure result
+      ansible.builtin.copy:
+        content: "{{ open_cinema_migration_failure_result | to_nice_json }}\n"
+        dest: "{{ open_cinema.diagnostics_root }}/{{ open_cinema_migration_failure_id }}.json"
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+
+    - name: Stop deployment and preserve the rollback bundle
+      ansible.builtin.fail:
+        msg: >-
+          Open Cinema migration failed. No service restart was attempted. The
+          pre-migration database, processor configuration, migration plan, and
+          correlated diagnostics remain under {{ open_cinema.rollback_root }}
+          and {{ open_cinema.diagnostics_root }}. Every migration subprocess
+          was bounded by the declared timeout policy.
+
+- name: Enforce private ownership of the live SQLite database
+  ansible.builtin.file:
+    path: "{{ open_cinema.django.database }}"
+    state: file
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0600"
+
+- name: Find retained rollback bundles when no schema transition is pending
+  ansible.builtin.find:
+    paths: "{{ open_cinema.rollback_root }}"
+    recurse: false
+    file_type: directory
+  register: open_cinema_existing_rollback_bundles
+  when: not open_cinema_has_pending_migrations | bool
+
+- name: Reuse the latest retained rollback identity for readiness records
+  ansible.builtin.set_fact:
+    open_cinema_rollback_id: >-
+      {{
+        ((open_cinema_existing_rollback_bundles.files
+           | map(attribute='path') | sort | last) | basename)
+        if open_cinema_existing_rollback_bundles.matched | int > 0
+        else 'none'
+      }}
+  when: not open_cinema_has_pending_migrations | bool
+
+- name: Provision the temporary default appliance administrator
+  ansible.builtin.command:
+    argv:
+      - "{{ open_cinema.venv_path }}/bin/python"
+      - manage.py
+      - ensure_default_admin
+      - --username
+      - "{{ open_cinema.default_admin.username }}"
+    chdir: "{{ open_cinema.app_path }}"
+  become_user: "{{ open_cinema.user }}"
+  environment:
+    DJANGO_SETTINGS_MODULE: "opencinema.settings"
+    OPEN_CINEMA_DEFAULT_ADMIN_PASSWORD: "{{ open_cinema.default_admin.password }}"
+  register: open_cinema_default_admin_result
+  changed_when: >-
+    'created' in open_cinema_default_admin_result.stdout or
+    'updated' in open_cinema_default_admin_result.stdout
+  no_log: true
+  when: open_cinema.default_admin.enabled | bool
 
 - name: Install Gunicorn systemd service
   ansible.builtin.template:
@@ -172,6 +794,34 @@
     mode: '0644'
   notify: Restart celery
 
+- name: Install Celery beat systemd service
+  ansible.builtin.template:
+    src: celery-beat.service.j2
+    dest: /etc/systemd/system/celery-beat.service
+    mode: '0644'
+  notify: Restart celery beat
+
+- name: Install the dedicated audio orchestrator systemd service
+  ansible.builtin.template:
+    src: orchestrator.service.j2
+    dest: /etc/systemd/system/open-cinema-orchestrator.service
+    mode: '0644'
+  notify: Restart open-cinema orchestrator
+
+- name: Verify application unit syntax and dependency graph before restart
+  ansible.builtin.command:
+    argv:
+      - systemd-analyze
+      - verify
+      - /etc/systemd/system/open-cinema.service
+      - /etc/systemd/system/open-cinema-orchestrator.service
+      - /etc/systemd/system/celery.service
+      - /etc/systemd/system/celery-beat.service
+  changed_when: false
+
+- name: Apply service definitions before end-of-play readiness
+  ansible.builtin.meta: flush_handlers
+
 - name: Enable and start Open Cinema service
   ansible.builtin.systemd:
     name: open-cinema
@@ -185,3 +835,38 @@
     enabled: true
     state: started
     daemon_reload: true
+  when: open_cinema.celery_enabled | bool
+
+- name: Enable and start Celery beat service
+  ansible.builtin.systemd:
+    name: celery-beat
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: open_cinema.celery_enabled | bool
+
+- name: Disable Celery when scheduled orchestration retention is not configured
+  ansible.builtin.systemd:
+    name: celery
+    enabled: false
+    state: stopped
+    daemon_reload: true
+  failed_when: false
+  when: not open_cinema.celery_enabled | bool
+
+- name: Disable Celery beat when scheduled retention is not configured
+  ansible.builtin.systemd:
+    name: celery-beat
+    enabled: false
+    state: stopped
+    daemon_reload: true
+  failed_when: false
+  when: not open_cinema.celery_enabled | bool
+
+- name: Enable and start the dedicated audio orchestrator
+  ansible.builtin.systemd:
+    name: open-cinema-orchestrator
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: open_cinema.orchestrator_enabled | bool

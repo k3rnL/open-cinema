@@ -12,25 +12,29 @@
 
 - name: Download open-cinema-admin build from GitHub release
   ansible.builtin.get_url:
-    url: "https://github.com/{{ open_cinema_ui.repo }}/releases/download/{{ open_cinema_ui.version }}/{{ open_cinema_ui.admin.asset_name }}"
-    dest: "/tmp/{{ open_cinema_ui.admin.asset_name }}"
+    url: "{{ open_cinema_release_artifacts.management_ui_admin.url }}"
+    dest: "/tmp/{{ open_cinema_release_artifacts.management_ui_admin.name }}"
     mode: '0644'
-    force: yes
+    checksum: "sha256:{{ open_cinema_release_artifacts.management_ui_admin.sha256 }}"
   register: admin_download
+  when: not (install_from_local | default(false) | bool)
 
 - name: Download open-cinema-ui build from GitHub release
   ansible.builtin.get_url:
-    url: "https://github.com/{{ open_cinema_ui.repo }}/releases/download/{{ open_cinema_ui.version }}/{{ open_cinema_ui.user_ui.asset_name }}"
-    dest: "/tmp/{{ open_cinema_ui.user_ui.asset_name }}"
+    url: "{{ open_cinema_release_artifacts.management_ui_on_box.url }}"
+    dest: "/tmp/{{ open_cinema_release_artifacts.management_ui_on_box.name }}"
     mode: '0644'
-    force: yes
+    checksum: "sha256:{{ open_cinema_release_artifacts.management_ui_on_box.sha256 }}"
   register: ui_download
+  when: not (install_from_local | default(false) | bool)
 
 - name: Clear admin web root before extraction
   ansible.builtin.file:
     path: "{{ open_cinema_ui.admin.web_root }}"
     state: absent
-  when: admin_download.changed
+  when:
+    - not (install_from_local | default(false) | bool)
+    - admin_download.changed
 
 - name: Recreate admin web root
   ansible.builtin.file:
@@ -39,23 +43,91 @@
     owner: www-data
     group: www-data
     mode: '0755'
-  when: admin_download.changed
+  when:
+    - not (install_from_local | default(false) | bool)
+    - admin_download.changed
 
 - name: Extract open-cinema-admin build
   ansible.builtin.unarchive:
-    src: "/tmp/{{ open_cinema_ui.admin.asset_name }}"
+    src: "/tmp/{{ open_cinema_release_artifacts.management_ui_admin.name }}"
     dest: "{{ open_cinema_ui.admin.web_root }}"
     remote_src: yes
     owner: www-data
     group: www-data
-  when: admin_download.changed
+  when:
+    - not (install_from_local | default(false) | bool)
+    - admin_download.changed
+  notify: Reload nginx
+
+- name: Verify local administration UI build exists
+  ansible.builtin.stat:
+    path: "{{ local_open_cinema_ui_source_path }}/apps/admin/dist/index.html"
+  delegate_to: localhost
+  become: false
+  register: local_admin_index
+  when: install_from_local | default(false) | bool
+
+- name: Require a built local administration UI
+  ansible.builtin.assert:
+    that:
+      - local_admin_index.stat.exists
+    fail_msg: >-
+      Build the current UI workspace before deployment with `npm run build` in
+      {{ local_open_cinema_ui_source_path }}.
+  when: install_from_local | default(false) | bool
+
+- name: Read the local management UI orchestration contract constants
+  ansible.builtin.slurp:
+    src: "{{ local_open_cinema_ui_source_path }}/packages/shared/src/orchestration/types.ts"
+  delegate_to: localhost
+  become: false
+  register: open_cinema_local_ui_contract_source
+  when: install_from_local | default(false) | bool
+
+- name: Reject a local management UI with incompatible DTO contracts
+  ansible.builtin.assert:
+    that:
+      - >-
+        (open_cinema_local_ui_contract_source.content | b64decode) is
+        search('export const AUDIO_API_VERSION = ' ~
+               (open_cinema_release_manifest.contracts.audio_api |
+                regex_replace('^.*/v', '') | int | string) ~ ' as const')
+      - >-
+        (open_cinema_local_ui_contract_source.content | b64decode) is
+        search('export const AUDIO_SCHEMA_VERSION = ' ~
+               (open_cinema_release_manifest.contracts.ui_dto_schema | int | string) ~
+               ' as const')
+    fail_msg: >-
+      The local management UI does not implement the coordinated audio API and
+      UI DTO schema declared by the release manifest. Rebuild a compatible UI
+      before synchronizing it to the appliance.
+  when: install_from_local | default(false) | bool
+
+- name: Synchronize local administration UI build
+  ansible.posix.synchronize:
+    src: "{{ local_open_cinema_ui_source_path }}/apps/admin/dist/"
+    dest: "{{ open_cinema_ui.admin.web_root }}/"
+    delete: true
+    checksum: true
+    owner: false
+    group: false
+    perms: false
+    times: false
+    rsync_path: "sudo rsync"
+    mode: push
+    rsync_opts:
+      - "--chown=www-data:www-data"
+      - "--chmod=D755,F644"
+  when: install_from_local | default(false) | bool
   notify: Reload nginx
 
 - name: Clear UI web root before extraction
   ansible.builtin.file:
     path: "{{ open_cinema_ui.user_ui.web_root }}"
     state: absent
-  when: ui_download.changed
+  when:
+    - not (install_from_local | default(false) | bool)
+    - ui_download.changed
 
 - name: Recreate UI web root
   ansible.builtin.file:
@@ -64,16 +136,55 @@
     owner: www-data
     group: www-data
     mode: '0755'
-  when: ui_download.changed
+  when:
+    - not (install_from_local | default(false) | bool)
+    - ui_download.changed
 
 - name: Extract open-cinema-ui build
   ansible.builtin.unarchive:
-    src: "/tmp/{{ open_cinema_ui.user_ui.asset_name }}"
+    src: "/tmp/{{ open_cinema_release_artifacts.management_ui_on_box.name }}"
     dest: "{{ open_cinema_ui.user_ui.web_root }}"
     remote_src: yes
     owner: www-data
     group: www-data
-  when: ui_download.changed
+  when:
+    - not (install_from_local | default(false) | bool)
+    - ui_download.changed
+  notify: Reload nginx
+
+- name: Verify local on-box UI build exists
+  ansible.builtin.stat:
+    path: "{{ local_open_cinema_ui_source_path }}/apps/ui/dist/index.html"
+  delegate_to: localhost
+  become: false
+  register: local_ui_index
+  when: install_from_local | default(false) | bool
+
+- name: Require a built local on-box UI
+  ansible.builtin.assert:
+    that:
+      - local_ui_index.stat.exists
+    fail_msg: >-
+      Build the current UI workspace before deployment with `npm run build` in
+      {{ local_open_cinema_ui_source_path }}.
+  when: install_from_local | default(false) | bool
+
+- name: Synchronize local on-box UI build
+  ansible.posix.synchronize:
+    src: "{{ local_open_cinema_ui_source_path }}/apps/ui/dist/"
+    dest: "{{ open_cinema_ui.user_ui.web_root }}/"
+    delete: true
+    checksum: true
+    owner: false
+    group: false
+    perms: false
+    times: false
+    rsync_path: "sudo rsync"
+    mode: push
+    rsync_opts:
+      - "--chown=www-data:www-data"
+      - "--chmod=D755,F644"
+  when: install_from_local | default(false) | bool
   notify: Reload nginx
 
 - name: Verify admin build (check index.html exists)
@@ -82,18 +193,47 @@
   register: admin_index
   failed_when: not admin_index.stat.exists
 
+- name: Verify the management UI build publishes its DTO contract
+  ansible.builtin.stat:
+    path: "{{ open_cinema_ui.admin.web_root }}/{{ open_cinema_ui.admin.contract_asset_name }}"
+  register: open_cinema_admin_contract_asset
+  failed_when: >-
+    not open_cinema_admin_contract_asset.stat.exists or
+    not open_cinema_admin_contract_asset.stat.isreg
+
 - name: Verify UI build (check index.html exists)
   ansible.builtin.stat:
     path: "{{ open_cinema_ui.user_ui.web_root }}/index.html"
   register: ui_index
   failed_when: not ui_index.stat.exists
 
+- name: Verify exact installed UI application identities
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - >-
+        import json, pathlib, sys;
+        expected_version = sys.argv[1];
+        records = [json.loads(pathlib.Path(path).read_text()) for path in sys.argv[2:]];
+        expected = [('admin', expected_version), ('on-box', expected_version)];
+        actual = [(record.get('application'), record.get('version')) for record in records];
+        assert all(record.get('schemaVersion') == 1 and record.get('project') == 'open-cinema-ui' for record in records), records;
+        assert actual == expected, {'expected': expected, 'actual': actual};
+        print(json.dumps(records, sort_keys=True))
+      - "{{ open_cinema_release_manifest.components.management_ui.version }}"
+      - "{{ open_cinema_ui.admin.web_root }}/open-cinema-release.json"
+      - "{{ open_cinema_ui.user_ui.web_root }}/open-cinema-release.json"
+  register: open_cinema_installed_ui_identities
+  changed_when: false
+
 - name: Set proper permissions on web directories
   ansible.builtin.file:
     path: "{{ item }}"
     owner: www-data
     group: www-data
-    recurse: yes
+    mode: "u=rwX,g=rX,o=rX"
+    recurse: true
   loop:
     - "{{ open_cinema_ui.admin.web_root }}"
     - "{{ open_cinema_ui.user_ui.web_root }}"
@@ -103,5 +243,9 @@
     path: "/tmp/{{ item }}"
     state: absent
   loop:
-    - "{{ open_cinema_ui.admin.asset_name }}"
-    - "{{ open_cinema_ui.user_ui.asset_name }}"
+    - "{{ open_cinema_release_artifacts.management_ui_admin.name }}"
+    - "{{ open_cinema_release_artifacts.management_ui_on_box.name }}"
+  when: not (install_from_local | default(false) | bool)
+
+- name: Apply UI web-server reload before readiness
+  ansible.builtin.meta: flush_handlers

@@ -1,27 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/pipewire}"
-mkdir -p "$XDG_RUNTIME_DIR"
-chmod 700 "$XDG_RUNTIME_DIR"
+runtime_dir="${XDG_RUNTIME_DIR:-/tmp/open-cinema-runtime}"
+mkdir -p "${runtime_dir}"
+chmod 0700 "${runtime_dir}"
 
-# Ensure a D-Bus session bus exists (headless containers usually don't have one)
-if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
-  # Start a private session bus and export env vars into this shell
-  eval "$(dbus-launch --sh-syntax)"
+if [[ ! -S "${runtime_dir}/bus" ]]; then
+  dbus-daemon \
+    --session \
+    --fork \
+    --address="unix:path=${runtime_dir}/bus" \
+    --nopidfile
 fi
 
-# Start services if not already running
-pgrep -x pipewire >/dev/null 2>&1 || pipewire &
-pgrep -x wireplumber >/dev/null 2>&1 || wireplumber &
-pgrep -x pipewire-pulse >/dev/null 2>&1 || pipewire-pulse &
+export XDG_RUNTIME_DIR="${runtime_dir}"
+export DBUS_SESSION_BUS_ADDRESS="unix:path=${runtime_dir}/bus"
+export PIPEWIRE_REMOTE=pipewire-0
 
-# Readiness check
-for i in {1..50}; do
-  pw-cli info 0 >/dev/null 2>&1 && break
+if ! pgrep -u "$(id -u)" -x pipewire >/dev/null 2>&1; then
+  pipewire >"${runtime_dir}/pipewire.log" 2>&1 &
+fi
+if ! pgrep -u "$(id -u)" -x wireplumber >/dev/null 2>&1; then
+  wireplumber >"${runtime_dir}/wireplumber.log" 2>&1 &
+fi
+
+for _attempt in $(seq 1 100); do
+  if pw-cli info 0 >/dev/null 2>&1 && wpctl status >/dev/null 2>&1; then
+    exit 0
+  fi
   sleep 0.1
 done
 
-# Optional: verify WP can talk to PW
-wpctl status >/dev/null 2>&1 || true
-echo "PipeWire + WirePlumber + pipewire-pulse started."
+echo "Isolated PipeWire/WirePlumber startup failed." >&2
+tail -n 80 "${runtime_dir}"/*.log >&2 || true
+exit 1

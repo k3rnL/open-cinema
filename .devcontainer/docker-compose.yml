@@ -1,19 +1,24 @@
-version: '3.8'
-
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        UV_VERSION: 0.9.28
     volumes:
       - ..:/workspace:cached
-    command: sleep infinity
+      - ../../wyreplumber:/wyreplumber:cached
+      - ../../../RustroverProjects/pcm-auto-decoder:/pcm-auto-decoder:cached
     network_mode: service:redis
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.2-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15

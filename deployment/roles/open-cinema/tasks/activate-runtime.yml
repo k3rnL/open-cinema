@@ -1,0 +1,18 @@
+---
+- name: Publish successful coordinated contract-gate state
+  ansible.builtin.set_fact:
+    open_cinema_contract_gate_complete: true
+
+- name: Render the accepted full runtime environment
+  ansible.builtin.include_tasks: render-runtime-environment.yml
+
+- name: Activate the full runtime after contract compatibility passes
+  ansible.builtin.meta: flush_handlers
+
+- name: Require the activated controller to be running
+  ansible.builtin.systemd:
+    name: open-cinema-orchestrator.service
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: open_cinema.orchestrator_enabled | bool

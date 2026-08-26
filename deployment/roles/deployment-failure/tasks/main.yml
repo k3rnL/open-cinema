@@ -1,0 +1,128 @@
+---
+- name: Name the correlated candidate-stage failure
+  ansible.builtin.set_fact:
+    open_cinema_candidate_failure_id: >-
+      candidate-{{ ansible_date_time.iso8601_basic_short }}
+    open_cinema_candidate_failure_service_states: {}
+
+- name: Find retained coordinated transition bundles after failure
+  ansible.builtin.find:
+    paths: "{{ open_cinema.rollback_root }}"
+    patterns: transition-*
+    file_type: directory
+    recurse: false
+  register: open_cinema_candidate_failure_bundles
+
+- name: Correlate the failure with one retained recovery boundary
+  ansible.builtin.set_fact:
+    open_cinema_candidate_failure_rollback_bundle: >-
+      {{
+        open_cinema_transition_rollback_id
+        if open_cinema_transition_rollback_id is defined
+        else
+        (((open_cinema_candidate_failure_bundles.files |
+           map(attribute='path') | sort | last) | basename)
+         if open_cinema_candidate_failure_bundles.matched | int > 0
+         else 'none')
+      }}
+
+- name: Probe every coordinated service after candidate-stage failure
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - "{{ item }}"
+  loop:
+    - redis-server.service
+    - open-cinema.service
+    - open-cinema-orchestrator.service
+    - celery.service
+    - celery-beat.service
+    - nginx.service
+    - camilladsp@camilladsp-0.service
+    - pcm-auto-decoder@decoder-0.service
+  register: open_cinema_candidate_failure_services
+  changed_when: false
+  failed_when: false
+
+- name: Publish candidate-stage failure service states
+  ansible.builtin.set_fact:
+    open_cinema_candidate_failure_service_states: >-
+      {{ open_cinema_candidate_failure_service_states |
+         combine({item.item: item.stdout | default('unavailable')}) }}
+  loop: "{{ open_cinema_candidate_failure_services.results }}"
+
+- name: Capture coordinated service logs after candidate-stage failure
+  ansible.builtin.command:
+    argv:
+      - journalctl
+      - --no-pager
+      - --since=-30min
+      - --unit=open-cinema.service
+      - --unit=open-cinema-orchestrator.service
+      - --unit=celery.service
+      - --unit=celery-beat.service
+      - --unit=redis-server.service
+      - --unit=nginx.service
+      - --unit=camilladsp@camilladsp-0.service
+      - --unit=pcm-auto-decoder@decoder-0.service
+  register: open_cinema_candidate_failure_logs
+  changed_when: false
+  failed_when: false
+
+- name: Retain private candidate-stage failure logs
+  ansible.builtin.copy:
+    content: >-
+      {{ open_cinema_candidate_failure_logs.stdout |
+         default('journal unavailable') }}
+    dest: >-
+      {{ open_cinema.diagnostics_root }}/{{ open_cinema_candidate_failure_id }}.log
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0600"
+
+- name: Find detailed diagnostics emitted before the aggregate failure
+  ansible.builtin.find:
+    paths: "{{ open_cinema.diagnostics_root }}"
+    patterns:
+      - "*.json"
+      - "*.log"
+    file_type: file
+    recurse: false
+  register: open_cinema_candidate_failure_related_diagnostics
+
+- name: Build the correlated candidate-stage failure result
+  ansible.builtin.set_fact:
+    open_cinema_candidate_failure_result:
+      schemaVersion: 1
+      status: failed
+      releaseId: "{{ open_cinema_release_manifest.release_id }}"
+      candidateDigest: "{{ open_cinema_deployment_candidate_digest }}"
+      rollbackBundle: "{{ open_cinema_candidate_failure_rollback_bundle }}"
+      failedTask: "{{ open_cinema_candidate_failure_task }}"
+      failureMessage: "{{ open_cinema_candidate_failure_message }}"
+      failureRc: "{{ open_cinema_candidate_failure_rc | int }}"
+      serviceStates: "{{ open_cinema_candidate_failure_service_states }}"
+      serviceLogs: >-
+        {{ open_cinema.diagnostics_root }}/{{ open_cinema_candidate_failure_id }}.log
+      relatedDiagnostics: >-
+        {{ open_cinema_candidate_failure_related_diagnostics.files |
+           map(attribute='path') | sort | list }}
+
+- name: Retain the private correlated candidate-stage failure result
+  ansible.builtin.copy:
+    content: "{{ open_cinema_candidate_failure_result | to_nice_json }}\n"
+    dest: >-
+      {{ open_cinema.diagnostics_root }}/{{ open_cinema_candidate_failure_id }}.json
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0600"
+
+- name: Stop without deleting the coordinated rollback boundary
+  ansible.builtin.fail:
+    msg: >-
+      Candidate deployment failed during {{ open_cinema_candidate_failure_task }}.
+      Retained rollback bundle {{ open_cinema_candidate_failure_rollback_bundle }}
+      and correlated diagnostics at {{ open_cinema.diagnostics_root }}/{{
+      open_cinema_candidate_failure_id }}.json. Select rollback explicitly; no
+      recovery point was deleted or restored automatically.

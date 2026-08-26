@@ -1,0 +1,56 @@
+[Unit]
+Description=Open Cinema audio orchestrator
+Documentation=file://{{ open_cinema.app_path }}/docs/audio-orchestration/README.md
+After=network-online.target redis-server.service user@{{ open_cinema_uid }}.service
+Wants=network-online.target redis-server.service user@{{ open_cinema_uid }}.service
+
+[Service]
+Type=simple
+User={{ open_cinema.user }}
+Group={{ open_cinema.group }}
+SupplementaryGroups={{ audio_service.supplementary_groups | join(' ') }}
+WorkingDirectory={{ open_cinema.app_path }}
+EnvironmentFile={{ open_cinema.app_path }}/.env
+Environment="XDG_RUNTIME_DIR={{ audio_service.runtime_dir }}"
+Environment="DBUS_SESSION_BUS_ADDRESS={{ audio_service.dbus_address }}"
+Environment="PIPEWIRE_REMOTE=pipewire-0"
+RuntimeDirectory=open-cinema
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+UMask=0027
+
+ExecStartPre=/usr/bin/test -S {{ audio_service.pipewire_socket }}
+ExecStartPre=/usr/bin/redis-cli -h 127.0.0.1 ping
+ExecStartPre={{ open_cinema.venv_path }}/bin/open-cinema-orchestrator --check
+ExecStart={{ open_cinema.venv_path }}/bin/open-cinema-orchestrator
+
+Restart=on-failure
+RestartSec=2s
+TimeoutStartSec=30s
+TimeoutStopSec=20s
+KillSignal=SIGTERM
+# Local adapter processes and any in-flight helper receive the stop signal with
+# the controller. This prevents a helper waiting on systemd from deadlocking the
+# unit's own stop transaction while the controller performs bounded cleanup.
+KillMode=control-group
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+# ProtectHome also hides /run/user, which contains the owned PipeWire socket.
+ProtectHome=false
+InaccessiblePaths=/home /root
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+ReadWritePaths={{ open_cinema.app_path }} /run/open-cinema /var/log/open-cinema
+
+[Install]
+WantedBy=multi-user.target

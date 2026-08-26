@@ -1,0 +1,24 @@
+---
+- name: Stop the controller before withdrawing live mutation privileges
+  ansible.builtin.systemd:
+    name: open-cinema-orchestrator.service
+    state: stopped
+  failed_when: false
+
+- name: Withdraw processor and live reconciliation privileges
+  ansible.builtin.set_fact:
+    open_cinema_contract_gate_complete: false
+
+- name: Render the non-live runtime environment
+  ansible.builtin.include_tasks: render-runtime-environment.yml
+
+- name: Apply the non-live environment before contract probes
+  ansible.builtin.meta: flush_handlers
+
+- name: Keep the diagnosable non-live controller available during contract probes
+  ansible.builtin.systemd:
+    name: open-cinema-orchestrator.service
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: open_cinema.orchestrator_enabled | bool

@@ -1,0 +1,95 @@
+---
+- name: Verify bounded Redis memory persistence and client policy
+  ansible.builtin.command:
+    argv:
+      - redis-cli
+      - --json
+      - CONFIG
+      - GET
+      - "{{ item.name }}"
+  loop:
+    - name: maxmemory
+      expected: "{{ redis_policy.maxmemory_mb | int * 1024 * 1024 }}"
+    - name: maxmemory-policy
+      expected: "{{ redis_policy.maxmemory_policy }}"
+    - name: maxclients
+      expected: "{{ redis_policy.maxclients }}"
+    - name: appendonly
+      expected: "no"
+    - name: save
+      expected: ""
+  register: open_cinema_readiness_redis_policy
+  changed_when: false
+  failed_when: >-
+    open_cinema_readiness_redis_policy.rc != 0 or
+    (open_cinema_readiness_redis_policy.stdout | from_json)[item.name] | string !=
+    item.expected | string
+
+- name: Verify the Redis systemd memory ceiling
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - redis-server.service
+      - --property=MemoryMax
+      - --value
+  register: open_cinema_readiness_redis_memory_max
+  changed_when: false
+  failed_when: >-
+    open_cinema_readiness_redis_memory_max.rc != 0 or
+    open_cinema_readiness_redis_memory_max.stdout | int !=
+    redis_policy.systemd_memory_max_mb | int * 1024 * 1024
+
+- name: Verify bounded SQLite Celery and retention settings
+  ansible.builtin.command:
+    argv:
+      - "{{ open_cinema.venv_path }}/bin/python"
+      - manage.py
+      - shell
+      - --no-imports
+      - -c
+      - >-
+        from django.conf import settings;
+        from django.db import connection;
+        assert settings.SQLITE_BUSY_TIMEOUT_MS == {{ open_cinema.sqlite.busy_timeout_ms }};
+        assert settings.SQLITE_WAL_AUTOCHECKPOINT_PAGES == {{ open_cinema.sqlite.wal_autocheckpoint_pages }};
+        assert settings.CELERY_TASK_IGNORE_RESULT is True;
+        assert settings.CELERY_RESULT_EXPIRES == {{ open_cinema.celery.result_expires_seconds }};
+        assert settings.CELERY_WORKER_PREFETCH_MULTIPLIER == {{ open_cinema.celery.prefetch_multiplier }};
+        assert settings.AUDIO_ORCHESTRATION_RETENTION == {{ open_cinema.retention | to_json }};
+        cursor = connection.cursor();
+        cursor.execute('PRAGMA journal_mode'); assert cursor.fetchone()[0].lower() == 'wal';
+        cursor.execute('PRAGMA busy_timeout'); assert cursor.fetchone()[0] == {{ open_cinema.sqlite.busy_timeout_ms }};
+        cursor.execute('PRAGMA synchronous'); assert cursor.fetchone()[0] == 1;
+        cursor.execute('PRAGMA wal_autocheckpoint'); assert cursor.fetchone()[0] == {{ open_cinema.sqlite.wal_autocheckpoint_pages }};
+        cursor.close(); print('bounded control-plane persistence verified')
+  args:
+    chdir: "{{ open_cinema.app_path }}"
+  become_user: "{{ open_cinema.user }}"
+  register: open_cinema_readiness_database_worker_policy
+  changed_when: false
+
+- name: Inspect bounded Celery unit execution and memory policy
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - "{{ item.service }}"
+      - --property=ExecStart
+      - --property=MemoryMax
+  loop:
+    - service: celery.service
+      memory_bytes: "{{ open_cinema.celery.worker_memory_max_mb | int * 1024 * 1024 }}"
+      required:
+        - "--concurrency={{ open_cinema.celery.worker_concurrency }}"
+        - "--prefetch-multiplier={{ open_cinema.celery.prefetch_multiplier }}"
+        - "--max-tasks-per-child={{ open_cinema.celery.max_tasks_per_child }}"
+    - service: celery-beat.service
+      memory_bytes: "{{ open_cinema.celery.beat_memory_max_mb | int * 1024 * 1024 }}"
+      required: []
+  register: open_cinema_readiness_celery_unit_policy
+  changed_when: false
+  failed_when: >-
+    open_cinema_readiness_celery_unit_policy.rc != 0 or
+    ('MemoryMax=' ~ (item.memory_bytes | string)) not in open_cinema_readiness_celery_unit_policy.stdout or
+    item.required | reject('in', open_cinema_readiness_celery_unit_policy.stdout) | list | length > 0
