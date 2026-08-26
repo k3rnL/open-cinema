@@ -1,0 +1,312 @@
+---
+- name: Require one explicit coordinated rollback bundle identity
+  ansible.builtin.assert:
+    that:
+      - open_cinema_rollback_bundle_id is defined
+      - open_cinema_rollback_bundle_id is match('^transition-[0-9T]+-[0-9a-f]{12}$')
+    fail_msg: >-
+      Supply the exact transition bundle with
+      -e open_cinema_rollback_bundle_id=transition-YYYYMMDDTHHMMSS-<digest>.
+      Rollback never selects or deletes a bundle implicitly.
+
+- name: Publish the exact coordinated rollback path
+  ansible.builtin.set_fact:
+    open_cinema_rollback_id: "{{ open_cinema_rollback_bundle_id }}"
+    open_cinema_rollback_bundle_path: >-
+      {{ open_cinema.rollback_root }}/{{ open_cinema_rollback_bundle_id }}
+
+- name: Inspect the coordinated rollback manifest and ready marker
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ open_cinema_rollback_bundle_path }}/manifest.yml"
+    - "{{ open_cinema_rollback_bundle_path }}/READY"
+  register: open_cinema_rollback_boundary_files
+
+- name: Reject incomplete or uncommitted rollback bundles
+  ansible.builtin.assert:
+    that:
+      - open_cinema_rollback_boundary_files.results[0].stat.exists
+      - open_cinema_rollback_boundary_files.results[1].stat.exists
+    fail_msg: >-
+      The selected rollback bundle has no private manifest or READY marker and
+      cannot be used as a coordinated recovery boundary.
+
+- name: Load the selected rollback manifest
+  ansible.builtin.slurp:
+    src: "{{ open_cinema_rollback_bundle_path }}/manifest.yml"
+  register: open_cinema_rollback_manifest_file
+
+- name: Publish and validate the selected rollback contract
+  ansible.builtin.set_fact:
+    open_cinema_rollback_manifest: >-
+      {{ open_cinema_rollback_manifest_file.content | b64decode | from_yaml }}
+
+- name: Require the coordinated full-generation rollback schema
+  ansible.builtin.assert:
+    that:
+      - open_cinema_rollback_manifest.schema_version == 1
+      - open_cinema_rollback_manifest.kind == 'open-cinema-coordinated-transition-backup'
+      - open_cinema_rollback_manifest.bundle_id == open_cinema_rollback_bundle_id
+      - open_cinema_rollback_manifest.restore.strategy == 'coordinated-full-generation'
+
+- name: Verify every coordinated rollback artifact checksum
+  ansible.builtin.stat:
+    path: "{{ open_cinema_rollback_bundle_path }}/{{ item.key }}"
+    checksum_algorithm: sha256
+  loop: "{{ open_cinema_rollback_manifest.artifacts | dict2items }}"
+  register: open_cinema_rollback_artifact_stats
+  failed_when: >-
+    not open_cinema_rollback_artifact_stats.stat.exists or
+    open_cinema_rollback_artifact_stats.stat.checksum != item.value
+
+- name: Restore the selected coordinated generation
+  block:
+    - name: Name the pre-rollback candidate checkpoint
+      ansible.builtin.set_fact:
+        open_cinema_pre_rollback_id: >-
+          pre-rollback-{{ ansible_date_time.iso8601_basic_short }}
+
+    - name: Back up the candidate database before rollback
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.transition_timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.transition_timeout_seconds }}s"
+          - sqlite3
+          - "{{ open_cinema.django.database }}"
+          - ".timeout {{ open_cinema.sqlite.busy_timeout_ms }}"
+          - ".backup '{{ open_cinema.diagnostics_root }}/{{ open_cinema_pre_rollback_id }}.sqlite3'"
+      become_user: "{{ open_cinema.user }}"
+      changed_when: true
+
+    - name: Keep the pre-rollback candidate checkpoint private
+      ansible.builtin.file:
+        path: >-
+          {{ open_cinema.diagnostics_root }}/{{ open_cinema_pre_rollback_id }}.sqlite3
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+
+    - name: Stop application writers and the live controller for rollback
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - open-cinema.service
+        - open-cinema-orchestrator.service
+        - celery.service
+        - celery-beat.service
+      failed_when: false
+
+    - name: Stop all managed processor instances for rollback
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop: >-
+        {{
+          (range(0, camilladsp.instance_count | int) | map('string') |
+           map('regex_replace', '^', 'camilladsp@camilladsp-') |
+           map('regex_replace', '$', '.service') | list) +
+          (range(0, pcm_auto_decoder.instance_count | int) | map('string') |
+           map('regex_replace', '^', 'pcm-auto-decoder@decoder-') |
+           map('regex_replace', '$', '.service') | list)
+        }}
+      failed_when: false
+
+    - name: Remove only coordinated application generation directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ open_cinema.app_path }}"
+        - "{{ wyreplumber.app_path }}"
+        - "{{ open_cinema_ui.admin.web_root }}"
+        - "{{ open_cinema_ui.user_ui.web_root }}"
+
+    - name: Extract coordinated application binding and web archives
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.transition_timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.transition_timeout_seconds }}s"
+          - tar
+          - --extract
+          - --gzip
+          - --numeric-owner
+          - "--file={{ open_cinema_rollback_bundle_path }}/{{ item }}"
+          - -C
+          - /
+      loop:
+        - application.tar.gz
+        - wyreplumber.tar.gz
+        - web.tar.gz
+        - managed-static.tar.gz
+        - processor-binaries.tar.gz
+        - processor-runtime.tar.gz
+      changed_when: true
+
+    - name: Restore the coordinated pre-transition database
+      ansible.builtin.copy:
+        src: "{{ open_cinema_rollback_bundle_path }}/db.sqlite3"
+        dest: "{{ open_cinema.django.database }}"
+        remote_src: true
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+
+    - name: Remove database journals from the replaced candidate generation
+      ansible.builtin.file:
+        path: "{{ open_cinema.django.database }}{{ item }}"
+        state: absent
+      loop:
+        - -wal
+        - -shm
+
+    - name: Restore the previous installed release and gate identities
+      ansible.builtin.copy:
+        src: "{{ open_cinema_rollback_bundle_path }}/{{ item.src }}"
+        dest: "{{ item.dest }}"
+        remote_src: true
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - src: release-manifest.yml
+          dest: "{{ release_manifest.install_path }}"
+          owner: root
+          group: root
+          mode: "0644"
+        - src: contract-gate-result.json
+          dest: "{{ open_cinema.diagnostics_root }}/contract-gate-result.json"
+          owner: "{{ open_cinema.user }}"
+          group: "{{ open_cinema.group }}"
+          mode: "0600"
+        - src: readiness-result.json
+          dest: "{{ open_cinema.readiness_result_path }}"
+          owner: "{{ open_cinema.user }}"
+          group: "{{ open_cinema.group }}"
+          mode: "0640"
+
+    - name: Reload restored system service definitions
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Reload restored audio-owner user service definitions
+      ansible.builtin.systemd:
+        daemon_reload: true
+        scope: user
+      become_user: "{{ open_cinema.user }}"
+      environment:
+        XDG_RUNTIME_DIR: "{{ audio_service.runtime_dir }}"
+        DBUS_SESSION_BUS_ADDRESS: "{{ audio_service.dbus_address }}"
+
+    - name: Start restored coordinated core services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop:
+        - redis-server.service
+        - open-cinema.service
+        - celery.service
+        - celery-beat.service
+        - open-cinema-orchestrator.service
+        - nginx.service
+
+    - name: Wait for the restored API to become available
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8000/api/audio/v1/runtime/readiness
+        status_code:
+          - 200
+          - 401
+          - 403
+        timeout: 5
+      register: open_cinema_rollback_api_wait
+      retries: 12
+      delay: 1
+      until: open_cinema_rollback_api_wait.status in [200, 401, 403]
+
+    - name: Install the post-rollback dynamic-state digest probe
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../scripts/dynamic-state-digest.py"
+        dest: /tmp/open-cinema-dynamic-state-digest.py
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0500"
+
+    - name: Capture restored user-owned audio intent
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.transition_timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.migrations.preflight_timeout_seconds }}s"
+          - "{{ open_cinema.venv_path }}/bin/python"
+          - /tmp/open-cinema-dynamic-state-digest.py
+      args:
+        chdir: "{{ open_cinema.app_path }}"
+      become_user: "{{ open_cinema.user }}"
+      register: open_cinema_rollback_state_command
+      changed_when: false
+
+    - name: Require rollback to restore exact user-owned audio intent
+      ansible.builtin.assert:
+        that:
+          - >-
+            (open_cinema_rollback_state_command.stdout_lines | last | from_json).intentDigest ==
+            open_cinema_rollback_manifest.dynamic_state.intentDigest
+        fail_msg: >-
+          The coordinated files were restored but graph revisions, activations,
+          endpoints, profiles, adapters, or overrides differ from the selected
+          pre-transition state. Leave the bundle retained and inspect both
+          dynamic-state documents before enabling further mutation.
+
+    - name: Record the successful coordinated rollback result
+      ansible.builtin.copy:
+        content: >-
+          {{ {'schemaVersion': 1, 'status': 'passed',
+               'bundleId': open_cinema_rollback_bundle_id,
+               'restoredCandidateDigest': open_cinema_rollback_manifest.previous_candidate_digest,
+               'intentDigest': open_cinema_rollback_manifest.dynamic_state.intentDigest,
+               'auditBeforeBackup': open_cinema_rollback_manifest.dynamic_state.audit,
+               'auditAfterRollback': (open_cinema_rollback_state_command.stdout_lines | last | from_json).audit,
+               'candidateDatabaseCheckpoint': open_cinema.diagnostics_root ~ '/' ~ open_cinema_pre_rollback_id ~ '.sqlite3'} |
+             to_nice_json }}
+        dest: "{{ open_cinema.diagnostics_root }}/rollback-result.json"
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+
+  rescue:
+    - name: Capture coordinated rollback failure logs
+      ansible.builtin.command:
+        argv:
+          - journalctl
+          - --no-pager
+          - --since=-30min
+          - --unit=open-cinema.service
+          - --unit=open-cinema-orchestrator.service
+          - --unit=celery.service
+          - --unit=celery-beat.service
+          - --unit=nginx.service
+      register: open_cinema_rollback_failure_logs
+      changed_when: false
+      failed_when: false
+
+    - name: Retain coordinated rollback failure diagnostics
+      ansible.builtin.copy:
+        content: "{{ open_cinema_rollback_failure_logs.stdout | default('journal unavailable') }}\n"
+        dest: "{{ open_cinema.diagnostics_root }}/rollback-failure.log"
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+
+    - name: Stop after a failed coordinated rollback
+      ansible.builtin.fail:
+        msg: >-
+          Coordinated rollback failed. The selected immutable bundle and the
+          candidate database checkpoint remain available; inspect
+          rollback-failure.log before retrying or redeploying.

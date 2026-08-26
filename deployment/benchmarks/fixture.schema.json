@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-cinema.local/schemas/benchmark-fixture-v2.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "suite_id",
+    "fixture_contract_id",
+    "status",
+    "scope",
+    "device_under_test",
+    "audio_chain",
+    "bluetooth_fixtures",
+    "input_fixtures",
+    "processor_fixtures",
+    "measurement",
+    "power_and_thermal_preconditions"
+  ],
+  "properties": {
+    "schema_version": {"const": 2},
+    "suite_id": {"const": "open-cinema-raspberry-audio-v2"},
+    "fixture_contract_id": {"const": "pi5-8gb-gab8-native-v1"},
+    "status": {"const": "supported-fixture"},
+    "scope": {
+      "type": "object",
+      "required": ["description", "excluded"],
+      "properties": {
+        "description": {"type": "string", "minLength": 1},
+        "excluded": {"type": "array", "minItems": 7, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "device_under_test": {
+      "type": "object",
+      "required": ["model", "revision", "memory_mb", "architecture", "operating_system", "power", "cooling", "storage", "network"],
+      "properties": {
+        "model": {"const": "Raspberry Pi 5 Model B"},
+        "revision": {"type": "string"},
+        "memory_mb": {"const": 8192},
+        "architecture": {"const": "aarch64"},
+        "operating_system": {
+          "type": "object",
+          "required": ["family", "codename", "major_version"],
+          "properties": {
+            "family": {"const": "Debian"},
+            "codename": {"const": "trixie"},
+            "major_version": {"const": 13}
+          }
+        },
+        "power": {
+          "type": "object",
+          "required": ["rated_watts", "declaration"],
+          "properties": {"rated_watts": {"const": 27}, "declaration": {"type": "string", "minLength": 1}}
+        },
+        "cooling": {
+          "type": "object",
+          "required": ["type", "required"],
+          "properties": {"type": {"const": "active-fan"}, "required": {"const": true}}
+        },
+        "storage": {"type": "object"},
+        "network": {"type": "object"}
+      }
+    },
+    "audio_chain": {
+      "type": "object",
+      "required": ["transport", "sample_rate_hz", "input", "output", "decoder", "camilladsp", "graph"],
+      "properties": {
+        "transport": {"const": "native-pipewire"},
+        "sample_rate_hz": {"const": 48000},
+        "input": {"type": "object", "required": ["kind", "interface", "declaration"]},
+        "output": {"type": "object", "required": ["kind", "model", "interface"], "properties": {"model": {"const": "WONDOM GAB8"}}},
+        "decoder": {"type": "object", "required": ["process", "instances", "output_contract"], "properties": {"instances": {"const": 1}}},
+        "camilladsp": {
+          "type": "object",
+          "required": ["process", "major_version", "instances", "backend", "processing_period_frames"],
+          "properties": {
+            "major_version": {"minimum": 4},
+            "instances": {"const": 1},
+            "backend": {"const": "pipewire"},
+            "processing_period_frames": {"const": 128}
+          }
+        },
+        "graph": {"type": "object", "required": ["expected_owned_links", "exact_topology_required"]}
+      }
+    },
+    "bluetooth_fixtures": {"type": "object"},
+    "input_fixtures": {"type": "object", "minProperties": 10, "additionalProperties": {"type": "object"}},
+    "processor_fixtures": {"type": "object", "minProperties": 6, "additionalProperties": {"type": "object"}},
+    "measurement": {"type": "object", "required": ["sustained_interval_seconds", "transition_interval_milliseconds", "physical_timing", "tools"]},
+    "power_and_thermal_preconditions": {"type": "object", "required": ["current_throttled_value", "historical_bits_are_recorded_not_silently_discarded", "maximum_temperature_celsius"]}
+  }
+}

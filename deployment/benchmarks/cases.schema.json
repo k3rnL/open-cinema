@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-cinema.local/schemas/benchmark-cases-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "case_manifest_id",
+    "suite_id",
+    "fixture_contract_id",
+    "criteria_policy_id",
+    "defaults",
+    "metric_sets",
+    "restoration_actions",
+    "cases"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "case_manifest_id": {"const": "pi5-8gb-gab8-native-cases-v1"},
+    "suite_id": {"const": "open-cinema-raspberry-audio-v2"},
+    "fixture_contract_id": {"const": "pi5-8gb-gab8-native-v1"},
+    "criteria_policy_id": {"const": "pi5-single-chain-criteria-v1"},
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixture_id", "criteria_set", "warm_up_repetitions", "measured_repetitions", "duration_seconds", "timeout_seconds", "measurement_boundary", "required_metric_sets", "restoration_action"],
+      "properties": {
+        "fixture_id": {"type": "string", "minLength": 1},
+        "criteria_set": {"type": "string", "minLength": 1},
+        "warm_up_repetitions": {"type": "integer", "minimum": 0},
+        "measured_repetitions": {"type": "integer", "minimum": 1},
+        "duration_seconds": {"type": "integer", "minimum": 1},
+        "timeout_seconds": {"type": "integer", "minimum": 1},
+        "measurement_boundary": {"$ref": "#/$defs/measurementBoundary"},
+        "required_metric_sets": {"$ref": "#/$defs/nonEmptyUniqueStrings"},
+        "restoration_action": {"type": "string", "minLength": 1}
+      }
+    },
+    "metric_sets": {
+      "type": "object",
+      "minProperties": 9,
+      "additionalProperties": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+    },
+    "restoration_actions": {
+      "type": "object",
+      "minProperties": 5,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disruptive", "verify"],
+        "properties": {
+          "disruptive": {"type": "boolean"},
+          "allowed_services": {"type": "array", "items": {"type": "string", "minLength": 1}},
+          "verify": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 25,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "campaign", "purpose", "input_fixture", "processor_fixture", "workload_state", "carrier_state", "expected_outcome"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "campaign": {"enum": ["baseline", "decoder", "camilladsp", "adaptive-routing", "recovery", "boot-persistence", "event-storage", "soak"]},
+          "purpose": {"type": "string", "minLength": 1},
+          "input_fixture": {"type": "string", "minLength": 1},
+          "processor_fixture": {"type": "string", "minLength": 1},
+          "workload_state": {"enum": ["idle", "no-carrier", "programme-audio"]},
+          "carrier_state": {"enum": ["not-applicable", "absent", "present"]},
+          "expected_outcome": {"enum": ["supported", "unsupported-by-build", "fixture-unavailable"]},
+          "criteria_set": {"type": "string", "minLength": 1},
+          "warm_up_repetitions": {"type": "integer", "minimum": 0},
+          "measured_repetitions": {"type": "integer", "minimum": 1},
+          "duration_seconds": {"type": "integer", "minimum": 1},
+          "timeout_seconds": {"type": "integer", "minimum": 1},
+          "measurement_boundary": {"$ref": "#/$defs/measurementBoundary"},
+          "required_metric_sets": {"$ref": "#/$defs/nonEmptyUniqueStrings"},
+          "restoration_action": {"type": "string", "minLength": 1},
+          "processor_fixture_matrix": {"$ref": "#/$defs/nonEmptyUniqueStrings"},
+          "disruptive_services": {"$ref": "#/$defs/nonEmptyUniqueStrings"},
+          "service_matrix": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"$ref": "#/$defs/nonEmptyUniqueStrings"}
+          },
+          "transition_edges": {"$ref": "#/$defs/nonEmptyUniqueStrings"},
+          "event_schedule": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["endpoint_events", "property_events", "transition_cycles"],
+            "properties": {
+              "endpoint_events": {"type": "integer", "minimum": 1},
+              "property_events": {"type": "integer", "minimum": 1},
+              "transition_cycles": {"type": "integer", "minimum": 1}
+            }
+          },
+          "transition_schedule_kind": {"type": "string", "minLength": 1},
+          "transition_schedule_seconds": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "integer", "minimum": 1}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "measurementBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"type": "string", "minLength": 1},
+        "end": {"type": "string", "minLength": 1}
+      }
+    },
+    "nonEmptyUniqueStrings": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

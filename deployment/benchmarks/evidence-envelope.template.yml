@@ -1,0 +1,49 @@
+---
+schemaVersion: 1
+suiteId: open-cinema-raspberry-audio-v2
+runId: example-run
+campaignId: baseline
+caseId: baseline-collector-overhead
+sampleId: sample-001
+campaignMode: characterization
+fixtureContractId: pi5-8gb-gab8-native-v1
+criteria:
+  id: characterization-v1
+  state: candidate
+  sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+timestamps:
+  startedUtc: "2026-08-26T00:00:00Z"
+  completedUtc: null
+  startedMonotonicNs: 1
+  completedMonotonicNs: null
+  clockCalibration:
+    clock: CLOCK_BOOTTIME
+    bootId: example-boot-id
+    controllerSubtractionAllowed: false
+    controllerUncertaintyNs: null
+workload:
+  state: idle
+  carrierState: not-applicable
+  declarationSource: case-manifest
+manifests:
+  fixture.yml: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+timeSeries:
+  - path: samples/system.jsonl
+    sha256: null
+logs: []
+captures: []
+invalidation:
+  invalid: false
+  reasons: []
+restoration:
+  action: none-read-only
+  required: false
+  status: not-required
+  topologyVerified: null
+  staticDigest: null
+  dynamicDigest: null
+checksums:
+  algorithm: sha256
+  manifestPath: SHA256SUMS
+  manifestSha256: null
+status: prepared

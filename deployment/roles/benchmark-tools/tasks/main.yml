@@ -1,0 +1,114 @@
+---
+- name: Install benchmark-only audio and system measurement tools
+  ansible.builtin.apt:
+    name:
+      - ffmpeg
+      - jq
+      - linux-perf
+      - netcat-openbsd
+      - python3
+      - sqlite3
+      - sysstat
+      - time
+    state: present
+    update_cache: true
+
+- name: Create the appliance benchmark result directory
+  ansible.builtin.file:
+    path: /var/lib/open-cinema/benchmark-results
+    state: directory
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0750"
+
+- name: Create the versioned benchmark contract directory
+  ansible.builtin.file:
+    path: /usr/local/share/open-cinema/benchmarks
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the correlated live-graph measurement command
+  ansible.builtin.copy:
+    src: measure-live-graph
+    dest: /usr/local/bin/open-cinema-measure-live-graph
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the per-object PipeWire error summarizer
+  ansible.builtin.copy:
+    src: summarize-pw-top
+    dest: /usr/local/bin/open-cinema-summarize-pw-top
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the versioned benchmark contracts and evidence schema
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../benchmarks/{{ item }}"
+    dest: "/usr/local/share/open-cinema/benchmarks/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - fixtures.yml
+    - fixture.schema.json
+    - cases.yml
+    - cases.schema.json
+    - criteria-policy.yml
+    - imported-evidence.yml
+    - evidence-envelope.schema.json
+    - evidence-envelope.template.yml
+
+- name: Resolve every required benchmark command
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/env
+      - which
+      - "{{ item }}"
+  loop:
+    - ffmpeg
+    - ffprobe
+    - journalctl
+    - jq
+    - nc
+    - perf
+    - pidstat
+    - pw-dump
+    - pw-top
+    - redis-cli
+    - sqlite3
+    - systemd-analyze
+    - time
+    - vcgencmd
+    - wpctl
+  register: open_cinema_benchmark_commands
+  changed_when: false
+
+- name: Record benchmark tool versions
+  ansible.builtin.command:
+    argv: "{{ item }}"
+  loop:
+    - [ffmpeg, -version]
+    - [perf, --version]
+    - [pidstat, -V]
+    - [sqlite3, --version]
+  register: open_cinema_benchmark_tool_versions
+  changed_when: false
+
+- name: Record the current power and thermal history without redeploying the appliance
+  ansible.builtin.command:
+    argv:
+      - vcgencmd
+      - get_throttled
+  register: open_cinema_benchmark_throttled
+  changed_when: false
+  failed_when: false
+
+- name: Report the benchmark preflight throttling observation
+  ansible.builtin.debug:
+    msg: >-
+      Benchmark preflight recorded {{ open_cinema_benchmark_throttled.stdout | trim }}.
+      The case runner, not this benchmark-only preparation role, classifies the run.

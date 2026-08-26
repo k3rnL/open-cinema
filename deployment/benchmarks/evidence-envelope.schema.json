@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-cinema.local/schemas/benchmark-evidence-envelope-v1.json",
+  "title": "Open Cinema benchmark evidence envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "suiteId",
+    "runId",
+    "campaignId",
+    "caseId",
+    "sampleId",
+    "campaignMode",
+    "fixtureContractId",
+    "criteria",
+    "timestamps",
+    "workload",
+    "manifests",
+    "timeSeries",
+    "logs",
+    "captures",
+    "invalidation",
+    "restoration",
+    "checksums",
+    "status"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "suiteId": {"type": "string", "minLength": 1},
+    "runId": {"type": "string", "minLength": 1},
+    "campaignId": {"type": "string", "minLength": 1},
+    "caseId": {"type": "string", "minLength": 1},
+    "sampleId": {"type": "string", "minLength": 1},
+    "campaignMode": {"enum": ["characterization", "acceptance"]},
+    "fixtureContractId": {"const": "pi5-8gb-gab8-native-v1"},
+    "criteria": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "state", "sha256"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "state": {"enum": ["candidate", "frozen"]},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "timestamps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startedUtc", "startedMonotonicNs", "clockCalibration"],
+      "properties": {
+        "startedUtc": {"type": "string", "format": "date-time"},
+        "completedUtc": {"type": ["string", "null"], "format": "date-time"},
+        "startedMonotonicNs": {"type": "integer", "minimum": 0},
+        "completedMonotonicNs": {"type": ["integer", "null"], "minimum": 0},
+        "clockCalibration": {
+          "type": "object",
+          "required": ["clock", "bootId", "controllerSubtractionAllowed"],
+          "properties": {
+            "clock": {"const": "CLOCK_BOOTTIME"},
+            "bootId": {"type": "string", "minLength": 1},
+            "controllerSubtractionAllowed": {"const": false},
+            "controllerUncertaintyNs": {"type": ["integer", "null"], "minimum": 0}
+          }
+        }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "carrierState", "declarationSource"],
+      "properties": {
+        "state": {"enum": ["idle", "no-carrier", "programme-audio"]},
+        "carrierState": {"enum": ["not-applicable", "absent", "present"]},
+        "declarationSource": {"type": "string", "minLength": 1}
+      }
+    },
+    "manifests": {"$ref": "#/$defs/pathDigestMap"},
+    "timeSeries": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/artifact"},
+      "minItems": 1
+    },
+    "logs": {"type": "array", "items": {"$ref": "#/$defs/artifact"}},
+    "captures": {"type": "array", "items": {"$ref": "#/$defs/artifact"}},
+    "invalidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invalid", "reasons"],
+      "properties": {
+        "invalid": {"type": "boolean"},
+        "reasons": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "restoration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "required", "status", "topologyVerified", "staticDigest", "dynamicDigest"],
+      "properties": {
+        "action": {"type": "string", "minLength": 1},
+        "required": {"type": "boolean"},
+        "status": {"enum": ["not-required", "pending", "restored", "failed"]},
+        "topologyVerified": {"type": ["boolean", "null"]},
+        "staticDigest": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "dynamicDigest": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "checksums": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "manifestPath", "manifestSha256"],
+      "properties": {
+        "algorithm": {"const": "sha256"},
+        "manifestPath": {"type": "string", "minLength": 1},
+        "manifestSha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "status": {"enum": ["prepared", "running", "passed", "failed", "invalid", "interrupted", "unsupported", "not-measured"]}
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "pathDigestMap": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+    }
+  }
+}

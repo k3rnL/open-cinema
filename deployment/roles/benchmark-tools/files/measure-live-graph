@@ -1,0 +1,336 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: open-cinema-measure-live-graph \
+  --case-id CASE_ID \
+  --workload-state idle|no-carrier|programme-audio \
+  --carrier-state not-applicable|absent|present \
+  DURATION_SECONDS
+EOF
+}
+
+case_id=''
+workload_state=''
+carrier_state=''
+duration_seconds=''
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --case-id)
+      [[ "$#" -ge 2 ]] || { usage; exit 2; }
+      case_id="$2"
+      shift 2
+      ;;
+    --workload-state)
+      [[ "$#" -ge 2 ]] || { usage; exit 2; }
+      workload_state="$2"
+      shift 2
+      ;;
+    --carrier-state)
+      [[ "$#" -ge 2 ]] || { usage; exit 2; }
+      carrier_state="$2"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    --*)
+      echo "unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+    *)
+      [[ -z "$duration_seconds" ]] || { usage; exit 2; }
+      duration_seconds="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ ! "$case_id" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+  echo "--case-id must use lowercase letters, digits, and hyphens" >&2
+  exit 2
+fi
+case "$duration_seconds" in
+  ''|*[!0-9]*|0)
+    echo "duration must be a positive number of seconds" >&2
+    exit 2
+    ;;
+esac
+case "$workload_state:$carrier_state" in
+  idle:not-applicable|no-carrier:absent|programme-audio:present)
+    ;;
+  *)
+    echo "workload and carrier declarations are missing or inconsistent" >&2
+    exit 2
+    ;;
+esac
+
+audio_user="${OPEN_CINEMA_AUDIO_USER:-opencinema}"
+result_root="${OPEN_CINEMA_BENCHMARK_ROOT:-/var/lib/open-cinema/benchmark-results/runs}"
+database_path="${OPEN_CINEMA_DATABASE_PATH:-/opt/home-cinema/open-cinema/db.sqlite3}"
+pw_top_summarizer="${OPEN_CINEMA_PW_TOP_SUMMARIZER:-/usr/local/bin/open-cinema-summarize-pw-top}"
+carrier_declaration_source="${OPEN_CINEMA_CARRIER_DECLARATION_SOURCE:-case-manifest-and-operator}"
+audio_uid="$(id -u "$audio_user")"
+audio_group="$(id -gn "$audio_user")"
+run_id="$(date -u +%Y%m%dT%H%M%SZ)-${case_id}-$$"
+run_dir="$result_root/$run_id"
+start_epoch="$(date +%s)"
+start_monotonic_ns="$(awk '{printf "%.0f", $1 * 1000000000}' /proc/uptime)"
+boot_id="$(tr -d '\n' </proc/sys/kernel/random/boot_id)"
+failure_reason='unexpected-command-failure'
+background_pids=()
+
+install -d -o "$audio_user" -g "$audio_group" -m 0750 "$result_root" "$run_dir"
+
+record_status() {
+  local status="$1"
+  local reason="$2"
+  {
+    echo "status=$status"
+    echo "reason=$reason"
+    echo "completed_at=$(date -u --iso-8601=seconds)"
+    echo "evidence_directory=$run_dir"
+  } >"$run_dir/run-status.txt"
+}
+
+on_exit() {
+  local exit_status="$?"
+  trap - EXIT INT TERM
+  set +e
+  for pid in "${background_pids[@]}"; do
+    kill "$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null
+  done
+  if [[ "$exit_status" -ne 0 ]]; then
+    if [[ ! -s "$run_dir/run-status.txt" ]]; then
+      record_status failed "$failure_reason"
+    fi
+    echo "benchmark_status=failed" >&2
+    echo "benchmark_evidence_directory=$run_dir" >&2
+    if [[ -s "$run_dir/summary.txt" ]]; then
+      cat "$run_dir/summary.txt" >&2
+    fi
+  fi
+  chown -R "$audio_user:$audio_group" "$run_dir" 2>/dev/null
+  chmod -R u=rwX,g=rX,o= "$run_dir" 2>/dev/null
+  exit "$exit_status"
+}
+trap on_exit EXIT
+trap 'failure_reason=interrupted-by-sigint; exit 130' INT
+trap 'failure_reason=interrupted-by-sigterm; exit 143' TERM
+
+audio_command() {
+  runuser -u "$audio_user" -- env \
+    XDG_RUNTIME_DIR="/run/user/$audio_uid" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$audio_uid/bus" \
+    PIPEWIRE_REMOTE=pipewire-0 \
+    "$@"
+}
+
+capture_decoder_status() {
+  local destination="$1"
+  local socket
+  socket="$(find /run/open-cinema/decoder -maxdepth 1 -type s -name '*.sock' -print -quit 2>/dev/null || true)"
+  if [[ -n "$socket" ]]; then
+    printf '%s\n' '{"protocolVersion":2,"messageType":"getStatus"}' \
+      | timeout 2 nc -N -U "$socket" >"$destination" || true
+  else
+    printf '%s\n' '{"error":"decoder status socket unavailable"}' >"$destination"
+  fi
+}
+
+process_statistics() {
+  local command_name="$1"
+  awk -v command_name="$command_name" '
+    $1 ~ /^[0-9]/ && $15 == command_name {
+      cpu = $8 + 0
+      rss = $13 + 0
+      cpu_total += cpu
+      samples++
+      if (cpu > maximum_cpu) maximum_cpu = cpu
+      if (rss > maximum_rss) maximum_rss = rss
+    }
+    END {
+      if (samples == 0) print "0 0 0"
+      else printf "%.3f %.3f %d\n", cpu_total / samples, maximum_cpu, maximum_rss
+    }
+  ' "$run_dir/pidstat.txt"
+}
+
+mapfile -t service_pids < <(pgrep -u "$audio_uid" || true)
+if [[ "${#service_pids[@]}" -eq 0 ]]; then
+  failure_reason="no-processes-owned-by-audio-user"
+  echo "no processes owned by $audio_user" >&2
+  exit 1
+fi
+pid_list="$(IFS=,; echo "${service_pids[*]}")"
+
+{
+  echo "schema_version=2"
+  echo "suite_id=open-cinema-raspberry-audio-v2"
+  echo "fixture_contract_id=pi5-8gb-gab8-native-v1"
+  echo "run_id=$run_id"
+  echo "case_id=$case_id"
+  echo "started_at=$(date -u --iso-8601=seconds)"
+  echo "started_monotonic_ns=$start_monotonic_ns"
+  echo "boot_id=$boot_id"
+  echo "controller_clock_subtraction_allowed=false"
+  echo "duration_seconds=$duration_seconds"
+  echo "workload_state=$workload_state"
+  echo "carrier_state=$carrier_state"
+  echo "carrier_declaration_source=$carrier_declaration_source"
+  echo "audio_user=$audio_user"
+  echo "audio_uid=$audio_uid"
+  echo "kernel=$(uname -srmo)"
+  echo "boot=$(systemd-analyze)"
+  echo "initial_temperature=$(vcgencmd measure_temp)"
+  echo "initial_throttling=$(vcgencmd get_throttled)"
+  echo "database_path=$database_path"
+} >"$run_dir/manifest.txt"
+
+ps -o pid=,ppid=,user=,comm=,rss=,etimes=,args= -p "$pid_list" \
+  >"$run_dir/processes-before.txt"
+systemctl --no-pager --plain list-units \
+  'open-cinema*' 'camilladsp@*' 'pcm-auto-decoder@*' \
+  >"$run_dir/system-services-before.txt"
+audio_command wpctl status >"$run_dir/wpctl-before.txt"
+audio_command pw-dump >"$run_dir/pipewire-before.json"
+capture_decoder_status "$run_dir/decoder-before.ndjson"
+redis-cli -h 127.0.0.1 INFO memory >"$run_dir/redis-before.txt"
+cp /proc/diskstats "$run_dir/diskstats-before.txt"
+df -B1 "$result_root" >"$run_dir/filesystem-before.txt"
+if [[ -f "$database_path" ]]; then
+  stat --printf='size_bytes=%s\nblocks=%b\n' "$database_path" \
+    >"$run_dir/database-before.txt"
+  sqlite3 "$database_path" \
+    'select "quick_check=" || quick_check from pragma_quick_check; select "journal_mode=" || journal_mode from pragma_journal_mode;' \
+    >>"$run_dir/database-before.txt"
+fi
+
+pidstat -h -u -r -p "$pid_list" 1 "$duration_seconds" \
+  >"$run_dir/pidstat.txt" &
+pidstat_pid=$!
+background_pids+=("$pidstat_pid")
+audio_command pw-top -b -n "$((duration_seconds + 1))" \
+  >"$run_dir/pw-top.txt" &
+pw_top_pid=$!
+background_pids+=("$pw_top_pid")
+
+echo 'sample_id,monotonic_ns,timestamp_utc,temperature_celsius,throttled,mem_available_kb,service_rss_kb,load_1m' \
+  >"$run_dir/system-samples.csv"
+for sample_number in $(seq 1 "$duration_seconds"); do
+  sample_id="$(printf '%06d' "$sample_number")"
+  monotonic_ns="$(awk '{printf "%.0f", $1 * 1000000000}' /proc/uptime)"
+  timestamp="$(date -u --iso-8601=seconds)"
+  temperature="$(vcgencmd measure_temp | sed -E "s/temp=([0-9.]+).*/\1/")"
+  throttled="$(vcgencmd get_throttled | cut -d= -f2)"
+  mem_available="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+  service_rss="$(ps -o rss= -p "$pid_list" | awk '{total += $1} END {print total + 0}')"
+  load_1m="$(cut -d' ' -f1 /proc/loadavg)"
+  printf '%s,%s,%s,%s,%s,%s,%s,%s\n' \
+    "$sample_id" "$monotonic_ns" "$timestamp" "$temperature" "$throttled" \
+    "$mem_available" "$service_rss" "$load_1m" \
+    >>"$run_dir/system-samples.csv"
+  sleep 1
+done
+
+wait "$pidstat_pid"
+wait "$pw_top_pid"
+background_pids=()
+
+ps -o pid=,ppid=,user=,comm=,rss=,etimes=,args= -p "$pid_list" \
+  >"$run_dir/processes-after.txt" || true
+audio_command wpctl status >"$run_dir/wpctl-after.txt"
+audio_command pw-dump >"$run_dir/pipewire-after.json"
+capture_decoder_status "$run_dir/decoder-after.ndjson"
+redis-cli -h 127.0.0.1 INFO memory >"$run_dir/redis-after.txt"
+cp /proc/diskstats "$run_dir/diskstats-after.txt"
+df -B1 "$result_root" >"$run_dir/filesystem-after.txt"
+if [[ -f "$database_path" ]]; then
+  stat --printf='size_bytes=%s\nblocks=%b\n' "$database_path" \
+    >"$run_dir/database-after.txt"
+  sqlite3 "$database_path" \
+    'select "quick_check=" || quick_check from pragma_quick_check; select "journal_mode=" || journal_mode from pragma_journal_mode;' \
+    >>"$run_dir/database-after.txt"
+fi
+journalctl --no-pager --since="@$start_epoch" \
+  --unit=open-cinema-orchestrator.service \
+  --unit=camilladsp@camilladsp-0.service \
+  --unit=pcm-auto-decoder@decoder-0.service \
+  "_UID=$audio_uid" >"$run_dir/journal.txt"
+
+"$pw_top_summarizer" "$run_dir/pw-top.txt" \
+  --output "$run_dir/pipewire-error-counters.json"
+jq -r '
+  ["node_id", "name", "first_errors", "last_errors", "delta_errors", "observed_increment_errors", "counter_resets"],
+  (.nodes[] | [.node_id, .name, .first_errors, .last_errors, .delta_errors, .observed_increment_errors, .counter_resets]) |
+  @tsv
+' "$run_dir/pipewire-error-counters.json" >"$run_dir/pipewire-error-counters.tsv"
+
+maximum_temperature="$(awk -F, 'NR > 1 && $4 > maximum {maximum=$4} END {print maximum + 0}' "$run_dir/system-samples.csv")"
+maximum_rss="$(awk -F, 'NR > 1 && $7 > maximum {maximum=$7} END {print maximum + 0}' "$run_dir/system-samples.csv")"
+read -r orchestrator_average_cpu orchestrator_maximum_cpu orchestrator_maximum_rss \
+  < <(process_statistics open-cinema-orc)
+read -r decoder_average_cpu decoder_maximum_cpu decoder_maximum_rss \
+  < <(process_statistics pcm-auto-decode)
+read -r camilladsp_average_cpu camilladsp_maximum_cpu camilladsp_maximum_rss \
+  < <(process_statistics camilladsp)
+maximum_pipewire_error_increment="$(jq -r '.maximum_observed_increment_errors' "$run_dir/pipewire-error-counters.json")"
+pipewire_nodes_with_increments="$(jq -r '.nodes_with_observed_increments' "$run_dir/pipewire-error-counters.json")"
+initial_decoder_sequence="$(jq -r '.sequence // 0' "$run_dir/decoder-before.ndjson" 2>/dev/null || printf 'unavailable')"
+final_decoder_sequence="$(jq -r '.sequence // 0' "$run_dir/decoder-after.ndjson" 2>/dev/null || printf 'unavailable')"
+initial_decoder_error_count="$(jq -r '(.errors // []) | length' "$run_dir/decoder-before.ndjson" 2>/dev/null || printf 'unavailable')"
+final_decoder_error_count="$(jq -r '(.errors // []) | length' "$run_dir/decoder-after.ndjson" 2>/dev/null || printf 'unavailable')"
+final_throttling="$(vcgencmd get_throttled | cut -d= -f2)"
+owned_links="$(jq '[.[] | select(.type == "PipeWire:Interface:Link" and .info.props["open-cinema.owner"] == "open-cinema.orchestrator")] | length' "$run_dir/pipewire-after.json")"
+
+{
+  echo "completed_at=$(date -u --iso-8601=seconds)"
+  echo "case_id=$case_id"
+  echo "workload_state=$workload_state"
+  echo "carrier_state=$carrier_state"
+  echo "maximum_temperature_celsius=$maximum_temperature"
+  echo "maximum_service_rss_kb=$maximum_rss"
+  echo "orchestrator_average_cpu_percent=$orchestrator_average_cpu"
+  echo "orchestrator_maximum_cpu_percent=$orchestrator_maximum_cpu"
+  echo "orchestrator_maximum_rss_kb=$orchestrator_maximum_rss"
+  echo "decoder_average_cpu_percent=$decoder_average_cpu"
+  echo "decoder_maximum_cpu_percent=$decoder_maximum_cpu"
+  echo "decoder_maximum_rss_kb=$decoder_maximum_rss"
+  echo "camilladsp_average_cpu_percent=$camilladsp_average_cpu"
+  echo "camilladsp_maximum_cpu_percent=$camilladsp_maximum_cpu"
+  echo "camilladsp_maximum_rss_kb=$camilladsp_maximum_rss"
+  echo "pipewire_error_counter_file=pipewire-error-counters.json"
+  echo "pipewire_nodes_with_increments=$pipewire_nodes_with_increments"
+  echo "maximum_pipewire_error_increment=$maximum_pipewire_error_increment"
+  echo "initial_decoder_sequence=$initial_decoder_sequence"
+  echo "final_decoder_sequence=$final_decoder_sequence"
+  echo "initial_decoder_error_count=$initial_decoder_error_count"
+  echo "final_decoder_error_count=$final_decoder_error_count"
+  echo "final_throttling=$final_throttling"
+  echo "final_owned_links=$owned_links"
+} >"$run_dir/summary.txt"
+
+if [[ "$final_throttling" != '0x0' ]]; then
+  failure_reason='power-or-thermal-precondition-failed'
+  record_status failed "$failure_reason"
+  exit 1
+fi
+if [[ "$workload_state" == 'programme-audio' && "$maximum_pipewire_error_increment" != '0' ]]; then
+  failure_reason='programme-audio-pipewire-errors-increased'
+  record_status failed "$failure_reason"
+  exit 1
+fi
+
+if [[ "$workload_state" == 'no-carrier' ]]; then
+  record_status characterized 'declared-no-carrier-safe-silence-observation'
+  echo 'benchmark_status=characterized'
+else
+  record_status characterized 'local-live-graph-characterization-completed'
+  echo 'benchmark_status=characterized'
+fi
+echo "benchmark_evidence_directory=$run_dir"
+cat "$run_dir/summary.txt"

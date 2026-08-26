@@ -1,0 +1,426 @@
+---
+- name: Inspect whether a previous coordinated generation exists
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ open_cinema.django.database }}"
+    - "{{ open_cinema.diagnostics_root }}/contract-gate-result.json"
+  register: open_cinema_transition_generation_files
+  when: not open_cinema_contract_gate_previously_passed | bool
+
+- name: Publish whether this is an upgrade or a clean installation
+  ansible.builtin.set_fact:
+    open_cinema_transition_previous_generation_exists: >-
+      {{
+        open_cinema_transition_generation_files.results | default([]) | length == 2 and
+        open_cinema_transition_generation_files.results[0].stat.exists | default(false) and
+        open_cinema_transition_generation_files.results[1].stat.exists | default(false)
+      }}
+  when: not open_cinema_contract_gate_previously_passed | bool
+
+- name: Back up the previously accepted coordinated generation
+  when:
+    - not open_cinema_contract_gate_previously_passed | bool
+    - open_cinema_transition_previous_generation_exists | bool
+  block:
+    - name: Inspect previous application services before the transition
+      ansible.builtin.command:
+        argv: [systemctl, is-active, "{{ item }}"]
+      loop:
+        - open-cinema.service
+        - open-cinema-orchestrator.service
+        - celery.service
+        - celery-beat.service
+      register: open_cinema_transition_previous_service_states
+      changed_when: false
+      failed_when: false
+
+    - name: Stop every previous application database writer
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - open-cinema.service
+        - open-cinema-orchestrator.service
+        - celery.service
+        - celery-beat.service
+      failed_when: false
+
+    - name: Stop previous managed processor instances
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop: >-
+        {{
+          (range(0, camilladsp.instance_count | int) |
+           map('string') |
+           map('regex_replace', '^', 'camilladsp@camilladsp-') |
+           map('regex_replace', '$', '.service') | list) +
+          (range(0, pcm_auto_decoder.instance_count | int) |
+           map('string') |
+           map('regex_replace', '^', 'pcm-auto-decoder@decoder-') |
+           map('regex_replace', '$', '.service') | list)
+        }}
+      failed_when: false
+
+    - name: Name the coordinated pre-transition bundle
+      ansible.builtin.set_fact:
+        open_cinema_rollback_id: >-
+          transition-{{ ansible_date_time.iso8601_basic_short }}-{{
+          open_cinema_deployment_candidate_digest[:12] }}
+        open_cinema_transition_rollback_id: >-
+          transition-{{ ansible_date_time.iso8601_basic_short }}-{{
+          open_cinema_deployment_candidate_digest[:12] }}
+        open_cinema_transition_bundle_path: >-
+          {{ open_cinema.rollback_root }}/transition-{{
+          ansible_date_time.iso8601_basic_short }}-{{
+          open_cinema_deployment_candidate_digest[:12] }}
+
+    - name: Create the private coordinated transition bundle
+      ansible.builtin.file:
+        path: "{{ open_cinema_transition_bundle_path }}/inventory"
+        state: directory
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0750"
+
+    - name: Install the dynamic-state digest probe for the previous generation
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../scripts/dynamic-state-digest.py"
+        dest: /tmp/open-cinema-dynamic-state-digest.py
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0500"
+
+    - name: Capture the previous user-owned audio intent digest
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.transition_timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.migrations.preflight_timeout_seconds }}s"
+          - "{{ open_cinema.venv_path }}/bin/python"
+          - /tmp/open-cinema-dynamic-state-digest.py
+      args:
+        chdir: "{{ open_cinema.app_path }}"
+      become_user: "{{ open_cinema.user }}"
+      register: open_cinema_transition_state_command
+      changed_when: false
+
+    - name: Retain the previous user-owned audio intent document
+      ansible.builtin.copy:
+        content: >-
+          {{ open_cinema_transition_state_command.stdout_lines | last |
+             from_json | to_nice_json }}
+        dest: "{{ open_cinema_transition_bundle_path }}/dynamic-state.json"
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+
+    - name: Inspect the previous database and installed release evidence
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - "{{ open_cinema.django.database }}"
+        - "{{ release_manifest.install_path }}"
+        - "{{ open_cinema.diagnostics_root }}/contract-gate-result.json"
+        - "{{ open_cinema.readiness_result_path }}"
+      register: open_cinema_transition_previous_files
+
+    - name: Require a restorable previous coordinated generation
+      ansible.builtin.assert:
+        that:
+          - open_cinema_transition_previous_files.results[0].stat.exists
+          - open_cinema_transition_previous_files.results[1].stat.exists
+          - open_cinema_transition_previous_files.results[2].stat.exists
+          - open_cinema_transition_previous_files.results[3].stat.exists
+        fail_msg: >-
+          A changed candidate cannot proceed because the installed database,
+          release manifest, passed contract gate, or readiness result is
+          missing; no previous coordinated generation can be restored safely.
+
+    - name: Load the previous accepted contract-gate result
+      ansible.builtin.slurp:
+        src: "{{ open_cinema.diagnostics_root }}/contract-gate-result.json"
+      register: open_cinema_transition_previous_gate_file
+
+    - name: Publish previous coordinated identities
+      ansible.builtin.set_fact:
+        open_cinema_transition_previous_gate: >-
+          {{ open_cinema_transition_previous_gate_file.content | b64decode | from_json }}
+        open_cinema_transition_installed_manifest: >-
+          {{ open_cinema_transition_previous_files.results[1] }}
+
+    - name: Back up the stopped pre-transition SQLite database
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.transition_timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.transition_timeout_seconds }}s"
+          - sqlite3
+          - "{{ open_cinema.django.database }}"
+          - ".timeout {{ open_cinema.sqlite.busy_timeout_ms }}"
+          - ".backup '{{ open_cinema_transition_bundle_path }}/db.sqlite3'"
+      become_user: "{{ open_cinema.user }}"
+      changed_when: true
+
+    - name: Copy previous release and readiness evidence
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ open_cinema_transition_bundle_path }}/{{ item.dest }}"
+        remote_src: true
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+      loop:
+        - src: "{{ release_manifest.install_path }}"
+          dest: release-manifest.yml
+        - src: "{{ open_cinema.diagnostics_root }}/contract-gate-result.json"
+          dest: contract-gate-result.json
+        - src: "{{ open_cinema.readiness_result_path }}"
+          dest: readiness-result.json
+
+    - name: Retain the controller inventory inputs used for this transition
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ open_cinema_transition_bundle_path }}/inventory/{{ item.dest }}"
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+      loop:
+        - src: "{{ inventory_file }}"
+          dest: inventory.yml
+        - src: "{{ playbook_dir }}/../inventories/group_vars/all.yml"
+          dest: group-vars-all.yml
+        - src: "{{ playbook_dir }}/../compatibility.yml"
+          dest: compatibility.yml
+        - src: "{{ release_manifest.source_path }}"
+          dest: candidate-release-manifest.yml
+
+    - name: Archive the previous application and virtual environment
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.transition_timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.transition_timeout_seconds }}s"
+          - tar
+          - --create
+          - --gzip
+          - --numeric-owner
+          - "--file={{ open_cinema_transition_bundle_path }}/application.tar.gz"
+          - --exclude=opt/home-cinema/open-cinema/db.sqlite3
+          - --exclude=opt/home-cinema/open-cinema/db.sqlite3-shm
+          - --exclude=opt/home-cinema/open-cinema/db.sqlite3-wal
+          - -C
+          - /
+          - "{{ open_cinema.app_path | regex_replace('^/', '') }}"
+      changed_when: true
+
+    - name: Archive the previous WyrePlumber source and native build
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.transition_timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.transition_timeout_seconds }}s"
+          - tar
+          - --create
+          - --gzip
+          - --numeric-owner
+          - "--file={{ open_cinema_transition_bundle_path }}/wyreplumber.tar.gz"
+          - -C
+          - /
+          - "{{ wyreplumber.app_path | regex_replace('^/', '') }}"
+      changed_when: true
+
+    - name: Archive both previous web application builds
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.transition_timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.transition_timeout_seconds }}s"
+          - tar
+          - --create
+          - --gzip
+          - --numeric-owner
+          - "--file={{ open_cinema_transition_bundle_path }}/web.tar.gz"
+          - -C
+          - /
+          - "{{ open_cinema_ui.admin.web_root | regex_replace('^/', '') }}"
+          - "{{ open_cinema_ui.user_ui.web_root | regex_replace('^/', '') }}"
+      changed_when: true
+
+    - name: Inspect managed static paths before archiving
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: "{{ open_cinema.managed_static_paths }}"
+      register: open_cinema_transition_static_path_stats
+
+    - name: Publish existing managed static paths
+      ansible.builtin.set_fact:
+        open_cinema_transition_existing_static_paths: >-
+          {{ open_cinema_transition_static_path_stats.results |
+             selectattr('stat.exists') | map(attribute='item') | list }}
+
+    - name: Archive previous managed static configuration
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ['/usr/bin/timeout', '--signal=TERM',
+             '--kill-after=' ~ open_cinema.transition_timeout_kill_grace_seconds ~ 's',
+             open_cinema.transition_timeout_seconds ~ 's',
+             'tar', '--create', '--gzip', '--numeric-owner',
+             '--file=' ~ open_cinema_transition_bundle_path ~ '/managed-static.tar.gz',
+             '-C', '/'] +
+            (open_cinema_transition_existing_static_paths |
+             map('regex_replace', '^/', '') | list)
+          }}
+      changed_when: true
+
+    - name: Archive previous managed processor binaries
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.transition_timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.transition_timeout_seconds }}s"
+          - tar
+          - --create
+          - --gzip
+          - --numeric-owner
+          - "--file={{ open_cinema_transition_bundle_path }}/processor-binaries.tar.gz"
+          - -C
+          - /
+          - "{{ camilladsp.install_path | regex_replace('^/', '') }}"
+          - "{{ pcm_auto_decoder.install_path | regex_replace('^/', '') }}"
+      changed_when: true
+
+    - name: Archive previous generated processor runtime configuration
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --signal=TERM
+          - "--kill-after={{ open_cinema.transition_timeout_kill_grace_seconds }}s"
+          - "{{ open_cinema.transition_timeout_seconds }}s"
+          - tar
+          - --create
+          - --gzip
+          - --numeric-owner
+          - "--file={{ open_cinema_transition_bundle_path }}/processor-runtime.tar.gz"
+          - -C
+          - /
+          - "{{ camilladsp.runtime_dir | regex_replace('^/', '') }}"
+          - "{{ pcm_auto_decoder.runtime_dir | regex_replace('^/', '') }}"
+      changed_when: true
+
+    - name: Inspect every coordinated backup artifact
+      ansible.builtin.stat:
+        path: "{{ open_cinema_transition_bundle_path }}/{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - db.sqlite3
+        - application.tar.gz
+        - wyreplumber.tar.gz
+        - web.tar.gz
+        - managed-static.tar.gz
+        - processor-binaries.tar.gz
+        - processor-runtime.tar.gz
+        - release-manifest.yml
+        - dynamic-state.json
+      register: open_cinema_transition_artifact_stats
+
+    - name: Correlate coordinated backup artifact checksums
+      ansible.builtin.set_fact:
+        open_cinema_transition_artifact_checksums: >-
+          {{ open_cinema_transition_artifact_checksums | default({}) |
+             combine({item.item: item.stat.checksum}) }}
+      loop: "{{ open_cinema_transition_artifact_stats.results }}"
+
+    - name: Write the coordinated transition manifest
+      ansible.builtin.template:
+        src: manifest.yml.j2
+        dest: "{{ open_cinema_transition_bundle_path }}/manifest.yml"
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+
+    - name: Mark the coordinated transition bundle restorable
+      ansible.builtin.copy:
+        content: "{{ open_cinema_transition_artifact_checksums | to_nice_json }}\n"
+        dest: "{{ open_cinema_transition_bundle_path }}/READY"
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+
+  rescue:
+    - name: Restart the previous application after backup failure
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+      loop:
+        - redis-server.service
+        - open-cinema.service
+        - celery.service
+        - celery-beat.service
+        - open-cinema-orchestrator.service
+      failed_when: false
+
+    - name: Stop before candidate mutation when backup is not restorable
+      ansible.builtin.fail:
+        msg: >-
+          Coordinated transition backup failed. The previous services were
+          restarted and no candidate application, UI, binding, processor, or
+          database mutation was attempted.
+
+- name: Find retained coordinated transition bundles
+  ansible.builtin.find:
+    paths: "{{ open_cinema.rollback_root }}"
+    patterns: transition-*
+    file_type: directory
+    recurse: false
+  register: open_cinema_transition_retained_bundles
+
+- name: Enforce private ownership of coordinated transition bundle roots
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0750"
+  loop: "{{ open_cinema_transition_retained_bundles.files }}"
+
+- name: Inspect retained transition bundle content by type
+  ansible.builtin.find:
+    paths: >-
+      {{ open_cinema_transition_retained_bundles.files |
+         map(attribute='path') | list }}
+    recurse: true
+    file_type: "{{ item }}"
+  loop:
+    - directory
+    - file
+  register: open_cinema_transition_retained_content
+  when: open_cinema_transition_retained_bundles.matched | int > 0
+
+- name: Enforce private retained transition directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0750"
+  loop: >-
+    {{ open_cinema_transition_retained_content.results[0].files | default([]) }}
+  when: open_cinema_transition_retained_bundles.matched | int > 0
+
+- name: Enforce private retained transition files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0600"
+  loop: >-
+    {{ open_cinema_transition_retained_content.results[1].files | default([]) }}
+  when: open_cinema_transition_retained_bundles.matched | int > 0

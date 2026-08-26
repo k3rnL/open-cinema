@@ -1,0 +1,17 @@
+---
+- name: Restore one explicit coordinated Open Cinema generation
+  hosts: all
+  become: true
+
+  pre_tasks:
+    - name: Load the coordinated release manifest used by readiness
+      ansible.builtin.include_vars:
+        file: "{{ release_manifest.source_path }}"
+        name: open_cinema_release_manifest
+
+  roles:
+    - role: rollback
+      tags: [rollback]
+
+    - role: readiness
+      tags: [readiness, verify]

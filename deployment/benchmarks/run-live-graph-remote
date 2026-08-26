@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$#" -lt 2 ]]; then
+  echo "usage: $0 SSH_TARGET MEASURE_LIVE_GRAPH_ARGUMENT..." >&2
+  exit 2
+fi
+
+ssh_target="$1"
+shift
+
+# Do not let the redaction pipeline hide the remote benchmark's exit status.
+set +e
+ssh -- "$ssh_target" sudo /usr/local/bin/open-cinema-measure-live-graph "$@" 2>&1 \
+  | sed -E \
+      -e 's/([0-9A-Fa-f]{2}[_:]){5}[0-9A-Fa-f]{2}/[redacted]/g' \
+      -e 's/((token|password|secret)[=:])[[:graph:]]+/\1[redacted]/Ig'
+pipeline_status=("${PIPESTATUS[@]}")
+set -e
+
+if [[ "${pipeline_status[1]}" -ne 0 ]]; then
+  exit "${pipeline_status[1]}"
+fi
+exit "${pipeline_status[0]}"

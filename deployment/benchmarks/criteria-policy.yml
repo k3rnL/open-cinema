@@ -1,0 +1,36 @@
+---
+schema_version: 1
+criteria_policy_id: pi5-single-chain-criteria-v1
+
+criteria_sets:
+  characterization-v1:
+    campaign_mode: characterization
+    state: candidate
+    platform_acceptance_allowed: false
+    thresholds_are_hypotheses: true
+    criteria_digest_required_in_run: true
+    source_must_remain_read_only_during_run: true
+    thresholds:
+      current_throttling: "0x0"
+      maximum_temperature_celsius: 80
+      collector_sample_loss_maximum: 0
+      programme_audio_pipewire_error_increment_maximum: 0
+  acceptance-v1:
+    campaign_mode: acceptance
+    state: awaiting-characterization-review
+    platform_acceptance_allowed: false
+    thresholds_are_hypotheses: false
+    criteria_digest_required_in_run: true
+    source_must_remain_read_only_during_run: true
+    thresholds: {}
+
+freeze_contract:
+  required_acceptance_state: frozen
+  digest_algorithm: sha256
+  immutable_copy_required_in_run_bundle: true
+  mutation_after_run_prepare: forbidden
+  acceptance_requires_distinct_run_from_characterization: true
+  acceptance_requires_all_required_cases: true
+  note: >-
+    Populate acceptance-v1 only after characterization review, set its state to
+    frozen, compute its digest before prepare, and never rewrite it from a case.

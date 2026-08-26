@@ -1,0 +1,44 @@
+---
+schema_version: 1
+index_id: pi5-8gb-imported-functional-v1
+fixture_contract_id: pi5-8gb-gab8-native-v1
+classification: imported-functional
+quantitative_use: forbidden
+
+records:
+  - id: tv-spdif-to-main
+    path: deployment/acceptance/2026-08-26-tv-spdif-input.md
+    observed_at: 2026-08-26
+    functional_result: passed-for-live-tv-pcm-and-supported-encoded-audio
+    quantitative_metrics: []
+    missing_measurements: [controlled-repetitions, physical-latency, audible-gap, percentiles]
+  - id: bluetooth-programme-source-to-main
+    path: deployment/acceptance/2026-08-26-bluetooth-programme-source.md
+    observed_at: 2026-08-26
+    functional_result: passed
+    quantitative_metrics: []
+    missing_measurements: [controlled-repetitions, physical-latency, audible-gap, percentiles]
+  - id: bluetooth-headset-output
+    path: deployment/acceptance/2026-08-26-bluetooth-headset-output.md
+    observed_at: 2026-08-26
+    functional_result: passed
+    quantitative_metrics: []
+    missing_measurements: [controlled-repetitions, physical-latency, audible-gap, percentiles]
+  - id: headset-takeover-and-fallback
+    path: deployment/acceptance/2026-08-26-adaptive-bluetooth-routing.md
+    observed_at: 2026-08-26
+    functional_result: passed-with-subjective-switch-observations
+    quantitative_metrics: []
+    missing_measurements: [twenty-cycles-per-direction, calibrated-audio-gap, median, p95, maximum]
+  - id: active-graph-headless-reboot
+    path: deployment/acceptance/2026-08-25-limited-live-rollout.md
+    observed_at: 2026-08-25
+    functional_result: passed
+    quantitative_metrics: []
+    missing_measurements: [boot-to-service-readiness, boot-to-exact-topology, boot-to-physical-audio]
+  - id: processor-and-runtime-restarts
+    path: deployment/acceptance/2026-08-25-service-restart-matrix.md
+    observed_at: 2026-08-25
+    functional_result: passed
+    quantitative_metrics: []
+    missing_measurements: [five-repetitions, calibrated-audio-restoration, median, p95, maximum]

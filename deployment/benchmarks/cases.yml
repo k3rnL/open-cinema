@@ -1,0 +1,445 @@
+---
+schema_version: 1
+case_manifest_id: pi5-8gb-gab8-native-cases-v1
+suite_id: open-cinema-raspberry-audio-v2
+fixture_contract_id: pi5-8gb-gab8-native-v1
+criteria_policy_id: pi5-single-chain-criteria-v1
+
+defaults:
+  fixture_id: pi5-8gb-gab8-native-v1
+  criteria_set: characterization-v1
+  warm_up_repetitions: 1
+  measured_repetitions: 5
+  duration_seconds: 60
+  timeout_seconds: 180
+  measurement_boundary:
+    start: after-preconditions-and-workload-readiness
+    end: after-final-sample-before-restoration
+  required_metric_sets:
+    - sustained-health
+    - native-audio-health
+    - topology-and-readiness
+  restoration_action: restore-active-intent
+
+metric_sets:
+  fixture-facts:
+    - resolved-fixture-manifest
+    - component-and-tool-versions
+    - initial-throttling
+  sustained-health:
+    - process-and-appliance-cpu
+    - process-rss-and-available-memory
+    - temperature-clocks-and-throttling
+    - disk-counters-and-free-space
+    - collector-overhead-and-sample-loss
+  native-audio-health:
+    - pipewire-per-object-error-counters
+    - decoder-errors-and-queue-state
+    - camilladsp-underrun-overrun-and-queue-state
+    - scoped-service-errors
+  topology-and-readiness:
+    - exact-owned-topology
+    - decoder-and-camilladsp-readiness
+    - resolved-plan-reconciliation-generation-and-retries
+  transition-timing:
+    - monotonic-request-discovery-decision-mutation-readiness-markers
+    - exact-topology-convergence
+    - physical-audio-loss-and-restoration-when-calibrated
+  physical-audio:
+    - source-and-captured-waveform-digests
+    - channel-layout
+    - latency-gap-discontinuity-silence-and-clipping
+    - calibration-and-uncertainty
+  event-accounting:
+    - offered-processed-coalesced-retried-and-dropped-events
+    - sqlite-latency-and-busy-results
+    - redis-observations
+  persistence-storage:
+    - database-plan-audit-and-diagnostic-growth
+    - retained-record-counts
+    - filesystem-and-device-write-counters
+  boot-readiness:
+    - boot-and-service-milestones
+    - saved-intent-binding-and-profile-digests
+    - physical-audio-restoration-when-calibrated
+
+restoration_actions:
+  none-read-only:
+    disruptive: false
+    verify: exact-topology-and-state-digests-unchanged
+  restore-active-intent:
+    disruptive: false
+    verify: exact-topology-and-static-dynamic-state-digests
+  restore-processor-and-active-intent:
+    disruptive: true
+    allowed_services:
+      - camilladsp@camilladsp-0.service
+      - pcm-auto-decoder@decoder-0.service
+    verify: exact-topology-and-static-dynamic-state-digests
+  restore-runtime-and-active-intent:
+    disruptive: true
+    allowed_services:
+      - open-cinema-orchestrator.service
+      - camilladsp@camilladsp-0.service
+      - pcm-auto-decoder@decoder-0.service
+      - pipewire.service
+      - wireplumber.service
+    verify: exact-topology-and-static-dynamic-state-digests
+  verify-boot-restoration:
+    disruptive: true
+    allowed_services: []
+    verify: saved-intent-exact-topology-and-physical-audio-restored
+
+cases:
+  - id: baseline-fixture-and-topology
+    campaign: baseline
+    purpose: Resolve the supported fixture and verify the native single-chain topology.
+    input_fixture: idle
+    processor_fixture: active-graph
+    workload_state: idle
+    carrier_state: not-applicable
+    expected_outcome: supported
+    warm_up_repetitions: 0
+    measured_repetitions: 1
+    duration_seconds: 1
+    timeout_seconds: 60
+    required_metric_sets: [fixture-facts, topology-and-readiness]
+    restoration_action: none-read-only
+
+  - id: baseline-collector-overhead
+    campaign: baseline
+    purpose: Measure the sustained and transition collectors without programme audio.
+    input_fixture: idle
+    processor_fixture: active-graph
+    workload_state: idle
+    carrier_state: not-applicable
+    expected_outcome: supported
+    warm_up_repetitions: 1
+    measured_repetitions: 1
+    duration_seconds: 60
+    timeout_seconds: 180
+    required_metric_sets: [fixture-facts, sustained-health, topology-and-readiness]
+    restoration_action: none-read-only
+
+  - id: decoder-pcm-stereo
+    campaign: decoder
+    purpose: Verify PCM bypass and the decoder's stable single output.
+    input_fixture: pcm-stereo
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: supported
+
+  - id: decoder-ac3-51
+    campaign: decoder
+    purpose: Verify AC-3 detection, decoding, layout, and stable output.
+    input_fixture: ac3-5.1
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: supported
+
+  - id: decoder-eac3-51
+    campaign: decoder
+    purpose: Verify E-AC-3 detection, decoding, layout, and stable output.
+    input_fixture: eac3-5.1
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: supported
+
+  - id: decoder-dts-51
+    campaign: decoder
+    purpose: Characterize DTS only after a checksummed fixture is registered.
+    input_fixture: dts-5.1
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: fixture-unavailable
+
+  - id: decoder-no-carrier-safe-silence
+    campaign: decoder
+    purpose: Characterize safe silence and starvation counters with no physical carrier.
+    input_fixture: no-carrier
+    processor_fixture: active-graph
+    workload_state: no-carrier
+    carrier_state: absent
+    expected_outcome: supported
+    warm_up_repetitions: 1
+    measured_repetitions: 5
+    duration_seconds: 60
+    timeout_seconds: 180
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness]
+    restoration_action: restore-active-intent
+
+  - id: decoder-unsupported-input
+    campaign: decoder
+    purpose: Verify the declared safe state and recovery for unsupported input.
+    input_fixture: unsupported-encoded
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: fixture-unavailable
+
+  - id: decoder-failure-recovery
+    campaign: decoder
+    purpose: Restart the one decoder and measure stable-output recovery.
+    input_fixture: pcm-stereo
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: supported
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing]
+    restoration_action: restore-processor-and-active-intent
+    disruptive_services: [pcm-auto-decoder@decoder-0.service]
+
+  - id: decoder-format-transitions
+    campaign: decoder
+    purpose: Measure 2.0, 5.1, 7.1, menu, and representative cross-format edges.
+    input_fixture: pcm-multichannel-channel-id
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: fixture-unavailable
+    transition_edges:
+      - pcm-2.0-to-menu-2.0
+      - ac3-5.1-to-menu-2.0
+      - pcm-7.1-to-menu-2.0
+      - ac3-5.1-to-eac3-5.1
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, physical-audio]
+
+  - id: camilladsp-profiles-128
+    campaign: camilladsp
+    purpose: Exercise every representative profile at the selected 128-frame period.
+    input_fixture: pcm-multichannel-channel-id
+    processor_fixture: camilladsp-production-fir-iir-128
+    processor_fixture_matrix:
+      - camilladsp-passthrough-128
+      - camilladsp-stereo-128
+      - camilladsp-multichannel-128
+      - camilladsp-channel-adaptation-128
+      - camilladsp-production-fir-iir-128
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: fixture-unavailable
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, physical-audio]
+
+  - id: camilladsp-profile-replacement
+    campaign: camilladsp
+    purpose: Measure replacement and readiness between representative 128-frame profiles.
+    input_fixture: pcm-stereo
+    processor_fixture: camilladsp-stereo-128
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: fixture-unavailable
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, physical-audio]
+    restoration_action: restore-processor-and-active-intent
+
+  - id: camilladsp-bypass
+    campaign: camilladsp
+    purpose: Measure the declared CamillaDSP bypass path.
+    input_fixture: pcm-stereo
+    processor_fixture: camilladsp-passthrough-128
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: fixture-unavailable
+    required_metric_sets: [native-audio-health, topology-and-readiness, transition-timing, physical-audio]
+    restoration_action: restore-processor-and-active-intent
+
+  - id: camilladsp-invalid-configuration
+    campaign: camilladsp
+    purpose: Verify rejection, safe state, and last-working-profile rollback.
+    input_fixture: pcm-stereo
+    processor_fixture: camilladsp-stereo-128
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: fixture-unavailable
+    required_metric_sets: [native-audio-health, topology-and-readiness, transition-timing, physical-audio]
+    restoration_action: restore-processor-and-active-intent
+    disruptive_services: [camilladsp@camilladsp-0.service]
+
+  - id: camilladsp-control-interruption
+    campaign: camilladsp
+    purpose: Measure suppression, readiness, and restoration after control loss.
+    input_fixture: pcm-stereo
+    processor_fixture: camilladsp-stereo-128
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: fixture-unavailable
+    required_metric_sets: [native-audio-health, topology-and-readiness, transition-timing, physical-audio]
+    restoration_action: restore-processor-and-active-intent
+    disruptive_services: [camilladsp@camilladsp-0.service]
+
+  - id: camilladsp-restart-and-rollback
+    campaign: camilladsp
+    purpose: Restart CamillaDSP and verify the last working 128-frame profile returns.
+    input_fixture: pcm-stereo
+    processor_fixture: camilladsp-stereo-128
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: fixture-unavailable
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, physical-audio]
+    restoration_action: restore-processor-and-active-intent
+    disruptive_services: [camilladsp@camilladsp-0.service]
+
+  - id: routing-headset-takeover
+    campaign: adaptive-routing
+    purpose: Measure main-speaker to headset takeover under continuous Bluetooth audio.
+    input_fixture: bluetooth-continuous-programme
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: supported
+    warm_up_repetitions: 1
+    measured_repetitions: 20
+    duration_seconds: 15
+    timeout_seconds: 60
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, physical-audio]
+
+  - id: routing-headset-to-main-fallback
+    campaign: adaptive-routing
+    purpose: Measure headset removal and fallback under continuous Bluetooth audio.
+    input_fixture: bluetooth-continuous-programme
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: supported
+    warm_up_repetitions: 1
+    measured_repetitions: 20
+    duration_seconds: 15
+    timeout_seconds: 60
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, physical-audio]
+
+  - id: routing-headset-reconnection
+    campaign: adaptive-routing
+    purpose: Verify reconnection returns to the preferred endpoint without Apply.
+    input_fixture: bluetooth-continuous-programme
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: supported
+    warm_up_repetitions: 1
+    measured_repetitions: 20
+    duration_seconds: 15
+    timeout_seconds: 60
+    required_metric_sets: [native-audio-health, topology-and-readiness, transition-timing, physical-audio]
+
+  - id: recovery-service-matrix
+    campaign: recovery
+    purpose: Restart each runtime service and the bounded combined processor/orchestrator group.
+    input_fixture: pcm-stereo
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: supported
+    warm_up_repetitions: 1
+    measured_repetitions: 5
+    duration_seconds: 30
+    timeout_seconds: 120
+    service_matrix:
+      - [pcm-auto-decoder@decoder-0.service]
+      - [camilladsp@camilladsp-0.service]
+      - [open-cinema-orchestrator.service]
+      - [pipewire.service]
+      - [wireplumber.service]
+      - [pcm-auto-decoder@decoder-0.service, camilladsp@camilladsp-0.service]
+      - [pcm-auto-decoder@decoder-0.service, camilladsp@camilladsp-0.service, open-cinema-orchestrator.service]
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, physical-audio]
+    restoration_action: restore-runtime-and-active-intent
+
+  - id: boot-persistence-saved-intent
+    campaign: boot-persistence
+    purpose: Measure ordered service readiness and saved audio restoration without Apply.
+    input_fixture: tv-continuous-programme
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: supported
+    warm_up_repetitions: 1
+    measured_repetitions: 5
+    duration_seconds: 120
+    timeout_seconds: 300
+    required_metric_sets: [fixture-facts, sustained-health, native-audio-health, topology-and-readiness, transition-timing, physical-audio, boot-readiness]
+    restoration_action: verify-boot-restoration
+
+  - id: event-storage-bounded-burst
+    campaign: event-storage
+    purpose: Measure bounded endpoint/property bursts, convergence, contention, and growth.
+    input_fixture: pcm-stereo
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: supported
+    warm_up_repetitions: 1
+    measured_repetitions: 5
+    duration_seconds: 120
+    timeout_seconds: 300
+    event_schedule:
+      endpoint_events: 100
+      property_events: 500
+      transition_cycles: 20
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, event-accounting, persistence-storage]
+
+  - id: soak-pcm
+    campaign: soak
+    purpose: Sustain the principal PCM chain with scheduled reconciliation transitions and topology checks.
+    input_fixture: pcm-stereo
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: supported
+    warm_up_repetitions: 1
+    measured_repetitions: 1
+    duration_seconds: 600
+    timeout_seconds: 720
+    transition_schedule_kind: reconciliation-refresh
+    transition_schedule_seconds: [180, 360, 540]
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, persistence-storage]
+
+  - id: soak-encoded-multichannel
+    campaign: soak
+    purpose: Sustain an encoded multichannel decode workload with scheduled transitions.
+    input_fixture: ac3-5.1
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: supported
+    warm_up_repetitions: 1
+    measured_repetitions: 1
+    duration_seconds: 600
+    timeout_seconds: 720
+    transition_schedule_kind: encoded-menu-format-edge
+    transition_schedule_seconds: [180, 360, 540]
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, persistence-storage]
+
+  - id: soak-representative-dsp
+    campaign: soak
+    purpose: Sustain the production-like FIR/IIR profile with scheduled profile reapply and restoration transitions at 128 frames.
+    input_fixture: pcm-multichannel-channel-id
+    processor_fixture: camilladsp-production-fir-iir-128
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: fixture-unavailable
+    warm_up_repetitions: 1
+    measured_repetitions: 1
+    duration_seconds: 600
+    timeout_seconds: 720
+    transition_schedule_kind: profile-reapply-and-restore
+    transition_schedule_seconds: [180, 360, 540]
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, persistence-storage, physical-audio]
+
+  - id: soak-adaptive-routing
+    campaign: soak
+    purpose: Sustain Bluetooth programme audio while scheduling takeover and fallback.
+    input_fixture: bluetooth-continuous-programme
+    processor_fixture: active-graph
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: supported
+    warm_up_repetitions: 1
+    measured_repetitions: 1
+    duration_seconds: 600
+    timeout_seconds: 720
+    transition_schedule_kind: headset-takeover-and-fallback
+    transition_schedule_seconds: [120, 240, 360, 480]
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, persistence-storage, physical-audio]

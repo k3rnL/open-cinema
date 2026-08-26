@@ -1,0 +1,12 @@
+---
+- name: Prepare an Open Cinema appliance for hardware benchmarks
+  hosts: all
+  become: true
+
+  roles:
+    - role: benchmark-tools
+      tags: [benchmark]
+
+    - role: benchmark-fixtures
+      tags: [benchmark, benchmark-fixtures]
+      when: open_cinema_generate_benchmark_fixtures | default(false) | bool

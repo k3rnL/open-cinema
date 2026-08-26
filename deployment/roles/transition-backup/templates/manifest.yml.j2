@@ -1,0 +1,25 @@
+schema_version: 1
+kind: open-cinema-coordinated-transition-backup
+created_at: "{{ ansible_date_time.iso8601 }}"
+host: "{{ ansible_facts['hostname'] }}"
+bundle_id: "{{ open_cinema_rollback_id }}"
+previous_candidate_digest: "{{ open_cinema_transition_previous_gate.candidateDigest | default('unknown') }}"
+candidate_digest: "{{ open_cinema_deployment_candidate_digest }}"
+release_manifest_sha256: "{{ open_cinema_transition_installed_manifest.stat.checksum }}"
+input_identity:
+{{ open_cinema_deployment_input_identity | default({}) | to_nice_yaml(indent=2) | indent(2, true) }}
+dynamic_state: {{ open_cinema_transition_state_command.stdout_lines | last | from_json | to_json }}
+artifacts:
+{{ open_cinema_transition_artifact_checksums | to_nice_yaml(indent=2) | indent(2, true) }}
+managed_static_paths:
+{{ open_cinema_transition_existing_static_paths | to_nice_yaml(indent=2) | indent(2, true) }}
+restore:
+  strategy: coordinated-full-generation
+  application_archive: application.tar.gz
+  wyreplumber_archive: wyreplumber.tar.gz
+  web_archive: web.tar.gz
+  processor_binary_archive: processor-binaries.tar.gz
+  processor_runtime_archive: processor-runtime.tar.gz
+  managed_static_archive: managed-static.tar.gz
+  database: db.sqlite3
+  release_manifest: release-manifest.yml

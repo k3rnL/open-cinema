@@ -1,0 +1,195 @@
+---
+- name: Publish the benchmark fixture directory
+  ansible.builtin.set_fact:
+    open_cinema_benchmark_fixture_dir: >-
+      {{ open_cinema_benchmark_result_root }}/fixtures/{{ open_cinema_benchmark_fixture_version }}
+
+- name: Create the benchmark fixture directory
+  ansible.builtin.file:
+    path: "{{ open_cinema_benchmark_fixture_dir }}"
+    state: directory
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0750"
+
+- name: Inspect the selected FFmpeg audio encoders
+  ansible.builtin.command:
+    argv:
+      - ffmpeg
+      - -hide_banner
+      - -encoders
+  register: open_cinema_ffmpeg_encoders
+  changed_when: false
+
+- name: Generate the deterministic stereo PCM WAV fixture
+  ansible.builtin.command:
+    argv:
+      - ffmpeg
+      - -hide_banner
+      - -loglevel
+      - error
+      - -f
+      - lavfi
+      - -i
+      - "sine=frequency=997:sample_rate=48000:duration={{ open_cinema_benchmark_duration_seconds }}"
+      - -filter_complex
+      - "[0:a]pan=stereo|c0=c0|c1=c0"
+      - -c:a
+      - pcm_s16le
+      - "{{ open_cinema_benchmark_fixture_dir }}/pcm-stereo.wav"
+    creates: "{{ open_cinema_benchmark_fixture_dir }}/pcm-stereo.wav"
+  become_user: "{{ open_cinema.user }}"
+
+- name: Generate the decoder's deterministic raw stereo carrier fixture
+  ansible.builtin.command:
+    argv:
+      - ffmpeg
+      - -hide_banner
+      - -loglevel
+      - error
+      - -i
+      - "{{ open_cinema_benchmark_fixture_dir }}/pcm-stereo.wav"
+      - -f
+      - s16le
+      - -acodec
+      - pcm_s16le
+      - "{{ open_cinema_benchmark_fixture_dir }}/pcm-stereo.s16le"
+    creates: "{{ open_cinema_benchmark_fixture_dir }}/pcm-stereo.s16le"
+  become_user: "{{ open_cinema.user }}"
+
+- name: Generate deterministic AC-3 and E-AC-3 IEC-61937 fixtures
+  ansible.builtin.command:
+    argv:
+      - ffmpeg
+      - -hide_banner
+      - -loglevel
+      - error
+      - -f
+      - lavfi
+      - -i
+      - "sine=frequency=997:sample_rate=48000:duration={{ open_cinema_benchmark_duration_seconds }}"
+      - -filter_complex
+      - "[0:a]pan=5.1(side)|FL=c0|FR=c0|FC=0.5*c0|LFE=0.25*c0|SL=0.5*c0|SR=0.5*c0"
+      - -c:a
+      - "{{ item.codec }}"
+      - -b:a
+      - "{{ item.bitrate }}"
+      - -f
+      - spdif
+      - "{{ open_cinema_benchmark_fixture_dir }}/{{ item.name }}.spdif"
+    creates: "{{ open_cinema_benchmark_fixture_dir }}/{{ item.name }}.spdif"
+  loop:
+    - name: ac3-5.1
+      codec: ac3
+      bitrate: 448k
+    - name: eac3-5.1
+      codec: eac3
+      bitrate: 768k
+  become_user: "{{ open_cinema.user }}"
+
+- name: Generate the deterministic DTS IEC-61937 fixture when FFmpeg exposes DCA
+  ansible.builtin.command:
+    argv:
+      - ffmpeg
+      - -hide_banner
+      - -loglevel
+      - error
+      - -f
+      - lavfi
+      - -i
+      - "sine=frequency=997:sample_rate=48000:duration={{ open_cinema_benchmark_duration_seconds }}"
+      - -filter_complex
+      - "[0:a]pan=5.1(side)|FL=c0|FR=c0|FC=0.5*c0|LFE=0.25*c0|SL=0.5*c0|SR=0.5*c0"
+      - -c:a
+      - dca
+      - -strict
+      - experimental
+      - -b:a
+      - 1411200
+      - -f
+      - spdif
+      - "{{ open_cinema_benchmark_fixture_dir }}/dts-5.1.spdif"
+    creates: "{{ open_cinema_benchmark_fixture_dir }}/dts-5.1.spdif"
+  become_user: "{{ open_cinema.user }}"
+  when: "' dca ' in open_cinema_ffmpeg_encoders.stdout"
+
+- name: Publish the generated fixture set
+  ansible.builtin.set_fact:
+    open_cinema_benchmark_fixtures: >-
+      {{
+        ['pcm-stereo.wav', 'pcm-stereo.s16le', 'ac3-5.1.spdif', 'eac3-5.1.spdif']
+        + (['dts-5.1.spdif'] if ' dca ' in open_cinema_ffmpeg_encoders.stdout else [])
+      }}
+
+- name: Compute fixture SHA-256 digests
+  ansible.builtin.stat:
+    path: "{{ open_cinema_benchmark_fixture_dir }}/{{ item }}"
+    checksum_algorithm: sha256
+  loop: "{{ open_cinema_benchmark_fixtures }}"
+  register: open_cinema_benchmark_fixture_stats
+
+- name: Probe every self-describing benchmark fixture
+  ansible.builtin.command:
+    argv:
+      - ffprobe
+      - -v
+      - error
+      - -show_entries
+      - stream=codec_name,sample_rate,channels,channel_layout
+      - -of
+      - compact=p=0:nk=0
+      - "{{ open_cinema_benchmark_fixture_dir }}/{{ item }}"
+  loop:
+    - pcm-stereo.wav
+    - ac3-5.1.spdif
+    - eac3-5.1.spdif
+  register: open_cinema_benchmark_fixture_probes
+  changed_when: false
+
+- name: Probe the DTS benchmark fixture when available
+  ansible.builtin.command:
+    argv:
+      - ffprobe
+      - -v
+      - error
+      - -show_entries
+      - stream=codec_name,sample_rate,channels,channel_layout
+      - -of
+      - compact=p=0:nk=0
+      - "{{ open_cinema_benchmark_fixture_dir }}/dts-5.1.spdif"
+  register: open_cinema_benchmark_dts_probe
+  changed_when: false
+  when: "' dca ' in open_cinema_ffmpeg_encoders.stdout"
+
+- name: Record the reproducible fixture manifest
+  ansible.builtin.copy:
+    content: |
+      schema_version: 1
+      suite_id: open-cinema-raspberry-audio-v2
+      fixture_contract_id: pi5-8gb-gab8-native-v1
+      duration_seconds: {{ open_cinema_benchmark_duration_seconds }}
+      sample_rate_hz: 48000
+      decoder_instances: 1
+      camilladsp_instances: 1
+      camilladsp_period_frames: 128
+      audio_transport: native-pipewire
+      generator: ffmpeg
+      fixtures:
+      {% for result in open_cinema_benchmark_fixture_stats.results %}
+        - name: {{ result.item }}
+          size_bytes: {{ result.stat.size }}
+          sha256: {{ result.stat.checksum }}
+      {% endfor %}
+      probes:
+      {% for result in open_cinema_benchmark_fixture_probes.results %}
+        - name: {{ result.item }}
+          stream: {{ result.stdout | to_json }}
+      {% endfor %}
+      {% if open_cinema_benchmark_dts_probe is not skipped %}
+        - name: dts-5.1.spdif
+          stream: {{ open_cinema_benchmark_dts_probe.stdout | to_json }}
+      {% endif %}
+    dest: "{{ open_cinema_benchmark_fixture_dir }}/manifest.yml"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0640"

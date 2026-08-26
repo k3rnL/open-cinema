@@ -1,0 +1,190 @@
+---
+schema_version: 2
+suite_id: open-cinema-raspberry-audio-v2
+fixture_contract_id: pi5-8gb-gab8-native-v1
+status: supported-fixture
+
+scope:
+  description: >-
+    The one available Open Cinema appliance and its native PipeWire,
+    single-decoder, single-CamillaDSP audio chain.
+  excluded:
+    - management-ui-acceptance
+    - clean-installation
+    - coordinated-release-publication
+    - other-raspberry-pi-models-or-memory-tiers
+    - multiple-decoder-or-camilladsp-instances
+    - arbitrary-graph-capacity
+    - advanced-managed-link-shapes
+
+device_under_test:
+  model: Raspberry Pi 5 Model B
+  revision: "1.1"
+  memory_mb: 8192
+  architecture: aarch64
+  operating_system:
+    family: Debian
+    codename: trixie
+    major_version: 13
+  power:
+    rated_watts: 27
+    declaration: Raspberry Pi 27 W supply
+  cooling:
+    type: active-fan
+    required: true
+  storage:
+    filesystem: ext4
+    minimum_free_gb: 8
+  network:
+    primary: wired-gigabit
+    wireless_measurements_are_separate: true
+
+audio_chain:
+  transport: native-pipewire
+  sample_rate_hz: 48000
+  input:
+    kind: spdif-to-i2s
+    interface: physical-i2s-capture
+    declaration: SPDIF receiver exposed as an ALSA/PipeWire I2S capture node
+  output:
+    kind: multichannel-pcm
+    model: WONDOM GAB8
+    interface: physical-alsa-playback
+  decoder:
+    process: pcm-auto-decoder
+    instances: 1
+    output_contract: one-stable-eight-channel-pcm-output
+  camilladsp:
+    process: camilladsp
+    major_version: 4
+    instances: 1
+    backend: pipewire
+    processing_period_frames: 128
+  graph:
+    expected_owned_links: 18
+    exact_topology_required: true
+
+bluetooth_fixtures:
+  programme_source:
+    class: phone-or-computer
+    profile: a2dp-source-to-appliance-sink
+    record:
+      - model
+      - operating-system
+      - bluetooth-version
+      - codec
+      - redacted-address
+  headset:
+    class: a2dp-headset
+    profile: appliance-source-to-headset-sink
+    record:
+      - model
+      - firmware
+      - codec
+      - redacted-address
+  adapter: raspberry-pi-onboard
+
+input_fixtures:
+  idle:
+    kind: none
+    carrier_state: not-applicable
+  no-carrier:
+    kind: physical-input-state
+    carrier_state: absent
+    expected_behavior: controlled-silence-without-process-crash
+  pcm-stereo:
+    kind: generated-audio
+    codec: pcm_s16le
+    channels: 2
+    channel_layout: stereo
+    sample_rate_hz: 48000
+    registry_status: generated-by-benchmark-fixture-role
+  pcm-multichannel-channel-id:
+    kind: registered-audio
+    codec: pcm_s16le
+    channels: 8
+    channel_layout: "7.1"
+    sample_rate_hz: 48000
+    registry_status: pending-registration
+  ac3-5.1:
+    kind: generated-audio
+    codec: ac3
+    channels: 6
+    channel_layout: "5.1(side)"
+    transport: iec61937
+    sample_rate_hz: 48000
+    registry_status: generated-by-benchmark-fixture-role
+  eac3-5.1:
+    kind: generated-audio
+    codec: eac3
+    channels: 6
+    channel_layout: "5.1(side)"
+    transport: iec61937
+    sample_rate_hz: 48000
+    registry_status: generated-by-benchmark-fixture-role
+  dts-5.1:
+    kind: registered-audio
+    codec: dts
+    channels: 6
+    channel_layout: "5.1(side)"
+    transport: iec61937
+    sample_rate_hz: 48000
+    registry_status: pending-registration
+  unsupported-encoded:
+    kind: registered-audio
+    codec: intentionally-unsupported
+    registry_status: pending-registration
+  bluetooth-continuous-programme:
+    kind: physical-bluetooth-source
+    carrier_state: present
+  tv-continuous-programme:
+    kind: physical-spdif-source
+    carrier_state: present
+
+processor_fixtures:
+  active-graph:
+    decoder_instances: 1
+    camilladsp_instances: 1
+    camilladsp_period_frames: 128
+    sample_rate_hz: 48000
+  camilladsp-passthrough-128:
+    profile_status: pending-registration
+    camilladsp_period_frames: 128
+  camilladsp-stereo-128:
+    profile_status: pending-registration
+    camilladsp_period_frames: 128
+  camilladsp-multichannel-128:
+    profile_status: pending-registration
+    camilladsp_period_frames: 128
+  camilladsp-channel-adaptation-128:
+    profile_status: pending-registration
+    camilladsp_period_frames: 128
+  camilladsp-production-fir-iir-128:
+    profile_status: pending-registration
+    camilladsp_period_frames: 128
+
+measurement:
+  sustained_interval_seconds: 1
+  transition_interval_milliseconds: 200
+  physical_timing:
+    state: uncalibrated
+    acceptance_metrics_available: false
+  tools:
+    - ffmpeg
+    - ffprobe
+    - journalctl
+    - jq
+    - perf
+    - pidstat
+    - pw-dump
+    - pw-top
+    - redis-cli
+    - sqlite3
+    - systemd-analyze
+    - vcgencmd
+    - wpctl
+
+power_and_thermal_preconditions:
+  current_throttled_value: "0x0"
+  historical_bits_are_recorded_not_silently_discarded: true
+  maximum_temperature_celsius: 80

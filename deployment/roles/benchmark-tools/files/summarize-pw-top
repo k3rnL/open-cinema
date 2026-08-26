@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""Summarize pw-top batch output without collapsing distinct PipeWire objects."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+from typing import TextIO
+
+
+def summarize(lines: TextIO) -> dict[str, object]:
+    nodes: dict[tuple[int, str], dict[str, object]] = {}
+    for line_number, line in enumerate(lines, start=1):
+        fields = line.split()
+        if len(fields) < 9 or fields[0] != "R":
+            continue
+        try:
+            node_id = int(fields[1])
+            errors = int(fields[8])
+        except ValueError:
+            continue
+
+        name = fields[-1] if len(fields) > 9 else f"node-{node_id}"
+        key = (node_id, name)
+        node = nodes.get(key)
+        if node is None:
+            nodes[key] = {
+                "node_id": node_id,
+                "name": name,
+                "first_errors": errors,
+                "last_errors": errors,
+                "delta_errors": 0,
+                "observed_increment_errors": 0,
+                "counter_resets": 0,
+                "samples": 1,
+                "first_line": line_number,
+                "last_line": line_number,
+            }
+            continue
+
+        previous = int(node["last_errors"])
+        if errors >= previous:
+            node["observed_increment_errors"] = int(
+                node["observed_increment_errors"]
+            ) + (errors - previous)
+        else:
+            # A process or PipeWire-object restart resets the native counter.
+            # Retain both the reset and all increments visible after it.
+            node["counter_resets"] = int(node["counter_resets"]) + 1
+            node["observed_increment_errors"] = int(
+                node["observed_increment_errors"]
+            ) + errors
+        node["last_errors"] = errors
+        node["delta_errors"] = errors - int(node["first_errors"])
+        node["samples"] = int(node["samples"]) + 1
+        node["last_line"] = line_number
+
+    ordered = [nodes[key] for key in sorted(nodes)]
+    if not ordered:
+        raise ValueError("pw-top input contains no readable PipeWire object rows")
+    return {
+        "schema_version": 1,
+        "nodes": ordered,
+        "maximum_delta_errors": max(int(node["delta_errors"]) for node in ordered),
+        "maximum_observed_increment_errors": max(
+            int(node["observed_increment_errors"]) for node in ordered
+        ),
+        "nodes_with_observed_increments": sum(
+            int(node["observed_increment_errors"]) > 0 for node in ordered
+        ),
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("input", type=Path)
+    parser.add_argument("--output", type=Path)
+    arguments = parser.parse_args()
+    try:
+        with arguments.input.open(encoding="utf-8", errors="replace") as source:
+            result = summarize(source)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
+
+    rendered = json.dumps(result, indent=2, sort_keys=True) + "\n"
+    if arguments.output is None:
+        print(rendered, end="")
+    else:
+        arguments.output.write_text(rendered, encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,4 @@
+---
+open_cinema_benchmark_result_root: /var/lib/open-cinema/benchmark-results
+open_cinema_benchmark_fixture_version: pi5-8gb-gab8-native-v1
+open_cinema_benchmark_duration_seconds: 300
