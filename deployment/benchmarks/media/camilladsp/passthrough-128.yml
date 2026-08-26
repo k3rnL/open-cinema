@@ -18,4 +18,3 @@ devices:
     node_description: Open Cinema benchmark CamillaDSP playback
     node_group_name: opencinema.benchmark.camilladsp.group
     autoconnect_to: null
-

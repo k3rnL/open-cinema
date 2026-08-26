@@ -30,4 +30,3 @@ files and missing/low-correlation markers. It does not resample, because doing
 so would change the timing evidence. Hardware acceptance also requires the
 physical calibration fields in `../media/physical-path.yml`; the analyzer's
 synthetic unit tests are not a substitute for that loopback measurement.
-

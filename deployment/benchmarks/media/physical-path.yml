@@ -82,4 +82,3 @@ software_analyzer_baseline:
 subjective_observation_policy:
   allowed: [pop, click, noise, voice-mapping, perceived-sync]
   quantitative_substitution: forbidden
-

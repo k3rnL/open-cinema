@@ -27,4 +27,3 @@ pipeline:
   - type: Filter
     channels: [0, 1]
     names: [stereo_gain]
-

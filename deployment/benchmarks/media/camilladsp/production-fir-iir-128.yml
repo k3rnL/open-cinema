@@ -44,4 +44,3 @@ pipeline:
   - type: Filter
     channels: [0, 1, 2, 3, 4, 5, 6, 7]
     names: [dc_block, synthetic_room_iir, synthetic_fir_1024]
-
