@@ -58,7 +58,24 @@
           "properties": {"type": {"const": "active-fan"}, "required": {"const": true}}
         },
         "storage": {"type": "object"},
-        "network": {"type": "object"}
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "primary_interface",
+            "transport",
+            "purpose",
+            "network_performance_is_out_of_scope",
+            "bluetooth_radio_measurements_are_separate"
+          ],
+          "properties": {
+            "primary_interface": {"const": "wlan0"},
+            "transport": {"const": "wireless-lan"},
+            "purpose": {"const": "controller-access-only"},
+            "network_performance_is_out_of_scope": {"const": true},
+            "bluetooth_radio_measurements_are_separate": {"const": true}
+          }
+        }
       }
     },
     "audio_chain": {
@@ -84,9 +101,69 @@
       }
     },
     "bluetooth_fixtures": {"type": "object"},
-    "input_fixtures": {"type": "object", "minProperties": 10, "additionalProperties": {"type": "object"}},
-    "processor_fixtures": {"type": "object", "minProperties": 6, "additionalProperties": {"type": "object"}},
+    "input_fixtures": {
+      "type": "object",
+      "minProperties": 10,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["automation"],
+        "properties": {"automation": {"$ref": "#/$defs/automation"}}
+      }
+    },
+    "processor_fixtures": {
+      "type": "object",
+      "minProperties": 6,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["automation"],
+        "properties": {"automation": {"$ref": "#/$defs/automation"}}
+      }
+    },
     "measurement": {"type": "object", "required": ["sustained_interval_seconds", "transition_interval_milliseconds", "physical_timing", "tools"]},
     "power_and_thermal_preconditions": {"type": "object", "required": ["current_throttled_value", "historical_bits_are_recorded_not_silently_discarded", "maximum_temperature_celsius"]}
+  },
+  "$defs": {
+    "automation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["driver"],
+          "properties": {"driver": {"const": "none"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["driver", "reason"],
+          "properties": {
+            "driver": {"const": "manual"},
+            "reason": {"type": "string", "minLength": 1}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["driver", "media_fixture_id", "target_node", "sample_format", "sample_rate_hz", "channels", "channel_map"],
+          "properties": {
+            "driver": {"const": "pipewire-file-playback"},
+            "media_fixture_id": {"type": "string", "minLength": 1},
+            "target_node": {"type": "string", "pattern": "^[A-Za-z0-9_.-]{1,160}$"},
+            "sample_format": {"const": "s16"},
+            "sample_rate_hz": {"const": 48000},
+            "channels": {"type": "integer", "minimum": 1, "maximum": 8},
+            "channel_map": {"type": "string", "pattern": "^[A-Z0-9,-]{2,80}$"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["driver", "profile_fixture_id"],
+          "properties": {
+            "driver": {"const": "camilladsp-processing-overlay"},
+            "profile_fixture_id": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    }
   }
 }

@@ -7,6 +7,8 @@
       - linux-perf
       - netcat-openbsd
       - python3
+      - python3-jsonschema
+      - python3-yaml
       - sqlite3
       - sysstat
       - time
@@ -45,6 +47,38 @@
     group: root
     mode: "0755"
 
+- name: Install the manifest-driven benchmark runner implementation
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../benchmarks/benchmark_runner.py"
+    dest: /usr/local/libexec/open-cinema-benchmark-runner
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the bounded benchmark workload driver
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../benchmarks/benchmark_workload_driver.py"
+    dest: /usr/local/libexec/benchmark_workload_driver.py
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the supported-service graph-intent adapter
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../benchmarks/benchmark_intent_adapter.py"
+    dest: /usr/local/libexec/open-cinema-benchmark-intent-adapter
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the inventory-bound benchmark command
+  ansible.builtin.template:
+    src: open-cinema-benchmark.j2
+    dest: /usr/local/bin/open-cinema-benchmark
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Install the versioned benchmark contracts and evidence schema
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../benchmarks/{{ item }}"
@@ -62,6 +96,41 @@
     - evidence-envelope.schema.json
     - evidence-envelope.template.yml
 
+- name: Create deterministic benchmark media directories
+  ansible.builtin.file:
+    path: "/usr/local/share/open-cinema/benchmarks/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - media
+    - media/generated
+    - media/camilladsp
+
+- name: Install checksummed benchmark media and CamillaDSP workloads
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../benchmarks/{{ item }}"
+    dest: "/usr/local/share/open-cinema/benchmarks/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - media/manifest.json
+    - media/generated/pcm-stereo-channel-id.s16le
+    - media/generated/pcm-7_1-channel-id.wav
+    - media/generated/ac3-5.1.spdif
+    - media/generated/eac3-5.1.spdif
+    - media/generated/dts-5.1.spdif
+    - media/generated/unsupported-aac-5.1.spdif
+    - media/camilladsp/profiles.json
+    - media/camilladsp/passthrough-128.yml
+    - media/camilladsp/stereo-128.yml
+    - media/camilladsp/multichannel-128.yml
+    - media/camilladsp/channel-adaptation-128.yml
+    - media/camilladsp/production-fir-iir-128.yml
+    - media/camilladsp/production-fir-1024.f32le
+
 - name: Resolve every required benchmark command
   ansible.builtin.command:
     argv:
@@ -69,17 +138,21 @@
       - which
       - "{{ item }}"
   loop:
+    - bluetoothctl
     - ffmpeg
     - ffprobe
     - journalctl
     - jq
     - nc
+    - open-cinema-benchmark
     - perf
     - pidstat
+    - pw-cat
     - pw-dump
     - pw-top
     - redis-cli
     - sqlite3
+    - systemd-cat
     - systemd-analyze
     - time
     - vcgencmd

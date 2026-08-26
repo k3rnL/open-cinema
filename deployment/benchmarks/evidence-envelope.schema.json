@@ -20,6 +20,7 @@
     "timeSeries",
     "logs",
     "captures",
+    "metricCoverage",
     "invalidation",
     "restoration",
     "checksums",
@@ -83,6 +84,23 @@
     },
     "logs": {"type": "array", "items": {"$ref": "#/$defs/artifact"}},
     "captures": {"type": "array", "items": {"$ref": "#/$defs/artifact"}},
+    "metricCoverage": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "artifacts", "reason"],
+        "properties": {
+          "status": {"enum": ["collected", "missing", "not-measured"]},
+          "artifacts": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "reason": {"type": ["string", "null"], "minLength": 1}
+        }
+      }
+    },
     "invalidation": {
       "type": "object",
       "additionalProperties": false,
@@ -115,7 +133,7 @@
         "manifestSha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}
       }
     },
-    "status": {"enum": ["prepared", "running", "passed", "failed", "invalid", "interrupted", "unsupported", "not-measured"]}
+    "status": {"enum": ["prepared", "running", "characterized", "passed", "failed", "invalid", "interrupted", "unsupported", "not-measured"]}
   },
   "$defs": {
     "artifact": {

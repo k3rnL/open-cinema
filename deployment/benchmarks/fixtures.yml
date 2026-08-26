@@ -36,8 +36,11 @@ device_under_test:
     filesystem: ext4
     minimum_free_gb: 8
   network:
-    primary: wired-gigabit
-    wireless_measurements_are_separate: true
+    primary_interface: wlan0
+    transport: wireless-lan
+    purpose: controller-access-only
+    network_performance_is_out_of_scope: true
+    bluetooth_radio_measurements_are_separate: true
 
 audio_chain:
   transport: native-pipewire
@@ -88,10 +91,15 @@ input_fixtures:
   idle:
     kind: none
     carrier_state: not-applicable
+    automation:
+      driver: none
   no-carrier:
     kind: physical-input-state
     carrier_state: absent
     expected_behavior: controlled-silence-without-process-crash
+    automation:
+      driver: manual
+      reason: The physical SPDIF/I2S carrier must be disconnected or disabled by the operator.
   pcm-stereo:
     kind: generated-audio
     codec: pcm_s16le
@@ -99,13 +107,29 @@ input_fixtures:
     channel_layout: stereo
     sample_rate_hz: 48000
     registry_status: generated-by-benchmark-fixture-role
+    automation:
+      driver: pipewire-file-playback
+      media_fixture_id: pcm-stereo-raw-carrier
+      target_node: open-cinema.decoder.decoder-0.capture
+      sample_format: s16
+      sample_rate_hz: 48000
+      channels: 2
+      channel_map: FL,FR
   pcm-multichannel-channel-id:
-    kind: registered-audio
+    kind: generated-audio
     codec: pcm_s16le
     channels: 8
     channel_layout: "7.1"
     sample_rate_hz: 48000
-    registry_status: pending-registration
+    registry_status: generated-by-benchmark-fixture-role
+    automation:
+      driver: pipewire-file-playback
+      media_fixture_id: pcm-channel-id-8ch
+      target_node: opencinema.camilladsp.0.capture
+      sample_format: s16
+      sample_rate_hz: 48000
+      channels: 8
+      channel_map: FL,FR,FC,LFE,SL,SR,RL,RR
   ac3-5.1:
     kind: generated-audio
     codec: ac3
@@ -114,6 +138,14 @@ input_fixtures:
     transport: iec61937
     sample_rate_hz: 48000
     registry_status: generated-by-benchmark-fixture-role
+    automation:
+      driver: pipewire-file-playback
+      media_fixture_id: ac3-5.1
+      target_node: open-cinema.decoder.decoder-0.capture
+      sample_format: s16
+      sample_rate_hz: 48000
+      channels: 2
+      channel_map: FL,FR
   eac3-5.1:
     kind: generated-audio
     codec: eac3
@@ -122,24 +154,54 @@ input_fixtures:
     transport: iec61937
     sample_rate_hz: 48000
     registry_status: generated-by-benchmark-fixture-role
+    automation:
+      driver: pipewire-file-playback
+      media_fixture_id: eac3-5.1
+      target_node: open-cinema.decoder.decoder-0.capture
+      sample_format: s16
+      sample_rate_hz: 48000
+      channels: 2
+      channel_map: FL,FR
   dts-5.1:
-    kind: registered-audio
+    kind: generated-audio
     codec: dts
     channels: 6
     channel_layout: "5.1(side)"
     transport: iec61937
     sample_rate_hz: 48000
-    registry_status: pending-registration
+    registry_status: generated-by-benchmark-fixture-role
+    automation:
+      driver: pipewire-file-playback
+      media_fixture_id: dts-5.1
+      target_node: open-cinema.decoder.decoder-0.capture
+      sample_format: s16
+      sample_rate_hz: 48000
+      channels: 2
+      channel_map: FL,FR
   unsupported-encoded:
-    kind: registered-audio
+    kind: generated-audio
     codec: intentionally-unsupported
-    registry_status: pending-registration
+    registry_status: generated-by-benchmark-fixture-role
+    automation:
+      driver: pipewire-file-playback
+      media_fixture_id: unsupported-aac-5.1
+      target_node: open-cinema.decoder.decoder-0.capture
+      sample_format: s16
+      sample_rate_hz: 48000
+      channels: 2
+      channel_map: FL,FR
   bluetooth-continuous-programme:
     kind: physical-bluetooth-source
     carrier_state: present
+    automation:
+      driver: manual
+      reason: Bluetooth source and headset actions require the operator and physical fixtures.
   tv-continuous-programme:
     kind: physical-spdif-source
     carrier_state: present
+    automation:
+      driver: manual
+      reason: TV playback and physical SPDIF carrier state require the operator.
 
 processor_fixtures:
   active-graph:
@@ -147,21 +209,46 @@ processor_fixtures:
     camilladsp_instances: 1
     camilladsp_period_frames: 128
     sample_rate_hz: 48000
+    automation:
+      driver: none
   camilladsp-passthrough-128:
-    profile_status: pending-registration
+    profile_status: generated-by-benchmark-fixture-role
     camilladsp_period_frames: 128
+    minimum_input_channels: 8
+    minimum_output_channels: 8
+    automation:
+      driver: camilladsp-processing-overlay
+      profile_fixture_id: camilladsp-passthrough-128
   camilladsp-stereo-128:
-    profile_status: pending-registration
+    profile_status: generated-by-benchmark-fixture-role
     camilladsp_period_frames: 128
+    minimum_input_channels: 2
+    minimum_output_channels: 2
+    automation:
+      driver: camilladsp-processing-overlay
+      profile_fixture_id: camilladsp-stereo-128
   camilladsp-multichannel-128:
-    profile_status: pending-registration
+    profile_status: generated-by-benchmark-fixture-role
     camilladsp_period_frames: 128
+    minimum_input_channels: 8
+    minimum_output_channels: 8
+    automation:
+      driver: camilladsp-processing-overlay
+      profile_fixture_id: camilladsp-multichannel-128
   camilladsp-channel-adaptation-128:
     profile_status: pending-registration
     camilladsp_period_frames: 128
+    automation:
+      driver: manual
+      reason: Changing the active output channel count requires a dedicated desired-graph fixture.
   camilladsp-production-fir-iir-128:
-    profile_status: pending-registration
+    profile_status: generated-by-benchmark-fixture-role
     camilladsp_period_frames: 128
+    minimum_input_channels: 8
+    minimum_output_channels: 8
+    automation:
+      driver: camilladsp-processing-overlay
+      profile_fixture_id: camilladsp-production-fir-iir-128
 
 measurement:
   sustained_interval_seconds: 1

@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+export OPEN_CINEMA_AUDIO_USER={{ open_cinema.user | quote }}
+export OPEN_CINEMA_BENCHMARK_CONTRACTS=/usr/local/share/open-cinema/benchmarks
+export OPEN_CINEMA_BENCHMARK_ROOT=/var/lib/open-cinema/benchmark-results
+export OPEN_CINEMA_DATABASE_PATH={{ open_cinema.django.database | quote }}
+export OPEN_CINEMA_RUNTIME_REDIS_KEY={{ open_cinema.runtime_redis_key | quote }}
+export OPEN_CINEMA_VENV_PYTHON={{ (open_cinema.venv_path ~ '/bin/python') | quote }}
+export OPEN_CINEMA_APP_PATH={{ open_cinema.app_path | quote }}
+export OPEN_CINEMA_INTENT_ADAPTER=/usr/local/libexec/open-cinema-benchmark-intent-adapter
+export OPEN_CINEMA_CAMILLADSP_HOST={{ camilladsp.websocket_address | quote }}
+export OPEN_CINEMA_CAMILLADSP_PORT={{ camilladsp.websocket_port | quote }}
+
+exec /usr/bin/python3 /usr/local/libexec/open-cinema-benchmark-runner "$@"

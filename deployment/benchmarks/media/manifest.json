@@ -1,0 +1,844 @@
+{
+  "adaptiveRoutingSequence": {
+    "eventSchedule": [
+      {
+        "atFrame": 96000,
+        "event": "headset-disconnect"
+      },
+      {
+        "atFrame": 192000,
+        "event": "headset-reconnect"
+      }
+    ],
+    "expectedAnalysis": [
+      "audio-loss",
+      "restoration",
+      "audible-gap"
+    ],
+    "fixtureId": "adaptive-switch-continuous-stereo"
+  },
+  "assetRoot": "generated",
+  "fixtureContractId": "pi5-8gb-gab8-native-v1",
+  "fixtures": [
+    {
+      "channelLayout": "stereo",
+      "channels": 2,
+      "codec": "pcm_s16le",
+      "durationFrames": 21600,
+      "durationSeconds": 0.45,
+      "ffprobe": {
+        "format": {
+          "bit_rate": "1536782",
+          "duration": "0.450000",
+          "format_name": "wav",
+          "size": "86444"
+        },
+        "streams": [
+          {
+            "channels": 2,
+            "codec_name": "pcm_s16le",
+            "codec_type": "audio",
+            "index": 0,
+            "sample_rate": "48000"
+          }
+        ],
+        "tool": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+      },
+      "generation": {
+        "channelFrequenciesHz": [
+          521,
+          617
+        ],
+        "marker": "phase-coded-3000hz-barker13",
+        "method": "python-standard-library-synthesis"
+      },
+      "id": "pcm-channel-id-2ch",
+      "mediaRole": "programme-and-channel-identification",
+      "path": "pcm-stereo-channel-id.wav",
+      "sampleRateHz": 48000,
+      "sha256": "d4f8af8020a3b06e71b3ecded9d520b465002fa111caf5d70329a31a736b378e",
+      "sizeBytes": 86444,
+      "transport": "wav"
+    },
+    {
+      "channelLayout": "5.1(side)",
+      "channels": 6,
+      "codec": "pcm_s16le",
+      "durationFrames": 40800,
+      "durationSeconds": 0.85,
+      "ffprobe": {
+        "format": {
+          "bit_rate": "4608414",
+          "duration": "0.850000",
+          "format_name": "wav",
+          "size": "489644"
+        },
+        "streams": [
+          {
+            "channels": 6,
+            "codec_name": "pcm_s16le",
+            "codec_type": "audio",
+            "index": 0,
+            "sample_rate": "48000"
+          }
+        ],
+        "tool": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+      },
+      "generation": {
+        "channelFrequenciesHz": [
+          521,
+          617,
+          733,
+          829,
+          941,
+          1057
+        ],
+        "marker": "phase-coded-3000hz-barker13",
+        "method": "python-standard-library-synthesis"
+      },
+      "id": "pcm-channel-id-6ch",
+      "mediaRole": "programme-and-channel-identification",
+      "path": "pcm-5_1-channel-id.wav",
+      "sampleRateHz": 48000,
+      "sha256": "f553fe6339f02e8e7be86edc1d211ae8a5875c0028c4788d625c6687033b1dc1",
+      "sizeBytes": 489644,
+      "transport": "wav"
+    },
+    {
+      "channelLayout": "7.1",
+      "channels": 8,
+      "codec": "pcm_s16le",
+      "durationFrames": 50400,
+      "durationSeconds": 1.05,
+      "ffprobe": {
+        "format": {
+          "bit_rate": "6144335",
+          "duration": "1.050000",
+          "format_name": "wav",
+          "size": "806444"
+        },
+        "streams": [
+          {
+            "channels": 8,
+            "codec_name": "pcm_s16le",
+            "codec_type": "audio",
+            "index": 0,
+            "sample_rate": "48000"
+          }
+        ],
+        "tool": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+      },
+      "generation": {
+        "channelFrequenciesHz": [
+          521,
+          617,
+          733,
+          829,
+          941,
+          1057,
+          1171,
+          1289
+        ],
+        "marker": "phase-coded-3000hz-barker13",
+        "method": "python-standard-library-synthesis"
+      },
+      "id": "pcm-channel-id-8ch",
+      "mediaRole": "programme-and-channel-identification",
+      "path": "pcm-7_1-channel-id.wav",
+      "sampleRateHz": 48000,
+      "sha256": "a623125f6214209b6be510dc48b3fc1201f745d5538e4357c1da75bc6099f49d",
+      "sizeBytes": 806444,
+      "transport": "wav"
+    },
+    {
+      "channelLayout": "stereo",
+      "channels": 2,
+      "codec": "pcm_s16le",
+      "durationFrames": 21600,
+      "durationSeconds": 0.45,
+      "ffprobe": {
+        "declaredFormat": "s16le/48000/2",
+        "status": "not-self-describing"
+      },
+      "generation": {
+        "method": "wav-payload-extraction",
+        "source": "pcm-stereo-channel-id.wav"
+      },
+      "id": "pcm-stereo-raw-carrier",
+      "mediaRole": "decoder-pcm-input",
+      "path": "pcm-stereo-channel-id.s16le",
+      "sampleRateHz": 48000,
+      "sha256": "efa2322ad77091f187f933a953c260258eb17d981f887cfba0b620a4052e3187",
+      "sizeBytes": 86400,
+      "transport": "raw-stereo-s16le"
+    },
+    {
+      "channelLayout": "stereo",
+      "channels": 2,
+      "codec": "pcm_s16le",
+      "durationFrames": 48000,
+      "durationSeconds": 1.0,
+      "ffprobe": {
+        "format": {
+          "bit_rate": "1536352",
+          "duration": "1.000000",
+          "format_name": "wav",
+          "size": "192044"
+        },
+        "streams": [
+          {
+            "channels": 2,
+            "codec_name": "pcm_s16le",
+            "codec_type": "audio",
+            "index": 0,
+            "sample_rate": "48000"
+          }
+        ],
+        "tool": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+      },
+      "generation": {
+        "method": "zero-filled-pcm"
+      },
+      "id": "controlled-silence",
+      "mediaRole": "safe-output-reference",
+      "path": "silence-stereo.wav",
+      "sampleRateHz": 48000,
+      "sha256": "ede1f6dd33abfce7bb3a45ba79b0ab5f8baae692709dd32214a41da9af55ab13",
+      "sizeBytes": 192044,
+      "transport": "wav"
+    },
+    {
+      "channelLayout": null,
+      "channels": null,
+      "codec": "none",
+      "durationFrames": null,
+      "durationSeconds": null,
+      "ffprobe": {
+        "reason": "fixture represents absent carrier",
+        "status": "not-applicable"
+      },
+      "generation": {
+        "carrierState": "absent",
+        "method": "empty-stream-sentinel"
+      },
+      "id": "no-carrier",
+      "mediaRole": "absent-input-state",
+      "path": "no-carrier.s16le",
+      "sampleRateHz": null,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": 0,
+      "transport": "no-bytes"
+    },
+    {
+      "channelLayout": "5.1(side)",
+      "channels": 6,
+      "codec": "ac3",
+      "durationFrames": 40800,
+      "durationSeconds": 0.85,
+      "ffprobe": {
+        "format": {
+          "bit_rate": "447999",
+          "duration": "2.962289",
+          "format_name": "spdif",
+          "size": "165888"
+        },
+        "streams": [
+          {
+            "channel_layout": "5.1(side)",
+            "channels": 6,
+            "codec_name": "ac3",
+            "codec_type": "audio",
+            "index": 0,
+            "sample_rate": "48000"
+          }
+        ],
+        "tool": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+      },
+      "generation": {
+        "bitrate": "448k",
+        "command": [
+          "-nostdin",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-y",
+          "-fflags",
+          "+bitexact",
+          "-i",
+          "pcm-5_1-channel-id.wav",
+          "-map_metadata",
+          "-1",
+          "-flags:a",
+          "+bitexact",
+          "-c:a",
+          "ac3",
+          "-b:a",
+          "448k",
+          "-f",
+          "spdif",
+          "ac3-5.1.spdif"
+        ],
+        "method": "ffmpeg-encoding-of-deterministic-pcm",
+        "source": "pcm-5_1-channel-id.wav",
+        "sourceDateEpoch": 0
+      },
+      "id": "ac3-5.1",
+      "mediaRole": "encoded-decoder-input",
+      "path": "ac3-5.1.spdif",
+      "sampleRateHz": 48000,
+      "sha256": "7ecba9b78d7afdb554a65220767867e13e65bc4d817e9bb7b56676ea8e0f2804",
+      "sizeBytes": 165888,
+      "transport": "iec61937"
+    },
+    {
+      "channelLayout": "5.1(side)",
+      "channels": 6,
+      "codec": "eac3",
+      "durationFrames": 40800,
+      "durationSeconds": 0.85,
+      "ffprobe": {
+        "format": {
+          "bit_rate": "1536000",
+          "duration": "3.456000",
+          "format_name": "spdif",
+          "size": "663552"
+        },
+        "streams": [
+          {
+            "channel_layout": "5.1(side)",
+            "channels": 6,
+            "codec_name": "eac3",
+            "codec_type": "audio",
+            "index": 0,
+            "sample_rate": "48000"
+          }
+        ],
+        "tool": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+      },
+      "generation": {
+        "bitrate": "768k",
+        "command": [
+          "-nostdin",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-y",
+          "-fflags",
+          "+bitexact",
+          "-i",
+          "pcm-5_1-channel-id.wav",
+          "-map_metadata",
+          "-1",
+          "-flags:a",
+          "+bitexact",
+          "-c:a",
+          "eac3",
+          "-b:a",
+          "768k",
+          "-f",
+          "spdif",
+          "eac3-5.1.spdif"
+        ],
+        "method": "ffmpeg-encoding-of-deterministic-pcm",
+        "source": "pcm-5_1-channel-id.wav",
+        "sourceDateEpoch": 0
+      },
+      "id": "eac3-5.1",
+      "mediaRole": "encoded-decoder-input",
+      "path": "eac3-5.1.spdif",
+      "sampleRateHz": 48000,
+      "sha256": "b6b11cebfeae24e0914a0f9887801958f3c57a96a42b70c07e7cd816b2d40c98",
+      "sizeBytes": 663552,
+      "transport": "iec61937"
+    },
+    {
+      "channelLayout": "5.1(side)",
+      "channels": 6,
+      "codec": "dts",
+      "durationFrames": 40800,
+      "durationSeconds": 0.85,
+      "ffprobe": {
+        "format": {
+          "bit_rate": "1411197",
+          "duration": "0.928800",
+          "format_name": "spdif",
+          "size": "163840"
+        },
+        "streams": [
+          {
+            "channel_layout": "5.1(side)",
+            "channels": 6,
+            "codec_name": "dts",
+            "codec_type": "audio",
+            "index": 0,
+            "sample_rate": "48000"
+          }
+        ],
+        "tool": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+      },
+      "generation": {
+        "bitrate": "1411200",
+        "command": [
+          "-nostdin",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-y",
+          "-fflags",
+          "+bitexact",
+          "-i",
+          "pcm-5_1-channel-id.wav",
+          "-map_metadata",
+          "-1",
+          "-flags:a",
+          "+bitexact",
+          "-c:a",
+          "dca",
+          "-strict",
+          "experimental",
+          "-b:a",
+          "1411200",
+          "-f",
+          "spdif",
+          "dts-5.1.spdif"
+        ],
+        "method": "ffmpeg-encoding-of-deterministic-pcm",
+        "source": "pcm-5_1-channel-id.wav",
+        "sourceDateEpoch": 0
+      },
+      "id": "dts-5.1",
+      "mediaRole": "encoded-decoder-input",
+      "path": "dts-5.1.spdif",
+      "sampleRateHz": 48000,
+      "sha256": "c52b9053cbe3233d4111200e6ce0d2500d5bd71e32278661c3023c6c4b1a9244",
+      "sizeBytes": 163840,
+      "transport": "iec61937"
+    },
+    {
+      "channelLayout": "5.1",
+      "channels": 6,
+      "codec": "aac",
+      "durationFrames": 40800,
+      "durationSeconds": 0.85,
+      "ffprobe": {
+        "format": {
+          "format_name": "spdif",
+          "size": "167936"
+        },
+        "streams": [
+          {
+            "channel_layout": "5.1",
+            "channels": 6,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 0,
+            "sample_rate": "48000"
+          }
+        ],
+        "tool": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+      },
+      "generation": {
+        "bitrate": "384k",
+        "commands": [
+          [
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-fflags",
+            "+bitexact",
+            "-i",
+            "pcm-5_1-channel-id.wav",
+            "-map_metadata",
+            "-1",
+            "-flags:a",
+            "+bitexact",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "384k",
+            "-f",
+            "adts",
+            "unsupported-aac-5.1.temporary.aac"
+          ],
+          [
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-fflags",
+            "+bitexact",
+            "-i",
+            "unsupported-aac-5.1.temporary.aac",
+            "-map_metadata",
+            "-1",
+            "-c:a",
+            "copy",
+            "-f",
+            "spdif",
+            "unsupported-aac-5.1.spdif"
+          ]
+        ],
+        "expectedDecoderOutcome": "unsupported-by-design-safe-silence",
+        "iec61937DataType": "0x07",
+        "method": "ffmpeg-aac-encoding-and-iec61937-remux",
+        "source": "pcm-5_1-channel-id.wav",
+        "sourceDateEpoch": 0
+      },
+      "id": "unsupported-aac-5.1",
+      "mediaRole": "unsupported-decoder-input",
+      "path": "unsupported-aac-5.1.spdif",
+      "sampleRateHz": 48000,
+      "sha256": "279e30efb67d9da3b7d0fdf2f5abdb53a5c83a2380378f857eab867e8dd93c94",
+      "sizeBytes": 167936,
+      "transport": "iec61937-unsupported-data-type"
+    },
+    {
+      "channelLayout": "stereo",
+      "channels": 2,
+      "codec": "pcm_s16le",
+      "durationFrames": 288000,
+      "durationSeconds": 6.0,
+      "ffprobe": {
+        "format": {
+          "bit_rate": "1536058",
+          "duration": "6.000000",
+          "format_name": "wav",
+          "size": "1152044"
+        },
+        "streams": [
+          {
+            "channels": 2,
+            "codec_name": "pcm_s16le",
+            "codec_type": "audio",
+            "index": 0,
+            "sample_rate": "48000"
+          }
+        ],
+        "tool": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+      },
+      "generation": {
+        "markerIntervalFrames": 24000,
+        "method": "python-standard-library-synthesis",
+        "scenarioEvents": [
+          "disconnect",
+          "reconnect"
+        ]
+      },
+      "id": "adaptive-switch-continuous-stereo",
+      "mediaRole": "headset-takeover-fallback-reference",
+      "path": "adaptive-switch-continuous-stereo.wav",
+      "sampleRateHz": 48000,
+      "sha256": "8c6b697fd8fcd9c2c80076cf81506d38a05e8a9005971ccb4c44390f7939fa5c",
+      "sizeBytes": 1152044,
+      "transport": "wav"
+    }
+  ],
+  "generationProvenance": {
+    "ffmpeg": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers",
+    "ffprobe": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers",
+    "marker": {
+      "chipFrames": 96,
+      "code": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        -1,
+        -1,
+        1,
+        1,
+        -1,
+        1,
+        -1,
+        1
+      ],
+      "kind": "phase-coded-3000hz-barker13",
+      "startFrame": 4800
+    },
+    "python": "3.12.3",
+    "sampleFormat": "signed-16-bit-little-endian",
+    "sampleRateHz": 48000,
+    "script": "generate_fixtures.py",
+    "scriptSha256": "93ef5902d6a82f5dfa82c94fe272f92e82d733f8f450a129d9a6d7e8a56328f6",
+    "sourceDateEpoch": 0
+  },
+  "license": "CC0-1.0 synthetic waveforms; no third-party programme material",
+  "schemaVersion": 1,
+  "stableOutputReferences": [
+    {
+      "channels": 8,
+      "durationFrames": 43200,
+      "ffprobe": {
+        "format": {
+          "bit_rate": "6144391",
+          "duration": "0.900000",
+          "format_name": "wav",
+          "size": "691244"
+        },
+        "streams": [
+          {
+            "channels": 8,
+            "codec_name": "pcm_s16le",
+            "codec_type": "audio",
+            "index": 0,
+            "sample_rate": "48000"
+          }
+        ],
+        "tool": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+      },
+      "firstLayoutChannels": 2,
+      "id": "stable-output-2ch-to-menu",
+      "markerBearing": true,
+      "menuLayoutChannels": 2,
+      "path": "stable-output-2ch-to-menu-reference.wav",
+      "sampleRateHz": 48000,
+      "sha256": "81828bb9ddaa79f2a495c25de88f9041cd008cffe725ee01201e74773e2e88f5",
+      "sizeBytes": 691244,
+      "transitionFrame": 21600
+    },
+    {
+      "channels": 8,
+      "durationFrames": 62400,
+      "ffprobe": {
+        "format": {
+          "bit_rate": "6144270",
+          "duration": "1.300000",
+          "format_name": "wav",
+          "size": "998444"
+        },
+        "streams": [
+          {
+            "channels": 8,
+            "codec_name": "pcm_s16le",
+            "codec_type": "audio",
+            "index": 0,
+            "sample_rate": "48000"
+          }
+        ],
+        "tool": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+      },
+      "firstLayoutChannels": 6,
+      "id": "stable-output-6ch-to-menu",
+      "markerBearing": true,
+      "menuLayoutChannels": 2,
+      "path": "stable-output-6ch-to-menu-reference.wav",
+      "sampleRateHz": 48000,
+      "sha256": "b62f360c06c9daa1e35a3b70414aba3db8a5baec39557073a110a0abd4e07c5d",
+      "sizeBytes": 998444,
+      "transitionFrame": 40800
+    },
+    {
+      "channels": 8,
+      "durationFrames": 72000,
+      "ffprobe": {
+        "format": {
+          "bit_rate": "6144234",
+          "duration": "1.500000",
+          "format_name": "wav",
+          "size": "1152044"
+        },
+        "streams": [
+          {
+            "channels": 8,
+            "codec_name": "pcm_s16le",
+            "codec_type": "audio",
+            "index": 0,
+            "sample_rate": "48000"
+          }
+        ],
+        "tool": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+      },
+      "firstLayoutChannels": 8,
+      "id": "stable-output-8ch-to-menu",
+      "markerBearing": true,
+      "menuLayoutChannels": 2,
+      "path": "stable-output-8ch-to-menu-reference.wav",
+      "sampleRateHz": 48000,
+      "sha256": "611dbeb60b576d185cde58beafed295b1852dce4696b132be789a0365f93105e",
+      "sizeBytes": 1152044,
+      "transitionFrame": 50400
+    }
+  ],
+  "suiteId": "open-cinema-raspberry-audio-v2",
+  "transitionSequences": [
+    {
+      "id": "pcm-2.0-to-menu",
+      "markerBearing": true,
+      "path": "pcm-2.0-to-menu.s16le",
+      "sampleRateHz": 48000,
+      "segments": [
+        {
+          "byteLength": 86400,
+          "byteOffset": 0,
+          "expectedDecodedLayout": "stereo",
+          "fixtureId": "pcm-stereo-raw-carrier",
+          "marker": {
+            "kind": "phase-coded-3000hz-barker13",
+            "sourceFrameOffset": 4800
+          },
+          "transportFrameOffset": 0
+        },
+        {
+          "byteLength": 86400,
+          "byteOffset": 86400,
+          "expectedDecodedLayout": "stereo-menu",
+          "fixtureId": "pcm-stereo-raw-carrier",
+          "marker": {
+            "kind": "phase-coded-3000hz-barker13",
+            "sourceFrameOffset": 4800
+          },
+          "transportFrameOffset": 21600
+        }
+      ],
+      "sha256": "0de80c7ae10c2910fca8915b02ab30827126e24bb9888e98ba87821052302ed1",
+      "sizeBytes": 172800,
+      "transport": "stereo-s16le-pcm-or-iec61937"
+    },
+    {
+      "id": "ac3-5.1-to-menu",
+      "markerBearing": true,
+      "path": "ac3-5.1-to-menu.s16le",
+      "sampleRateHz": 48000,
+      "segments": [
+        {
+          "byteLength": 165888,
+          "byteOffset": 0,
+          "expectedDecodedLayout": "5.1(side)",
+          "fixtureId": "ac3-5.1",
+          "marker": {
+            "kind": "phase-coded-3000hz-barker13",
+            "sourceFrameOffset": 4800
+          },
+          "transportFrameOffset": 0
+        },
+        {
+          "byteLength": 86400,
+          "byteOffset": 165888,
+          "expectedDecodedLayout": "stereo-menu",
+          "fixtureId": "pcm-stereo-raw-carrier",
+          "marker": {
+            "kind": "phase-coded-3000hz-barker13",
+            "sourceFrameOffset": 4800
+          },
+          "transportFrameOffset": 41472
+        }
+      ],
+      "sha256": "fb4ec51b0cab378753cd52a3415af5402fdc0fbe792115de50f6c7e937bf9b3d",
+      "sizeBytes": 252288,
+      "transport": "stereo-s16le-pcm-or-iec61937"
+    },
+    {
+      "channels": 8,
+      "durationFrames": 72000,
+      "ffprobe": {
+        "format": {
+          "bit_rate": "6144234",
+          "duration": "1.500000",
+          "format_name": "wav",
+          "size": "1152044"
+        },
+        "streams": [
+          {
+            "channels": 8,
+            "codec_name": "pcm_s16le",
+            "codec_type": "audio",
+            "index": 0,
+            "sample_rate": "48000"
+          }
+        ],
+        "tool": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+      },
+      "firstLayoutChannels": 8,
+      "id": "pcm-7.1-to-menu-stable-output-reference",
+      "markerBearing": true,
+      "menuLayoutChannels": 2,
+      "path": "stable-output-8ch-to-menu-reference.wav",
+      "sampleRateHz": 48000,
+      "segments": [
+        {
+          "expectedDecodedLayout": "7.1",
+          "fixtureId": "pcm-channel-id-8ch",
+          "frameLength": 50400,
+          "frameOffset": 0,
+          "marker": {
+            "kind": "phase-coded-3000hz-barker13",
+            "sourceFrameOffset": 4800
+          }
+        },
+        {
+          "expectedDecodedLayout": "stereo-menu-in-eight-channel-contract",
+          "fixtureId": "pcm-stereo-menu-stable-output",
+          "frameLength": 21600,
+          "frameOffset": 50400,
+          "marker": {
+            "kind": "phase-coded-3000hz-barker13",
+            "sourceFrameOffset": 4800
+          }
+        }
+      ],
+      "sha256": "611dbeb60b576d185cde58beafed295b1852dce4696b132be789a0365f93105e",
+      "sizeBytes": 1152044,
+      "transitionFrame": 50400,
+      "transport": "wav-stable-eight-channel-output-reference"
+    },
+    {
+      "id": "ac3-eac3-dts-pcm-cross-format",
+      "markerBearing": true,
+      "path": "ac3-eac3-dts-pcm-cross-format.s16le",
+      "sampleRateHz": 48000,
+      "segments": [
+        {
+          "byteLength": 165888,
+          "byteOffset": 0,
+          "expectedDecodedLayout": "5.1(side)",
+          "fixtureId": "ac3-5.1",
+          "marker": {
+            "kind": "phase-coded-3000hz-barker13",
+            "sourceFrameOffset": 4800
+          },
+          "transportFrameOffset": 0
+        },
+        {
+          "byteLength": 663552,
+          "byteOffset": 165888,
+          "expectedDecodedLayout": "5.1(side)",
+          "fixtureId": "eac3-5.1",
+          "marker": {
+            "kind": "phase-coded-3000hz-barker13",
+            "sourceFrameOffset": 4800
+          },
+          "transportFrameOffset": 41472
+        },
+        {
+          "byteLength": 163840,
+          "byteOffset": 829440,
+          "expectedDecodedLayout": "5.1(side)",
+          "fixtureId": "dts-5.1",
+          "marker": {
+            "kind": "phase-coded-3000hz-barker13",
+            "sourceFrameOffset": 4800
+          },
+          "transportFrameOffset": 207360
+        },
+        {
+          "byteLength": 86400,
+          "byteOffset": 993280,
+          "expectedDecodedLayout": "stereo-menu",
+          "fixtureId": "pcm-stereo-raw-carrier",
+          "marker": {
+            "kind": "phase-coded-3000hz-barker13",
+            "sourceFrameOffset": 4800
+          },
+          "transportFrameOffset": 248320
+        }
+      ],
+      "sha256": "74848f2769bd8b02b235fbaec430c4571b51d5671974857b82f01216f273ac27",
+      "sizeBytes": 1079680,
+      "transport": "stereo-s16le-pcm-or-iec61937"
+    }
+  ]
+}

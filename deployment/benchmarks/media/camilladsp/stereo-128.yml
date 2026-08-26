@@ -1,0 +1,30 @@
+---
+title: Benchmark stereo 128
+description: Synthetic native PipeWire stereo gain workload.
+devices:
+  samplerate: 48000
+  chunksize: 128
+  capture:
+    type: PipeWire
+    channels: 2
+    node_name: opencinema.benchmark.camilladsp.capture
+    node_description: Open Cinema benchmark CamillaDSP capture
+    node_group_name: opencinema.benchmark.camilladsp.group
+    autoconnect_to: null
+  playback:
+    type: PipeWire
+    channels: 2
+    node_name: opencinema.benchmark.camilladsp.playback
+    node_description: Open Cinema benchmark CamillaDSP playback
+    node_group_name: opencinema.benchmark.camilladsp.group
+    autoconnect_to: null
+filters:
+  stereo_gain:
+    type: Gain
+    parameters:
+      gain: -1.0
+pipeline:
+  - type: Filter
+    channels: [0, 1]
+    names: [stereo_gain]
+

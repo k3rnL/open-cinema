@@ -71,6 +71,9 @@
           "workload_state": {"enum": ["idle", "no-carrier", "programme-audio"]},
           "carrier_state": {"enum": ["not-applicable", "absent", "present"]},
           "expected_outcome": {"enum": ["supported", "unsupported-by-build", "fixture-unavailable"]},
+          "execution_mode": {"const": "manual"},
+          "manual_reason": {"type": "string", "minLength": 1},
+          "workload_action_kind": {"enum": ["reject-invalid-camilladsp-config"]},
           "criteria_set": {"type": "string", "minLength": 1},
           "warm_up_repetitions": {"type": "integer", "minimum": 0},
           "measured_repetitions": {"type": "integer", "minimum": 1},
@@ -97,13 +100,21 @@
               "transition_cycles": {"type": "integer", "minimum": 1}
             }
           },
-          "transition_schedule_kind": {"type": "string", "minLength": 1},
+          "transition_schedule_kind": {
+            "enum": [
+              "reconciliation-refresh",
+              "encoded-menu-format-edge",
+              "profile-reapply-and-restore",
+              "headset-takeover-and-fallback"
+            ]
+          },
           "transition_schedule_seconds": {
             "type": "array",
             "minItems": 1,
             "uniqueItems": true,
             "items": {"type": "integer", "minimum": 1}
-          }
+          },
+          "transition_input_cycle": {"$ref": "#/$defs/nonEmptyUniqueStrings"}
         }
       }
     }

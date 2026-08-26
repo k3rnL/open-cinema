@@ -1,0 +1,99 @@
+{
+  "assets": [
+    {
+      "format": "FLOAT32LE",
+      "generation": "normalized-18khz-blackman-windowed-sinc",
+      "id": "production-fir-1024",
+      "path": "production-fir-1024.f32le",
+      "sampleRateHz": 48000,
+      "sha256": "7bf60ebd2fafa7f36ff31b56c3384f1f6aabafd42d0c8a1a6771cc04d33c2538",
+      "sizeBytes": 4096,
+      "taps": 1024
+    }
+  ],
+  "fixtureContractId": "pi5-8gb-gab8-native-v1",
+  "profiles": [
+    {
+      "id": "camilladsp-passthrough-128",
+      "inputChannels": 8,
+      "outputChannels": 8,
+      "path": "passthrough-128.yml",
+      "periodFrames": 128,
+      "sampleRateHz": 48000,
+      "sha256": "f0816082b9f370f9058243c60fee384b9e36500c7fcd00b80f51a87db8985e4f",
+      "sizeBytes": 658,
+      "transport": "native-pipewire",
+      "workload": {
+        "firTapsPerChannel": 0,
+        "iirBiquadsPerChannel": 0,
+        "mixers": 0
+      }
+    },
+    {
+      "id": "camilladsp-stereo-128",
+      "inputChannels": 2,
+      "outputChannels": 2,
+      "path": "stereo-128.yml",
+      "periodFrames": 128,
+      "sampleRateHz": 48000,
+      "sha256": "fdcef91c0e021f42187b6d0080a711d3f9f8b903a4ffba7e021f85909483ae67",
+      "sizeBytes": 784,
+      "transport": "native-pipewire",
+      "workload": {
+        "firTapsPerChannel": 0,
+        "gainFiltersPerChannel": 1,
+        "mixers": 0
+      }
+    },
+    {
+      "id": "camilladsp-multichannel-128",
+      "inputChannels": 8,
+      "outputChannels": 8,
+      "path": "multichannel-128.yml",
+      "periodFrames": 128,
+      "sampleRateHz": 48000,
+      "sha256": "793933a6482df355a047d4d03b73bca0860ea7f4a8fc9818efc4d824328b9973",
+      "sizeBytes": 829,
+      "transport": "native-pipewire",
+      "workload": {
+        "firTapsPerChannel": 0,
+        "gainFiltersPerChannel": 1,
+        "mixers": 0
+      }
+    },
+    {
+      "id": "camilladsp-channel-adaptation-128",
+      "inputChannels": 8,
+      "outputChannels": 2,
+      "path": "channel-adaptation-128.yml",
+      "periodFrames": 128,
+      "sampleRateHz": 48000,
+      "sha256": "82c874e005dc16dbdadf0882a168c721412db9ab1881c8eb0163d5c6819ae1ed",
+      "sizeBytes": 1240,
+      "transport": "native-pipewire",
+      "workload": {
+        "firTapsPerChannel": 0,
+        "mixerSourceTerms": 10,
+        "mixers": 1
+      }
+    },
+    {
+      "id": "camilladsp-production-fir-iir-128",
+      "inputChannels": 8,
+      "outputChannels": 8,
+      "path": "production-fir-iir-128.yml",
+      "periodFrames": 128,
+      "sampleRateHz": 48000,
+      "sha256": "821084142e9be39d1ce25fc914e0974aae1509ff7d30fa60e1e45c2f571312a9",
+      "sizeBytes": 1247,
+      "transport": "native-pipewire",
+      "workload": {
+        "firTapsPerChannel": 1024,
+        "iirBiquadsPerChannel": 2,
+        "mixers": 0
+      }
+    }
+  ],
+  "purpose": "synthetic-performance-workloads-not-room-correction",
+  "schemaVersion": 1
+}

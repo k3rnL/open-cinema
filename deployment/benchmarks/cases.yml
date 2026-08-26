@@ -150,12 +150,12 @@ cases:
 
   - id: decoder-dts-51
     campaign: decoder
-    purpose: Characterize DTS only after a checksummed fixture is registered.
+    purpose: Verify DTS detection, decoding, layout, and stable output.
     input_fixture: dts-5.1
     processor_fixture: active-graph
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: fixture-unavailable
+    expected_outcome: supported
 
   - id: decoder-no-carrier-safe-silence
     campaign: decoder
@@ -164,7 +164,7 @@ cases:
     processor_fixture: active-graph
     workload_state: no-carrier
     carrier_state: absent
-    expected_outcome: supported
+    expected_outcome: fixture-unavailable
     warm_up_repetitions: 1
     measured_repetitions: 5
     duration_seconds: 60
@@ -179,7 +179,7 @@ cases:
     processor_fixture: active-graph
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: fixture-unavailable
+    expected_outcome: unsupported-by-build
 
   - id: decoder-failure-recovery
     campaign: decoder
@@ -201,6 +201,10 @@ cases:
     workload_state: programme-audio
     carrier_state: present
     expected_outcome: fixture-unavailable
+    execution_mode: manual
+    manual_reason: >-
+      The declared 7.1 PCM edge cannot enter the deployed two-channel decoder
+      capture contract; it needs a separate desired-graph fixture.
     transition_edges:
       - pcm-2.0-to-menu-2.0
       - ac3-5.1-to-menu-2.0
@@ -217,12 +221,27 @@ cases:
       - camilladsp-passthrough-128
       - camilladsp-stereo-128
       - camilladsp-multichannel-128
-      - camilladsp-channel-adaptation-128
       - camilladsp-production-fir-iir-128
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: fixture-unavailable
+    expected_outcome: supported
     required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, physical-audio]
+    restoration_action: restore-processor-and-active-intent
+
+  - id: camilladsp-channel-adaptation-128
+    campaign: camilladsp
+    purpose: Retain the 7.1-to-stereo workload as an explicit unavailable topology-changing case.
+    input_fixture: pcm-multichannel-channel-id
+    processor_fixture: camilladsp-channel-adaptation-128
+    workload_state: programme-audio
+    carrier_state: present
+    expected_outcome: fixture-unavailable
+    execution_mode: manual
+    manual_reason: >-
+      The current active desired graph requires an eight-channel CamillaDSP
+      output; a two-channel profile needs a separately published graph fixture.
+    required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, physical-audio]
+    restoration_action: restore-processor-and-active-intent
 
   - id: camilladsp-profile-replacement
     campaign: camilladsp
@@ -231,7 +250,7 @@ cases:
     processor_fixture: camilladsp-stereo-128
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: fixture-unavailable
+    expected_outcome: supported
     required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, physical-audio]
     restoration_action: restore-processor-and-active-intent
 
@@ -242,7 +261,7 @@ cases:
     processor_fixture: camilladsp-passthrough-128
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: fixture-unavailable
+    expected_outcome: supported
     required_metric_sets: [native-audio-health, topology-and-readiness, transition-timing, physical-audio]
     restoration_action: restore-processor-and-active-intent
 
@@ -250,22 +269,22 @@ cases:
     campaign: camilladsp
     purpose: Verify rejection, safe state, and last-working-profile rollback.
     input_fixture: pcm-stereo
-    processor_fixture: camilladsp-stereo-128
+    processor_fixture: active-graph
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: fixture-unavailable
+    expected_outcome: supported
+    workload_action_kind: reject-invalid-camilladsp-config
     required_metric_sets: [native-audio-health, topology-and-readiness, transition-timing, physical-audio]
     restoration_action: restore-processor-and-active-intent
-    disruptive_services: [camilladsp@camilladsp-0.service]
 
   - id: camilladsp-control-interruption
     campaign: camilladsp
     purpose: Measure suppression, readiness, and restoration after control loss.
     input_fixture: pcm-stereo
-    processor_fixture: camilladsp-stereo-128
+    processor_fixture: active-graph
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: fixture-unavailable
+    expected_outcome: supported
     required_metric_sets: [native-audio-health, topology-and-readiness, transition-timing, physical-audio]
     restoration_action: restore-processor-and-active-intent
     disruptive_services: [camilladsp@camilladsp-0.service]
@@ -274,10 +293,10 @@ cases:
     campaign: camilladsp
     purpose: Restart CamillaDSP and verify the last working 128-frame profile returns.
     input_fixture: pcm-stereo
-    processor_fixture: camilladsp-stereo-128
+    processor_fixture: active-graph
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: fixture-unavailable
+    expected_outcome: supported
     required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, physical-audio]
     restoration_action: restore-processor-and-active-intent
     disruptive_services: [camilladsp@camilladsp-0.service]
@@ -289,7 +308,7 @@ cases:
     processor_fixture: active-graph
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: supported
+    expected_outcome: fixture-unavailable
     warm_up_repetitions: 1
     measured_repetitions: 20
     duration_seconds: 15
@@ -303,7 +322,7 @@ cases:
     processor_fixture: active-graph
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: supported
+    expected_outcome: fixture-unavailable
     warm_up_repetitions: 1
     measured_repetitions: 20
     duration_seconds: 15
@@ -317,7 +336,7 @@ cases:
     processor_fixture: active-graph
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: supported
+    expected_outcome: fixture-unavailable
     warm_up_repetitions: 1
     measured_repetitions: 20
     duration_seconds: 15
@@ -354,7 +373,7 @@ cases:
     processor_fixture: active-graph
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: supported
+    expected_outcome: fixture-unavailable
     warm_up_repetitions: 1
     measured_repetitions: 5
     duration_seconds: 120
@@ -369,7 +388,9 @@ cases:
     processor_fixture: active-graph
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: supported
+    expected_outcome: fixture-unavailable
+    execution_mode: manual
+    manual_reason: Endpoint/property burst injection has no bounded product API driver yet.
     warm_up_repetitions: 1
     measured_repetitions: 5
     duration_seconds: 120
@@ -410,6 +431,7 @@ cases:
     timeout_seconds: 720
     transition_schedule_kind: encoded-menu-format-edge
     transition_schedule_seconds: [180, 360, 540]
+    transition_input_cycle: [pcm-stereo, ac3-5.1]
     required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, persistence-storage]
 
   - id: soak-representative-dsp
@@ -419,7 +441,7 @@ cases:
     processor_fixture: camilladsp-production-fir-iir-128
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: fixture-unavailable
+    expected_outcome: supported
     warm_up_repetitions: 1
     measured_repetitions: 1
     duration_seconds: 600
@@ -427,6 +449,7 @@ cases:
     transition_schedule_kind: profile-reapply-and-restore
     transition_schedule_seconds: [180, 360, 540]
     required_metric_sets: [sustained-health, native-audio-health, topology-and-readiness, transition-timing, persistence-storage, physical-audio]
+    restoration_action: restore-processor-and-active-intent
 
   - id: soak-adaptive-routing
     campaign: soak
@@ -435,7 +458,7 @@ cases:
     processor_fixture: active-graph
     workload_state: programme-audio
     carrier_state: present
-    expected_outcome: supported
+    expected_outcome: fixture-unavailable
     warm_up_repetitions: 1
     measured_repetitions: 1
     duration_seconds: 600

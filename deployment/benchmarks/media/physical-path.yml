@@ -1,0 +1,85 @@
+---
+schema_version: 1
+path_id: pi5-gab8-input-to-post-output-capture-v1
+fixture_contract_id: pi5-8gb-gab8-native-v1
+state: awaiting-physical-loopback-calibration
+acceptance_metrics_available: false
+
+measurement_boundary:
+  begins_at: programme-generator-digital-output
+  ends_at: post-gab8-analogue-output-capture
+  includes:
+    - programme-player-output
+    - spdif-to-i2s-input-board
+    - raspberry-pi-i2s-capture
+    - native-pipewire-pcm-auto-decoder
+    - native-pipewire-camilladsp-128-frame-profile
+    - wondom-gab8-dac-and-amplifier-output
+    - capture-attenuator-and-adc
+  excludes:
+    - loudspeaker-acoustic-propagation
+    - listener-estimated-lip-sync
+
+programme_generator:
+  material_registry: manifest.json
+  required_output: bit-exact-48khz-stereo-pcm-or-iec61937
+  selected_path: external-player-to-optical-spdif-input
+  resolved_run_fields:
+    - manufacturer-and-model
+    - firmware
+    - playback-command
+    - output-mode
+    - fixture-sha256
+  status: selected-class-device-identity-pending
+
+output_capture:
+  selected_point: gab8-analogue-output-before-loudspeaker
+  required_path: isolated-line-level-attenuator-to-two-or-more-channel-adc
+  sample_format: signed-24-bit-or-better-linear-pcm
+  sample_rate_hz: 48000
+  reference_channel: FL
+  resolved_run_fields:
+    - adc-manufacturer-and-model
+    - adc-firmware
+    - analogue-attenuation-db
+    - capture-command
+    - measured-clipping-margin-dbfs
+  status: selected-boundary-device-identity-pending
+
+clock_relationship:
+  kind: independent-generator-and-capture-clocks
+  subtraction_policy: >-
+    Never subtract controller, appliance, generator, or capture timestamps.
+    Physical timing comes from markers in one captured waveform.
+  required_calibration:
+    - capture-clock-drift-ppm
+    - calibration-interval-seconds
+    - marker-sample-quantization
+
+calibration:
+  method: direct-loopback-marker-cross-correlation
+  source_fixture: adaptive-switch-continuous-stereo
+  repetitions_required: 20
+  loopback_baseline:
+    state: not-measured
+    median_ms: null
+    p95_ms: null
+    maximum_ms: null
+  uncertainty_components:
+    generator_ms: null
+    capture_ms: null
+    baseline_ms: null
+    clock_drift_ppm: null
+  physical_result: not-measured
+  blocking_reason: capture-adc-and-loopback-identities-have-not-been-recorded
+
+software_analyzer_baseline:
+  state: covered-by-deterministic-tests
+  sample_rate_hz: 48000
+  marker_quantization_uncertainty_ms: 0.010416666666666666
+  claim: analyzer-correctness-only-not-physical-path-calibration
+
+subjective_observation_policy:
+  allowed: [pop, click, noise, voice-mapping, perceived-sync]
+  quantitative_substitution: forbidden
+

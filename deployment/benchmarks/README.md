@@ -13,8 +13,10 @@ shapes.
 
 ## Contracts and evidence
 
-- `fixtures.yml` fixes the physical and runtime fixture plus registered and
-  pending audio/profile inputs.
+- `fixtures.yml` fixes the physical and runtime fixture plus each input and
+  processor fixture's bounded automation binding. A `manual` binding is an
+  unavailable automated case, not permission for the runner to guess at a
+  Bluetooth or physical action.
 - `cases.yml` defines the bounded campaigns, workload and carrier state,
   repetitions, duration, boundaries, metrics, outcome class, timeout, and
   restoration action for every case.
@@ -33,27 +35,123 @@ Raw journals, time series, and audio captures stay under the restricted target
 result directory. Commit only small redacted summaries, stable raw paths, and
 checksums. Never copy Bluetooth addresses, credentials, or tokens into a report.
 
+The supported Raspberry Pi fixture uses `wlan0` for controller access. Network
+throughput and latency are outside the audio benchmark boundary, and Bluetooth
+radio measurements remain separate from the controller-network declaration.
+
 ## Prepare the measurement tools
 
-Run only the benchmark playbook. It installs bounded measurement helpers and
-the checked-in contracts; it does not redeploy Open Cinema or modify the saved
-graph:
+Run only the benchmark playbook. It installs bounded measurement helpers, the
+target workload driver, and the checked-in checksummed media/profile fixtures;
+it does not redeploy Open Cinema or modify the saved graph:
 
 ```console
 cd deployment
 ansible-playbook -i inventories/local.yml playbooks/benchmark.yml
 ```
 
-Audio fixture generation is explicit and optional:
-
-```console
-ansible-playbook -i inventories/local.yml playbooks/benchmark.yml \
-  -e open_cinema_generate_benchmark_fixtures=true
-```
-
 The preparation role records `vcgencmd get_throttled` without demanding a new
 image or erasing historical flags. Each run retains the initial and final value;
 the case result or fixture comparison decides whether it is valid.
+
+## Run the manifest-driven harness
+
+Prepare a unique evidence directory for one case or a complete campaign. This
+captures the fixture, component/tool versions, clock calibration, journal
+marker, active intent, service state, exact owned topology, and static/dynamic
+digests before any fault injection:
+
+```console
+sudo open-cinema-benchmark prepare --case-id decoder-pcm-stereo
+# benchmark_run_id=20260826T200000.000000Z-0123456789ab
+```
+
+Execute and resume only cases selected during `prepare`:
+
+```console
+sudo open-cinema-benchmark run-case RUN_ID decoder-pcm-stereo
+sudo open-cinema-benchmark run-case RUN_ID decoder-pcm-stereo --resume
+```
+
+Each retry receives a new immutable attempt directory. Failed, invalid, and
+interrupted attempts remain in the run as evidence; resume never deletes or
+overwrites their raw data.
+
+Every command and schedule is bounded by the checked-in case manifest. Runtime
+fault injection is restricted to the exact systemd units allowed by the case's
+restoration action. A disruptive sample restores the saved active graph through
+OpenCinema's compare-and-swap activation service and restores the initial
+service state. It then verifies exact stable topology plus static and semantic
+user-intent digests on success, failure, timeout, or interruption. Generated
+database sequence values are retained as observations, not rewritten by the
+benchmark. Before mutating playback or CamillaDSP state, the workload driver
+writes a private crash journal containing the owned process identity and exact
+prior CamillaDSP configuration. Resume and the explicit restore guard clean
+only marker-owned benchmark process groups and restore that configuration
+before graph and service verification. If automatic restoration reports a
+failure, stop and run the
+explicit guard before doing anything else:
+
+```console
+sudo open-cinema-benchmark restore RUN_ID
+```
+
+### Executable workload boundary
+
+For registered PCM and IEC-61937 cases, `run-case` verifies the fixture size and
+SHA-256, loops it in real time through FFmpeg, and creates an ephemeral
+`pw-cat` stream targeted only at the declared decoder or CamillaDSP capture
+node. It stops that process on success, failure, timeout, and interruption. A
+PipeWire or processor service fault also restarts the synthetic programme
+stream so recovery is measured under audio rather than silence.
+
+Startup succeeds only after the feeder and player are alive and PipeWire shows
+an active link to the exact declared target. The runner repeats those checks
+during sustained and transition sampling; an early process exit or lost link
+fails the sample. Playback logs are retained inside the sample envelope,
+checksummed, and included in the redacted export.
+
+CamillaDSP profile cases read the current active configuration and apply only a
+checked-in processing overlay. The active PipeWire capture/playback device
+names, groups, and channel bus remain unchanged. The exact prior configuration
+is restored before the graph/service restoration check. The 7.1-to-stereo
+profile is deliberately unavailable because it changes the active output bus
+and therefore needs its own published desired-graph fixture.
+
+The automatically executable control-plane set includes PCM, AC-3, E-AC-3, DTS,
+unsupported-carrier safe behavior, decoder failure recovery, compatible
+CamillaDSP profiles/replacement/bypass/invalid-config rejection, CamillaDSP
+control/restart recovery, the service recovery matrix, and the PCM, encoded,
+and DSP soaks. Scheduled soak markers execute their declared stream switch,
+stream refresh, or profile reapply/restore action; they are not passive labels.
+Cases that require calibrated physical-audio capture still execute their safe
+control-plane work, but remain `not-measured` until that capture is available.
+
+The runner does not connect/disconnect a headset, start phone/TV programme
+audio, remove the physical SPDIF carrier, reboot the appliance, inject product
+event bursts, or apply a channel-count-changing graph. Those cases prepare as
+`fixture-unavailable` with a reason until their physical/operator or product-API
+driver exists. Also keep the physical TV source silent during synthetic decoder
+playback; an unrelated carrier contaminates the sample and must be recorded as
+invalid.
+
+Finalization validates every sample envelope, applies frozen/candidate criteria,
+excludes invalid samples from deterministic median/nearest-rank-p95/maximum
+statistics, captures the unit-scoped journal after the explicit marker, and
+creates a redacted export with `SHA256SUMS` and its detached digest:
+
+```console
+sudo open-cinema-benchmark finalize RUN_ID
+```
+
+Every envelope records `metricCoverage` for each required metric set. Missing
+automated artifacts invalidate a sample; an unavailable required calibrated
+physical capture produces `not-measured`. Neither state can characterize or
+accept a run.
+
+Finalizing an incomplete or invalid run returns nonzero and leaves it resumable.
+A characterization run can only become `characterized`; only a distinct run
+using reviewed, frozen acceptance criteria can become `accepted`.
 
 ## Declare carrier state for every live-graph sample
 

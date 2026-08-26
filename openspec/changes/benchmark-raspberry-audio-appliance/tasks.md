@@ -10,24 +10,24 @@
 ## 2. Build the repeatable target harness and collectors
 
 - [x] 2.1 Update the benchmark Ansible playbook and roles to install the declared measurement tools and bounded helpers without redeploying the product, requiring a clean image, or installing/querying PulseAudio compatibility tools.
-- [ ] 2.2 Implement a manifest-driven benchmark runner with `prepare`, `run-case`, `finalize`, and `restore` phases, resumable case status, explicit timeouts, and a unique evidence directory per run.
-- [ ] 2.3 Implement run and sample identifiers plus boot-relative monotonic timestamps, UTC metadata, clock-calibration records, and guards against subtracting unsynchronized controller and appliance clocks.
-- [ ] 2.4 Implement fixture preflight and fact collection for hardware revision, RAM, power/cooling declaration, OS/kernel, storage, network, audio interfaces, Bluetooth fixture metadata with redacted addresses, graph revision, processor configs, component/tool versions, and initial throttling state.
-- [ ] 2.5 Implement one-second sustained collection for per-process and appliance CPU, RSS, available memory, temperature, clocks, throttling, service state, disk counters, filesystem space, and collector overhead/sample loss.
-- [ ] 2.6 Implement 100–250 ms transition collection for PipeWire registry state, exact expected owned topology, decoder/CamillaDSP readiness, resolved-plan and reconciliation state, generation/sequence, retry state, and audio-restoration markers.
-- [ ] 2.7 Collect native PipeWire xrun/drop facts, decoder and CamillaDSP underrun/overrun/queue facts, scoped service errors, and journals beginning at an explicit run marker.
-- [ ] 2.8 Collect offered, processed, coalesced, retried, and dropped orchestration events together with SQLite latency/busy results, Redis observations, plan/audit/diagnostic growth, filesystem writes, and retained-record counts.
-- [ ] 2.9 Implement final evidence redaction, schema validation, SHA-256 manifests, deterministic statistics, invalid-sample exclusion with reasons, and a small human-readable case summary.
-- [ ] 2.10 Implement an interruption-safe restoration guard that snapshots active intent and service state, bounds fault injection to named services, restores the prior graph, and verifies exact topology plus static/dynamic state digests after every disruptive case.
+- [x] 2.2 Implement a manifest-driven benchmark runner with `prepare`, `run-case`, `finalize`, and `restore` phases, resumable case status, explicit timeouts, and a unique evidence directory per run.
+- [x] 2.3 Implement run and sample identifiers plus boot-relative monotonic timestamps, UTC metadata, clock-calibration records, and guards against subtracting unsynchronized controller and appliance clocks.
+- [x] 2.4 Implement fixture preflight and fact collection for hardware revision, RAM, power/cooling declaration, OS/kernel, storage, network, audio interfaces, Bluetooth fixture metadata with redacted addresses, graph revision, processor configs, component/tool versions, and initial throttling state.
+- [x] 2.5 Implement one-second sustained collection for per-process and appliance CPU, RSS, available memory, temperature, clocks, throttling, service state, disk counters, filesystem space, and collector overhead/sample loss.
+- [x] 2.6 Implement 100–250 ms transition collection for PipeWire registry state, exact expected owned topology, decoder/CamillaDSP readiness, resolved-plan and reconciliation state, generation/sequence, retry state, and audio-restoration markers.
+- [x] 2.7 Collect native PipeWire xrun/drop facts, decoder and CamillaDSP underrun/overrun/queue facts, scoped service errors, and journals beginning at an explicit run marker.
+- [x] 2.8 Collect offered, processed, coalesced, retried, and dropped orchestration events together with SQLite latency/busy results, Redis observations, plan/audit/diagnostic growth, filesystem writes, and retained-record counts.
+- [x] 2.9 Implement final evidence redaction, schema validation, SHA-256 manifests, deterministic statistics, invalid-sample exclusion with reasons, and a small human-readable case summary.
+- [x] 2.10 Implement an interruption-safe restoration guard that snapshots active intent and service state, bounds fault injection to named services, restores the prior graph, and verifies exact topology plus static/dynamic state digests after every disruptive case.
 
 ## 3. Prepare deterministic audio and physical timing fixtures
 
-- [ ] 3.1 Create or register checksummed PCM stereo/multichannel channel-identification, AC-3, E-AC-3, DTS, silence/no-carrier, and unsupported-format samples with generation provenance and `ffprobe` metadata.
-- [ ] 3.2 Create checksummed, marker-bearing 2.0-to-menu, 5.1-to-menu, 7.1-to-menu, and representative cross-format transition sequences that expose decoder detection and stable-output behavior.
-- [ ] 3.3 Define representative CamillaDSP 128-frame passthrough, stereo, multichannel, channel-adaptation, and production-like FIR/IIR profiles with workload metadata and configuration digests.
+- [x] 3.1 Create or register checksummed PCM stereo/multichannel channel-identification, AC-3, E-AC-3, DTS, silence/no-carrier, and unsupported-format samples with generation provenance and `ffprobe` metadata.
+- [x] 3.2 Create checksummed, marker-bearing 2.0-to-menu, 5.1-to-menu, 7.1-to-menu, and representative cross-format transition sequences that expose decoder detection and stable-output behavior.
+- [x] 3.3 Define representative CamillaDSP 128-frame passthrough, stereo, multichannel, channel-adaptation, and production-like FIR/IIR profiles with workload metadata and configuration digests.
 - [ ] 3.4 Select, document, and calibrate the physical programme generator and output-capture path, including channel, rate, conversion stages, clock relationship, loopback baseline, and timing uncertainty.
-- [ ] 3.5 Implement waveform marker/cross-correlation analysis for end-to-end latency, audio-loss and restoration edges, unexpected silence, discontinuity, clipping, and audible-gap duration while retaining source/captured artifacts.
-- [ ] 3.6 Add deterministic synthetic-waveform tests for latency/gap analysis, channel mapping, uncertainty propagation, missing markers, corrupted captures, and subjective-note separation.
+- [x] 3.5 Implement waveform marker/cross-correlation analysis for end-to-end latency, audio-loss and restoration edges, unexpected silence, discontinuity, clipping, and audible-gap duration while retaining source/captured artifacts.
+- [x] 3.6 Add deterministic synthetic-waveform tests for latency/gap analysis, channel mapping, uncertainty propagation, missing markers, corrupted captures, and subjective-note separation.
 
 ## 4. Define bounded benchmark campaigns
 
@@ -43,9 +43,9 @@
 ## 5. Verify and deploy the harness
 
 - [x] 5.1 Add automated schema and cross-reference tests proving every required case has a compatible fixture, metric set, restoration action, sample count, duration, outcome class, and criteria mapping.
-- [ ] 5.2 Add runner lifecycle tests for successful, failed, timed-out, invalid, resumed, and interrupted cases and prove finalization never treats incomplete evidence as accepted.
-- [ ] 5.3 Add recorded-fixture tests for collectors, monotonic ordering, topology convergence, event accounting, redaction, checksum manifests, median/nearest-rank-p95/maximum calculations, and collector-overhead invalidation.
-- [ ] 5.4 Exercise every disruptive campaign against a simulated or recorded service fixture and verify restoration runs on success, failure, timeout, and interruption before enabling it on hardware.
+- [x] 5.2 Add runner lifecycle tests for successful, failed, timed-out, invalid, resumed, and interrupted cases and prove finalization never treats incomplete evidence as accepted.
+- [x] 5.3 Add recorded-fixture tests for collectors, monotonic ordering, topology convergence, event accounting, redaction, checksum manifests, median/nearest-rank-p95/maximum calculations, and collector-overhead invalidation.
+- [x] 5.4 Exercise every disruptive campaign against a simulated or recorded service fixture and verify restoration runs on success, failure, timeout, and interruption before enabling it on hardware.
 - [ ] 5.5 Deploy the benchmark-only roles to the Pi, run preflight and a short self-test, verify no product/static-state drift or sensitive-data leak, and record collector overhead before hardware characterization.
 
 ## 6. Run hardware characterization

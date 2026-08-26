@@ -43,6 +43,7 @@ def test_benchmark_tools_are_explicit_and_separate_from_the_appliance_play() -> 
     for command in (
         "ffprobe",
         "pidstat",
+        "pw-cat",
         "pw-dump",
         "pw-top",
         "redis-cli",
@@ -50,6 +51,10 @@ def test_benchmark_tools_are_explicit_and_separate_from_the_appliance_play() -> 
         "wpctl",
     ):
         assert f"- {command}" in tasks
+    assert "benchmark_workload_driver.py" in tasks
+    assert "media/manifest.json" in tasks
+    assert "media/generated/ac3-5.1.spdif" in tasks
+    assert "media/camilladsp/production-fir-iir-128.yml" in tasks
 
     # Preparation records the current/historical bits; it does not require a
     # fresh image or erase history to make installation pass.
@@ -99,6 +104,13 @@ def test_single_supported_fixture_contract_is_schema_valid_and_natively_scoped()
     assert fixture["device_under_test"]["memory_mb"] == 8192
     assert fixture["device_under_test"]["power"]["rated_watts"] == 27
     assert fixture["device_under_test"]["cooling"]["type"] == "active-fan"
+    assert fixture["device_under_test"]["network"] == {
+        "primary_interface": "wlan0",
+        "transport": "wireless-lan",
+        "purpose": "controller-access-only",
+        "network_performance_is_out_of_scope": True,
+        "bluetooth_radio_measurements_are_separate": True,
+    }
     chain = fixture["audio_chain"]
     assert chain["transport"] == "native-pipewire"
     assert chain["sample_rate_hz"] == 48_000
@@ -108,6 +120,25 @@ def test_single_supported_fixture_contract_is_schema_valid_and_natively_scoped()
     assert chain["camilladsp"]["instances"] == 1
     assert chain["camilladsp"]["processing_period_frames"] == 128
     assert "candidate_tiers" not in fixture
+    pcm = fixture["input_fixtures"]["pcm-stereo"]["automation"]
+    assert pcm == {
+        "driver": "pipewire-file-playback",
+        "media_fixture_id": "pcm-stereo-raw-carrier",
+        "target_node": "open-cinema.decoder.decoder-0.capture",
+        "sample_format": "s16",
+        "sample_rate_hz": 48_000,
+        "channels": 2,
+        "channel_map": "FL,FR",
+    }
+    assert (
+        fixture["processor_fixtures"]["camilladsp-production-fir-iir-128"]["automation"]["driver"]
+        == "camilladsp-processing-overlay"
+    )
+    assert fixture["bluetooth_fixtures"]["headset"]["class"] == "a2dp-headset"
+    assert (
+        fixture["input_fixtures"]["bluetooth-continuous-programme"]["automation"]["driver"]
+        == "manual"
+    )
 
 
 def test_case_manifest_schema_cross_references_and_campaign_bounds() -> None:
@@ -163,16 +194,26 @@ def test_case_manifest_schema_cross_references_and_campaign_bounds() -> None:
         input_available = (
             fixture["input_fixtures"][case["input_fixture"]].get("registry_status")
             != "pending-registration"
+            and fixture["input_fixtures"][case["input_fixture"]]["automation"]["driver"] != "manual"
         )
         processor_available = (
             fixture["processor_fixtures"][case["processor_fixture"]].get("profile_status")
             != "pending-registration"
+            and fixture["processor_fixtures"][case["processor_fixture"]]["automation"]["driver"]
+            != "manual"
         )
         matrix_available = all(
             fixture["processor_fixtures"][profile].get("profile_status") != "pending-registration"
+            and fixture["processor_fixtures"][profile]["automation"]["driver"] != "manual"
             for profile in case.get("processor_fixture_matrix", [])
         )
-        if not (input_available and processor_available and matrix_available):
+        automatically_executable = case.get("execution_mode") != "manual"
+        if not (
+            input_available
+            and processor_available
+            and matrix_available
+            and automatically_executable
+        ):
             assert case["expected_outcome"] == "fixture-unavailable"
         else:
             assert case["expected_outcome"] != "fixture-unavailable"
@@ -189,6 +230,7 @@ def test_case_manifest_schema_cross_references_and_campaign_bounds() -> None:
         "decoder-failure-recovery",
         "decoder-format-transitions",
         "camilladsp-profiles-128",
+        "camilladsp-channel-adaptation-128",
         "camilladsp-profile-replacement",
         "camilladsp-bypass",
         "camilladsp-invalid-configuration",

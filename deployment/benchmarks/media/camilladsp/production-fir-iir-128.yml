@@ -1,0 +1,47 @@
+---
+title: Benchmark production-like FIR IIR 128
+description: >-
+  Synthetic fixed workload for measurement only; coefficients are not room
+  correction and must not be installed as a listening profile.
+devices:
+  samplerate: 48000
+  chunksize: 128
+  capture:
+    type: PipeWire
+    channels: 8
+    node_name: opencinema.benchmark.camilladsp.capture
+    node_description: Open Cinema benchmark CamillaDSP capture
+    node_group_name: opencinema.benchmark.camilladsp.group
+    autoconnect_to: null
+  playback:
+    type: PipeWire
+    channels: 8
+    node_name: opencinema.benchmark.camilladsp.playback
+    node_description: Open Cinema benchmark CamillaDSP playback
+    node_group_name: opencinema.benchmark.camilladsp.group
+    autoconnect_to: null
+filters:
+  dc_block:
+    type: Biquad
+    parameters:
+      type: Highpass
+      freq: 18.0
+      q: 0.70710678
+  synthetic_room_iir:
+    type: Biquad
+    parameters:
+      type: Peaking
+      freq: 120.0
+      q: 1.2
+      gain: -3.0
+  synthetic_fir_1024:
+    type: Conv
+    parameters:
+      type: Raw
+      filename: production-fir-1024.f32le
+      format: FLOAT32LE
+pipeline:
+  - type: Filter
+    channels: [0, 1, 2, 3, 4, 5, 6, 7]
+    names: [dc_block, synthetic_room_iir, synthetic_fir_1024]
+

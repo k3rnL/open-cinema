@@ -32,6 +32,11 @@ timeSeries:
     sha256: null
 logs: []
 captures: []
+metricCoverage:
+  sustained-health:
+    status: missing
+    artifacts: [samples/system.jsonl]
+    reason: sample-has-not-run
 invalidation:
   invalid: false
   reasons: []
