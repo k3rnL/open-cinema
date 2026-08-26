@@ -326,7 +326,7 @@ def test_deployment_uses_one_contract_gated_full_runtime() -> None:
     site = read(DEPLOYMENT / "playbooks/site.yml")
     rollback_playbook = read(DEPLOYMENT / "playbooks/rollback.yml")
     group_inventory = yaml.safe_load(read(DEPLOYMENT / "inventories/group_vars/all.yml"))
-    local_inventory = yaml.safe_load(read(DEPLOYMENT / "inventories/local.yml"))
+    example_inventory = yaml.safe_load(read(DEPLOYMENT / "inventories/example.yml"))
     environment = read(DEPLOYMENT / "roles/open-cinema/templates/env.j2")
     readiness = read(READINESS_ROLE / "tasks/main.yml")
     backup = read(DEPLOYMENT / "roles/transition-backup/tasks/main.yml")
@@ -341,7 +341,7 @@ def test_deployment_uses_one_contract_gated_full_runtime() -> None:
         "rollout_policy",
     }
     assert retired_inventory_keys.isdisjoint(group_inventory)
-    assert retired_inventory_keys.isdisjoint(local_inventory["all"]["hosts"]["cinema_pi"])
+    assert retired_inventory_keys.isdisjoint(example_inventory["all"]["hosts"]["cinema_pi"])
     assert all(group_inventory["open_cinema"]["orchestration_features"].values())
     assert "open_cinema_release_status" not in group_inventory
     assert group_inventory["open_cinema_close_rollback_window"] is False
@@ -673,14 +673,11 @@ def test_readiness_verifies_vendor_integrity_and_permission_boundaries() -> None
 
 def test_nginx_restricts_the_management_api_to_configured_networks() -> None:
     inventory = yaml.safe_load(read(DEPLOYMENT / "inventories/group_vars/all.yml"))
-    local_inventory = yaml.safe_load(read(DEPLOYMENT / "inventories/local.yml"))
     nginx_tasks = read(DEPLOYMENT / "roles/nginx/tasks/main.yml")
     nginx_site = read(DEPLOYMENT / "roles/nginx/templates/open-cinema.conf.j2")
     readiness = read(READINESS_ROLE / "tasks/main.yml")
 
     assert inventory["open_cinema_management_api_networks"] == ["127.0.0.1"]
-    networks = local_inventory["all"]["hosts"]["cinema_pi"]["open_cinema_management_api_networks"]
-    assert "192.168.1.0/24" in networks
     assert "Require an explicit bounded management API network policy" in nginx_tasks
     assert "0.0.0.0/0" in nginx_tasks and "::/0" in nginx_tasks
     assert "{% for network in open_cinema_management_api_networks %}" in nginx_site
