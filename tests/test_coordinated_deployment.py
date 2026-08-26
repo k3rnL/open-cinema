@@ -114,6 +114,10 @@ def test_manifest_input_validation_precedes_every_appliance_role() -> None:
     assert "Verify recursive immutable protection" in rollback_preflight
     assert "target-verified" in rollback_preflight
     assert "when: not install_from_local" in rollback_preflight
+    assert (
+        "- name: Verify and protect the private first-release replacement baseline\n"
+        "  become: true"
+    ) in rollback_preflight
     assert "MUTABLE_SOURCE_MARKERS" not in validator
     for rejected_input in (
         "editable",
@@ -741,6 +745,14 @@ def test_preflight_aggregates_compatibility_before_destructive_or_live_roles() -
     assert "Probe installed Python packages and orchestration contracts" in preflight
     assert "Verify retained rollback input for standalone preflight runs" in preflight
     assert "private-rollback-preflight.yml" in preflight
+    normalize_at = preflight.index(
+        "Normalize independent host and component probe results"
+    )
+    match_at = preflight.index(
+        "Match the normalized host against supported Raspberry Pi models"
+    )
+    classify_at = preflight.index("Classify the target platform")
+    assert normalize_at < match_at < classify_at
     assert defaults["open_cinema_preflight_result_path"] == "/tmp/open-cinema-preflight-result.json"
 
 

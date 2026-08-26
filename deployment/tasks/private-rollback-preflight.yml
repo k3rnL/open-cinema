@@ -9,6 +9,7 @@
   when: open_cinema_private_rollback_manifest.rollback.strategy == 'previous-coordinated-release'
 
 - name: Verify and protect the private first-release replacement baseline
+  become: true
   when:
     - open_cinema_private_rollback_manifest.rollback.strategy == 'private-full-generation-replacement'
   block:

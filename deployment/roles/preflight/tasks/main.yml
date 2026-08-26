@@ -261,7 +261,7 @@
   register: open_cinema_preflight_candidate_manifest
   when: open_cinema_preflight_require_full_runtime | bool
 
-- name: Normalize host and component probe results
+- name: Normalize independent host and component probe results
   ansible.builtin.set_fact:
     open_cinema_preflight_model: >-
       {{ open_cinema_preflight_model_command.stdout | trim |
@@ -271,6 +271,17 @@
          if open_cinema_preflight_disk_command.rc == 0 and
             open_cinema_preflight_disk_command.stdout_lines | length > 1
          else 0 }}
+    open_cinema_preflight_audio_versions: >-
+      {%- set versions = {} -%}
+      {%- for result in open_cinema_preflight_audio_version_commands.results -%}
+        {%- set _ = versions.update({result.item.component:
+          ((result.stdout | default('')) ~ ' ' ~ (result.stderr | default(''))) |
+          open_cinema_extract_version}) -%}
+      {%- endfor -%}
+      {{ versions }}
+
+- name: Match the normalized host against supported Raspberry Pi models
+  ansible.builtin.set_fact:
     open_cinema_preflight_matching_production_models: >-
       {%- set matches = [] -%}
       {%- for requirement in open_cinema_compatibility.platform.production.raspberry_pi_models -%}
@@ -295,14 +306,6 @@
         {%- endif -%}
       {%- endfor -%}
       {{ matches }}
-    open_cinema_preflight_audio_versions: >-
-      {%- set versions = {} -%}
-      {%- for result in open_cinema_preflight_audio_version_commands.results -%}
-        {%- set _ = versions.update({result.item.component:
-          ((result.stdout | default('')) ~ ' ' ~ (result.stderr | default(''))) |
-          open_cinema_extract_version}) -%}
-      {%- endfor -%}
-      {{ versions }}
 
 - name: Classify the target platform
   ansible.builtin.set_fact:
