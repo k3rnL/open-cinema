@@ -1,3 +1,0 @@
-
-class AudioBackendException(Exception):
-    pass

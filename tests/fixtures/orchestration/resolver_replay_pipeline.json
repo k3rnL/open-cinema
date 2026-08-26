@@ -1,0 +1,216 @@
+{
+  "desired": {
+    "activation": {
+      "activationId": "activation:replay",
+      "definitionId": "graph:replay",
+      "desiredStateVersion": 1,
+      "parameterBindings": {},
+      "revisionId": "revision:replay:1",
+      "sceneBindings": {}
+    },
+    "graphRevision": {
+      "contentDigest": "f266f3b12c8515c3dacb7b91522c96ad77deb557a68938a6c4989582b0bf6115",
+      "definitionId": "graph:replay",
+      "document": {
+        "conditions": [],
+        "edges": [],
+        "id": "graph:replay",
+        "kind": "graph",
+        "layout": {},
+        "metadata": {
+          "name": "Minimal replay"
+        },
+        "nodes": [],
+        "parameters": [],
+        "publicPorts": [],
+        "schemaVersion": 1
+      },
+      "revisionId": "revision:replay:1",
+      "revisionNumber": 1,
+      "schemaVersion": 1
+    },
+    "logicalEndpoints": [],
+    "subgraphRevisions": []
+  },
+  "format": "open-cinema.resolver-replay/v1",
+  "outputPlan": {
+    "digest": "977df447086a80cd5e0a86af2d10a59adf7e994bc6ea7b13f4c4d5c2ca886bba",
+    "document": {
+      "actionIntent": [],
+      "currentPlanPolicy": {
+        "mayBecomeCurrent": true,
+        "mayExecuteActions": true,
+        "mayRemainCurrent": true,
+        "reason": "The plan is complete and has no resolution diagnostics.",
+        "retainLastSafePlan": false
+      },
+      "desired": {
+        "activationId": "activation:replay",
+        "contentDigest": "f266f3b12c8515c3dacb7b91522c96ad77deb557a68938a6c4989582b0bf6115",
+        "definitionId": "graph:replay",
+        "desiredStateVersion": 1,
+        "revisionId": "revision:replay:1",
+        "revisionNumber": 1
+      },
+      "effectivePlanDigest": "5cf2b4e8b9a7fbea5565ba93867de44337a745d5a9b59fdfd7f30fdf28fcfad4",
+      "effectiveRuntimeIntent": {
+        "actionIntent": [],
+        "activeNodes": [],
+        "controls": {},
+        "endpointBindings": [],
+        "resourceAssignments": {},
+        "selectedEdges": [],
+        "signalContracts": {}
+      },
+      "endpointBindings": [],
+      "errors": [],
+      "expandedGraph": {
+        "conditions": [],
+        "edges": [],
+        "id": "graph:replay",
+        "kind": "graph",
+        "metadata": {
+          "name": "Minimal replay"
+        },
+        "nodes": [],
+        "parameters": [],
+        "publicPorts": [],
+        "schemaVersion": 1
+      },
+      "overrides": {
+        "controls": {},
+        "endpointSelections": {},
+        "modes": {},
+        "parameterValues": {},
+        "provenance": {},
+        "rejected": [],
+        "winners": []
+      },
+      "parameters": {},
+      "paths": {
+        "activeNodeIds": [],
+        "rejectedEdgeIds": [],
+        "selectedEdgeIds": []
+      },
+      "resourceAssignments": {},
+      "resourceDecisions": {},
+      "schemaVersion": 1,
+      "selections": {},
+      "signalContracts": {},
+      "status": "resolved",
+      "warnings": [],
+      "world": {
+        "evaluatedAt": "2026-08-22T16:00:00+00:00",
+        "runtimeGeneration": 1,
+        "runtimeSequence": 0,
+        "version": "1:0:1:1:1:1:1"
+      }
+    },
+    "explanation": {
+      "conditionResults": {},
+      "kind": "audio-resolution",
+      "overrideDecisions": {
+        "controls": {},
+        "endpointSelections": {},
+        "modes": {},
+        "parameterValues": {},
+        "provenance": {},
+        "rejected": [],
+        "winners": []
+      },
+      "selectionDecisions": {},
+      "stages": [
+        {
+          "errors": 0,
+          "stage": "structure",
+          "warnings": 0
+        },
+        {
+          "errors": 0,
+          "stage": "subgraphs",
+          "warnings": 0
+        },
+        {
+          "errors": 0,
+          "stage": "parameters",
+          "warnings": 0
+        },
+        {
+          "errors": 0,
+          "stage": "endpoints",
+          "warnings": 0
+        },
+        {
+          "errors": 0,
+          "stage": "conditions",
+          "warnings": 0
+        },
+        {
+          "errors": 0,
+          "stage": "paths",
+          "warnings": 0
+        },
+        {
+          "errors": 0,
+          "stage": "signals",
+          "warnings": 0
+        },
+        {
+          "errors": 0,
+          "stage": "resources",
+          "warnings": 0
+        }
+      ],
+      "status": "resolved",
+      "summary": {
+        "errorCount": 0,
+        "selectedEdges": [],
+        "selectedEndpoints": [],
+        "warningCount": 0
+      }
+    },
+    "status": "resolved"
+  },
+  "policies": {
+    "resourcePolicy": {
+      "policy": {
+        "conflict": "priority"
+      },
+      "resources": [],
+      "version": 1
+    }
+  },
+  "schemaVersion": 1,
+  "versions": {
+    "desiredGraph": 1,
+    "desiredState": 1,
+    "resolvedPlan": 1,
+    "resolverInput": 1,
+    "world": "1:0:1:1:1:1:1"
+  },
+  "world": {
+    "endpointInventory": {
+      "candidates": [],
+      "capturedAt": "2026-08-22T16:00:00Z",
+      "generation": 1,
+      "sequence": 0
+    },
+    "evaluatedAt": "2026-08-22T16:00:00+00:00",
+    "overrides": [],
+    "processors": [],
+    "signalFacts": {
+      "facts": {},
+      "version": 1
+    },
+    "version": {
+      "endpointVersion": 1,
+      "overrideVersion": 1,
+      "processorVersion": 1,
+      "resourcePolicyVersion": 1,
+      "runtimeGeneration": 1,
+      "runtimeSequence": 0,
+      "signalVersion": 1,
+      "token": "1:0:1:1:1:1:1"
+    }
+  }
+}

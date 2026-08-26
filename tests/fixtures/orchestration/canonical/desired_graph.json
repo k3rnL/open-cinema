@@ -1,0 +1,104 @@
+{
+  "fixtureVersion": "open-cinema.canonical-acceptance/v1",
+  "logicalEndpoints": [
+    {"id": "endpoint:tv", "direction": "input", "tags": ["programme", "tv"]},
+    {"id": "endpoint:bluetooth-programme", "direction": "input", "tags": ["programme", "bluetooth"]},
+    {"id": "endpoint:main-speakers", "direction": "output", "tags": ["preferred-output", "room-speakers"]},
+    {"id": "endpoint:headset", "direction": "output", "tags": ["preferred-output", "headset"]}
+  ],
+  "graph": {
+    "schemaVersion": 1,
+    "id": "graph:canonical-home-cinema",
+    "kind": "graph",
+    "metadata": {
+      "name": "Canonical home cinema routing",
+      "description": "TV or Bluetooth through adaptive decoding and CamillaDSP to speakers or headset.",
+      "labels": {"fixture": "canonical-home-cinema"}
+    },
+    "parameters": [
+      {"name": "roomVolume", "type": "number", "required": false, "default": 0.75, "minimum": 0.0, "maximum": 1.0},
+      {"name": "headsetVolume", "type": "number", "required": false, "default": 0.55, "minimum": 0.0, "maximum": 1.0}
+    ],
+    "publicPorts": [],
+    "conditions": [],
+    "nodes": [
+      {
+        "id": "node:programme-selector",
+        "type": "core.ordered-selector",
+        "version": 1,
+        "configuration": {
+          "mode": "exclusive",
+          "candidates": [
+            {
+              "endpoint": "endpoint:bluetooth-programme",
+              "priority": 200,
+              "eligibleWhen": {
+                "op": "all",
+                "args": [
+                  {"op": "eq", "fact": "endpoint.endpoint:bluetooth-programme.availability", "value": "route-available"},
+                  {"op": "eq", "fact": "endpoint.endpoint:bluetooth-programme.activeSignal", "value": true}
+                ]
+              },
+              "unknownResult": "ineligible"
+            },
+            {"endpoint": "endpoint:tv", "priority": 100, "eligibleWhen": {"op": "exists", "fact": "endpoint.endpoint:tv.availability"}, "unknownResult": "waiting"}
+          ]
+        },
+        "layout": {"x": 0, "y": 0}
+      },
+      {
+        "id": "node:adaptive-decoder",
+        "type": "processor.pcm-auto-decoder",
+        "version": 1,
+        "configuration": {
+          "pcmBehavior": "bypass",
+          "encodedBehavior": "decode",
+          "unsupportedBehavior": "error",
+          "minimumConfidence": 0.9
+        },
+        "layout": {"x": 300, "y": 0}
+      },
+      {
+        "id": "node:output-selector",
+        "type": "core.ordered-selector",
+        "version": 1,
+        "configuration": {
+          "mode": "exclusive",
+          "candidates": [
+            {
+              "endpoint": "endpoint:headset",
+              "priority": 300,
+              "eligibleWhen": {"op": "eq", "fact": "endpoint.endpoint:headset.availability", "value": "route-available"},
+              "unknownResult": "ineligible"
+            },
+            {
+              "endpoint": "endpoint:main-speakers",
+              "priority": 100,
+              "eligibleWhen": {"op": "eq", "fact": "endpoint.endpoint:main-speakers.availability", "value": "route-available"},
+              "unknownResult": "waiting"
+            }
+          ]
+        },
+        "layout": {"x": 900, "y": 0}
+      },
+      {
+        "id": "node:output-processing",
+        "type": "processor.camilladsp-profile-selector",
+        "version": 1,
+        "configuration": {
+          "profiles": [
+            {"output": "endpoint:headset", "profile": "camilladsp:headphone-stereo", "volume": {"parameter": "headsetVolume"}},
+            {"output": "endpoint:main-speakers", "profile": "camilladsp:living-room", "volume": {"parameter": "roomVolume"}}
+          ]
+        },
+        "layout": {"x": 600, "y": 0}
+      }
+    ],
+    "edges": [
+      {"id": "edge:programme-to-decoder", "from": {"node": "node:programme-selector", "port": "audio"}, "to": {"node": "node:adaptive-decoder", "port": "input"}},
+      {"id": "edge:decoder-to-processing", "from": {"node": "node:adaptive-decoder", "port": "output"}, "to": {"node": "node:output-processing", "port": "input"}},
+      {"id": "edge:processing-to-output", "from": {"node": "node:output-processing", "port": "output"}, "to": {"node": "node:output-selector", "port": "input"}}
+    ],
+    "layout": {"viewport": {"x": 0, "y": 0, "zoom": 1.0}}
+  }
+}

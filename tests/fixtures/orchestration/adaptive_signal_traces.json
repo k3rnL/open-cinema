@@ -1,0 +1,398 @@
+{
+  "fixtureVersion": "open-cinema.adaptive-signal-traces/v1",
+  "policy": {
+    "pcmBehavior": "bypass",
+    "encodedBehavior": "decode",
+    "unsupportedBehavior": "error",
+    "supportedCodecs": ["ac3", "eac3", "dts"],
+    "minimumConfidence": 0.9,
+    "detectionWindowMs": 250,
+    "confidenceHysteresis": 0.05,
+    "debounceMs": 0,
+    "stableDurationMs": 0,
+    "cooldownMs": 0
+  },
+  "cases": [
+    {
+      "id": "plain-pcm",
+      "observations": [
+        {
+          "observationWindowMs": 500,
+          "observedAtMs": 1000,
+          "decoderAvailable": true,
+          "processorHealth": "ready",
+          "descriptor": {
+            "version": 1,
+            "transport": {
+              "kind": "pcm",
+              "format": {
+                "sampleFormat": "S16LE",
+                "rate": 48000,
+                "layout": {"channels": 2, "positions": ["FL", "FR"]}
+              }
+            },
+            "content": {"kind": "pcm"},
+            "decodedOutput": null,
+            "confidence": 0.99,
+            "source": {"kind": "replay", "id": "fixture:plain-pcm", "sequence": 1},
+            "observedAt": "2026-08-22T16:00:00Z"
+          },
+          "expected": {
+            "choice": "pcm-bypass",
+            "decisionStatus": "resolved",
+            "reason": "pcm_bypass_explicitly_allowed",
+            "schedulerStatus": "scheduled",
+            "scheduleResolution": true,
+            "outputChannels": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "detecting-unknown",
+      "observations": [
+        {
+          "observationWindowMs": 500,
+          "observedAtMs": 1000,
+          "decoderAvailable": true,
+          "processorHealth": "detecting",
+          "descriptor": {
+            "version": 1,
+            "transport": {"kind": "unknown", "format": {}},
+            "content": {"kind": "unknown"},
+            "decodedOutput": null,
+            "confidence": 0.99,
+            "source": {"kind": "replay", "id": "fixture:detecting", "sequence": 1},
+            "observedAt": "2026-08-22T16:00:01Z"
+          },
+          "expected": {
+            "choice": "waiting",
+            "decisionStatus": "waiting",
+            "reason": "signal_content_unknown",
+            "schedulerStatus": "scheduled",
+            "scheduleResolution": true,
+            "outputChannels": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "ac3",
+      "observations": [
+        {
+          "observationWindowMs": 500,
+          "observedAtMs": 1000,
+          "decoderAvailable": true,
+          "processorHealth": "ready",
+          "descriptor": {
+            "version": 1,
+            "transport": {
+              "kind": "iec61937",
+              "format": {"sampleFormat": "S16LE", "rate": 48000, "layout": {"channels": 2}}
+            },
+            "content": {"kind": "encoded", "codec": "ac3"},
+            "decodedOutput": {
+              "sampleFormat": "FLOAT32LE",
+              "rate": 48000,
+              "layout": {"channels": 6, "positions": ["FL", "FR", "FC", "LFE", "SL", "SR"]}
+            },
+            "confidence": 0.99,
+            "source": {"kind": "replay", "id": "fixture:ac3", "sequence": 1},
+            "observedAt": "2026-08-22T16:00:02Z"
+          },
+          "expected": {
+            "choice": "decode",
+            "decisionStatus": "resolved",
+            "reason": "observed_decoded_output_authoritative",
+            "schedulerStatus": "scheduled",
+            "scheduleResolution": true,
+            "outputChannels": 6
+          }
+        }
+      ]
+    },
+    {
+      "id": "eac3",
+      "observations": [
+        {
+          "observationWindowMs": 500,
+          "observedAtMs": 1000,
+          "decoderAvailable": true,
+          "processorHealth": "ready",
+          "descriptor": {
+            "version": 1,
+            "transport": {
+              "kind": "iec61937",
+              "format": {"sampleFormat": "S16LE", "rate": 48000, "layout": {"channels": 2}}
+            },
+            "content": {"kind": "encoded", "codec": "eac3"},
+            "decodedOutput": {
+              "sampleFormat": "FLOAT32LE",
+              "rate": 48000,
+              "layout": {"channels": 6, "positions": ["FL", "FR", "FC", "LFE", "SL", "SR"]}
+            },
+            "confidence": 0.99,
+            "source": {"kind": "replay", "id": "fixture:eac3", "sequence": 1},
+            "observedAt": "2026-08-22T16:00:03Z"
+          },
+          "expected": {
+            "choice": "decode",
+            "decisionStatus": "resolved",
+            "reason": "observed_decoded_output_authoritative",
+            "schedulerStatus": "scheduled",
+            "scheduleResolution": true,
+            "outputChannels": 6
+          }
+        }
+      ]
+    },
+    {
+      "id": "dts",
+      "observations": [
+        {
+          "observationWindowMs": 500,
+          "observedAtMs": 1000,
+          "decoderAvailable": true,
+          "processorHealth": "ready",
+          "descriptor": {
+            "version": 1,
+            "transport": {
+              "kind": "iec61937",
+              "format": {"sampleFormat": "S16LE", "rate": 48000, "layout": {"channels": 2}}
+            },
+            "content": {"kind": "encoded", "codec": "dts"},
+            "decodedOutput": {
+              "sampleFormat": "FLOAT32LE",
+              "rate": 48000,
+              "layout": {"channels": 6, "positions": ["FL", "FR", "FC", "LFE", "SL", "SR"]}
+            },
+            "confidence": 0.99,
+            "source": {"kind": "replay", "id": "fixture:dts", "sequence": 1},
+            "observedAt": "2026-08-22T16:00:04Z"
+          },
+          "expected": {
+            "choice": "decode",
+            "decisionStatus": "resolved",
+            "reason": "observed_decoded_output_authoritative",
+            "schedulerStatus": "scheduled",
+            "scheduleResolution": true,
+            "outputChannels": 6
+          }
+        }
+      ]
+    },
+    {
+      "id": "codec-change",
+      "observations": [
+        {
+          "observationWindowMs": 500,
+          "observedAtMs": 1000,
+          "decoderAvailable": true,
+          "processorHealth": "ready",
+          "descriptor": {
+            "version": 1,
+            "transport": {
+              "kind": "iec61937",
+              "format": {"sampleFormat": "S16LE", "rate": 48000, "layout": {"channels": 2}}
+            },
+            "content": {"kind": "encoded", "codec": "ac3"},
+            "decodedOutput": {"sampleFormat": "FLOAT32LE", "rate": 48000, "layout": {"channels": 6}},
+            "confidence": 0.99,
+            "source": {"kind": "replay", "id": "fixture:codec-change", "sequence": 1},
+            "observedAt": "2026-08-22T16:00:05Z"
+          },
+          "expected": {
+            "choice": "decode",
+            "decisionStatus": "resolved",
+            "reason": "observed_decoded_output_authoritative",
+            "schedulerStatus": "scheduled",
+            "scheduleResolution": true,
+            "outputChannels": 6
+          }
+        },
+        {
+          "observationWindowMs": 500,
+          "observedAtMs": 1500,
+          "decoderAvailable": true,
+          "processorHealth": "ready",
+          "descriptor": {
+            "version": 1,
+            "transport": {
+              "kind": "iec61937",
+              "format": {"sampleFormat": "S16LE", "rate": 48000, "layout": {"channels": 2}}
+            },
+            "content": {"kind": "encoded", "codec": "dts"},
+            "decodedOutput": {"sampleFormat": "FLOAT32LE", "rate": 48000, "layout": {"channels": 6}},
+            "confidence": 0.99,
+            "source": {"kind": "replay", "id": "fixture:codec-change", "sequence": 2},
+            "observedAt": "2026-08-22T16:00:06Z"
+          },
+          "expected": {
+            "choice": "decode",
+            "decisionStatus": "resolved",
+            "reason": "observed_decoded_output_authoritative",
+            "schedulerStatus": "scheduled",
+            "scheduleResolution": true,
+            "outputChannels": 6
+          }
+        }
+      ]
+    },
+    {
+      "id": "stereo-in-codec",
+      "observations": [
+        {
+          "observationWindowMs": 500,
+          "observedAtMs": 1000,
+          "decoderAvailable": true,
+          "processorHealth": "ready",
+          "descriptor": {
+            "version": 1,
+            "transport": {
+              "kind": "iec61937",
+              "format": {"sampleFormat": "S16LE", "rate": 48000, "layout": {"channels": 2}}
+            },
+            "content": {"kind": "encoded", "codec": "ac3"},
+            "decodedOutput": {
+              "sampleFormat": "FLOAT32LE",
+              "rate": 48000,
+              "layout": {"channels": 2, "positions": ["FL", "FR"]}
+            },
+            "confidence": 0.99,
+            "source": {"kind": "replay", "id": "fixture:stereo-ac3", "sequence": 1},
+            "observedAt": "2026-08-22T16:00:07Z"
+          },
+          "expected": {
+            "choice": "decode",
+            "decisionStatus": "resolved",
+            "reason": "observed_decoded_output_authoritative",
+            "schedulerStatus": "scheduled",
+            "scheduleResolution": true,
+            "outputChannels": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "unsupported-codec",
+      "observations": [
+        {
+          "observationWindowMs": 500,
+          "observedAtMs": 1000,
+          "decoderAvailable": true,
+          "processorHealth": "ready",
+          "descriptor": {
+            "version": 1,
+            "transport": {
+              "kind": "iec61937",
+              "format": {"sampleFormat": "S16LE", "rate": 48000, "layout": {"channels": 2}}
+            },
+            "content": {"kind": "encoded", "codec": "truehd"},
+            "decodedOutput": null,
+            "confidence": 0.99,
+            "source": {"kind": "replay", "id": "fixture:unsupported", "sequence": 1},
+            "observedAt": "2026-08-22T16:00:08Z"
+          },
+          "expected": {
+            "choice": "error",
+            "decisionStatus": "error",
+            "reason": "unsupported_codec_error_policy",
+            "schedulerStatus": "scheduled",
+            "scheduleResolution": true,
+            "outputChannels": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "false-preamble",
+      "observations": [
+        {
+          "observationWindowMs": 500,
+          "observedAtMs": 1000,
+          "decoderAvailable": true,
+          "processorHealth": "ready",
+          "descriptor": {
+            "version": 1,
+            "transport": {
+              "kind": "pcm",
+              "format": {"sampleFormat": "S16LE", "rate": 48000, "layout": {"channels": 2}}
+            },
+            "content": {"kind": "pcm"},
+            "decodedOutput": null,
+            "confidence": 0.99,
+            "source": {"kind": "replay", "id": "fixture:false-preamble", "sequence": 1},
+            "observedAt": "2026-08-22T16:00:09Z"
+          },
+          "expected": {
+            "choice": "pcm-bypass",
+            "decisionStatus": "resolved",
+            "reason": "pcm_bypass_explicitly_allowed",
+            "schedulerStatus": "scheduled",
+            "scheduleResolution": true,
+            "outputChannels": 2
+          }
+        },
+        {
+          "observationWindowMs": 30,
+          "observedAtMs": 1030,
+          "decoderAvailable": true,
+          "processorHealth": "detecting",
+          "descriptor": {
+            "version": 1,
+            "transport": {
+              "kind": "iec61937",
+              "format": {"sampleFormat": "S16LE", "rate": 48000, "layout": {"channels": 2}}
+            },
+            "content": {"kind": "encoded", "codec": "ac3"},
+            "decodedOutput": null,
+            "confidence": 0.4,
+            "source": {"kind": "replay", "id": "fixture:false-preamble", "sequence": 2},
+            "observedAt": "2026-08-22T16:00:09.030Z"
+          },
+          "expected": {
+            "choice": "waiting",
+            "decisionStatus": "waiting",
+            "reason": "signal_confidence_below_minimum",
+            "schedulerStatus": "ignored",
+            "schedulerReason": "confidence_below_switch_threshold",
+            "scheduleResolution": false,
+            "activeContent": "pcm",
+            "outputChannels": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "status-failure",
+      "observations": [
+        {
+          "observationWindowMs": 500,
+          "observedAtMs": 1000,
+          "decoderAvailable": false,
+          "processorHealth": "status-channel-failed",
+          "descriptor": {
+            "version": 1,
+            "transport": {
+              "kind": "iec61937",
+              "format": {"sampleFormat": "S16LE", "rate": 48000, "layout": {"channels": 2}}
+            },
+            "content": {"kind": "encoded", "codec": "ac3"},
+            "decodedOutput": null,
+            "confidence": 0.99,
+            "source": {"kind": "replay", "id": "fixture:status-failure", "sequence": 1},
+            "observedAt": "2026-08-22T16:00:10Z"
+          },
+          "expected": {
+            "choice": "decode",
+            "decisionStatus": "waiting",
+            "reason": "decoder_unavailable",
+            "schedulerStatus": "scheduled",
+            "scheduleResolution": true,
+            "outputChannels": null
+          }
+        }
+      ]
+    }
+  ]
+}

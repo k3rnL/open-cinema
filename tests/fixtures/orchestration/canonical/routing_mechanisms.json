@@ -1,0 +1,99 @@
+{
+  "fixtureVersion": "open-cinema.routing-mechanism-evaluation/v1",
+  "desiredGraph": "graph:canonical-home-cinema",
+  "decisionRule": "Use WirePlumber default/target metadata for every one-to-one ordinary route; create raw links only for an explicitly planned advanced shape that metadata cannot express.",
+  "canonicalRequiresRawLinks": false,
+  "canonicalStages": [
+    {
+      "id": "selected-programme-to-decoder",
+      "shape": "one-to-one-capture",
+      "mechanism": "stream-target-metadata",
+      "subject": "managed decoder capture stream",
+      "target": "selected TV or Bluetooth Audio/Source endpoint",
+      "rawManagedLinks": false
+    },
+    {
+      "id": "decoder-to-camilladsp",
+      "shape": "one-to-one-processor-chain",
+      "mechanism": "stream-target-metadata",
+      "subject": "managed decoder playback stream",
+      "target": "prepared CamillaDSP input node",
+      "rawManagedLinks": false
+    },
+    {
+      "id": "camilladsp-to-selected-output",
+      "shape": "one-to-one-playback",
+      "mechanism": "stream-target-metadata",
+      "subject": "managed CamillaDSP playback stream",
+      "target": "selected main-speaker or headset Audio/Sink endpoint",
+      "rawManagedLinks": false
+    },
+    {
+      "id": "ordinary-follow-default-playback",
+      "shape": "one-to-one-unpinned-playback",
+      "mechanism": "configured-default-metadata",
+      "subject": "ordinary movable playback streams governed by follow-default policy",
+      "target": "selected main-speaker or headset Audio/Sink endpoint",
+      "rawManagedLinks": false
+    }
+  ],
+  "canonicalCases": [
+    {"id": "case:tv-pcm-main-speakers", "rawManagedLinks": false},
+    {"id": "case:bluetooth-main-speakers", "rawManagedLinks": false},
+    {"id": "case:headset-overrides-output", "rawManagedLinks": false},
+    {"id": "case:headset-removed-restores-speakers", "rawManagedLinks": false},
+    {"id": "case:tv-ac3-decoded-to-room", "rawManagedLinks": false}
+  ],
+  "advancedShapes": [
+    {
+      "id": "controlled-fan-out",
+      "mechanism": "explicit-managed-links",
+      "rawManagedLinks": true,
+      "reason": "One target.object value cannot route one stream concurrently to several independently verified outputs.",
+      "requiredOwnership": "open-cinema.orchestrator",
+      "processorRequirement": "Use a declared fan-out/adapter processor when format, clock, latency, or channel contracts differ between branches."
+    },
+    {
+      "id": "multi-source-mixer",
+      "mechanism": "managed-mixer-and-explicit-internal-links",
+      "rawManagedLinks": true,
+      "reason": "Default and target metadata select destinations; they do not define gains or combine several sources into one signal.",
+      "requiredOwnership": "open-cinema.orchestrator",
+      "processorRequirement": "A declared mixer processor owns mixing semantics; links only connect its planned inputs and output."
+    },
+    {
+      "id": "stable-processor-internal-topology",
+      "mechanism": "explicit-managed-links-if-target-metadata-is-insufficient",
+      "rawManagedLinks": "conditional",
+      "reason": "Use explicit links only when a prepared processor exposes fixed ports or channel-specific topology that WirePlumber target metadata cannot represent.",
+      "requiredOwnership": "open-cinema.orchestrator",
+      "processorRequirement": "The processor plan must declare every internal link; topology is never inferred from the live graph."
+    }
+  ],
+  "evidence": [
+    {
+      "repository": "wyreplumber",
+      "path": "tests/test_runtime_metadata_controls.py",
+      "claim": "A real WirePlumber policy process routes an ordinary playback stream through configured default metadata and moves it through target.object without owned raw links."
+    },
+    {
+      "repository": "wyreplumber",
+      "path": "tests/test_runtime_managed_links.py",
+      "claim": "Explicit links are uniquely owner-tagged, idempotent, and cannot adopt or remove unmanaged topology."
+    },
+    {
+      "repository": "wyreplumber",
+      "path": "docs/runtime-contract-v1.md",
+      "claim": "The released binding contract records the default/target versus managed-link boundary."
+    },
+    {
+      "repository": "open-cinema-ui",
+      "path": "apps/admin/src/pages/pipelines/edit.tsx",
+      "claim": "The existing editor represents user-facing graph intent; runtime mechanism remains a backend plan/explanation concern for the future orchestration UI."
+    }
+  ],
+  "pendingAcceptance": [
+    "The released binding integration test proves ordinary playback default/target movement; capture-stream and complete decoder/CamillaDSP chain acceptance remains task 13.7.",
+    "Target Raspberry Pi timing and audio-gap behavior remain deferred hardware measurements and do not change this mechanism boundary."
+  ]
+}

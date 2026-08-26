@@ -1,0 +1,249 @@
+{
+  "fixtureVersion": "open-cinema.runtime-endpoints/v1",
+  "source": "sanitized WirePlumber 0.5 native snapshot payloads",
+  "snapshots": {
+    "connected": {
+      "payload_version": 1,
+      "generation": 41,
+      "sequence": 120,
+      "captured_at": "2026-08-22T14:00:00Z",
+      "health": {"state": "connected", "generation": 41, "reason": null, "details": {}},
+      "devices": [
+        {
+          "id": 10,
+          "properties": {
+            "device.name": "alsa_card.usb-room-dac",
+            "device.description": "Room USB DAC",
+            "device.serial": "USB-DAC-001",
+            "device.bus": "usb",
+            "api.alsa.path": "hw:RoomDAC"
+          },
+          "parameter_ids": []
+        },
+        {
+          "id": 20,
+          "properties": {
+            "device.name": "alsa_card.hdmi",
+            "device.description": "AV receiver HDMI",
+            "device.bus": "pci",
+            "api.alsa.path": "hdmi:0,0"
+          },
+          "parameter_ids": []
+        },
+        {
+          "id": 30,
+          "properties": {
+            "device.name": "alsa_card.platform-tv-capture",
+            "device.description": "TV SPDIF capture",
+            "device.bus": "platform",
+            "device.bus-id": "platform-fe203000.i2s",
+            "api.alsa.path": "hw:TVCapture"
+          },
+          "parameter_ids": []
+        },
+        {
+          "id": 40,
+          "properties": {
+            "device.name": "bluez_card.phone",
+            "device.description": "Programme phone",
+            "device.bus": "bluetooth",
+            "api.bluez5.address": "AA:BB:CC:00:00:01"
+          },
+          "parameter_ids": []
+        },
+        {
+          "id": 50,
+          "properties": {
+            "device.name": "bluez_card.headset",
+            "device.description": "Living room headset",
+            "device.bus": "bluetooth",
+            "api.bluez5.address": "AA:BB:CC:00:00:02"
+          },
+          "parameter_ids": []
+        },
+        {
+          "id": 60,
+          "properties": {
+            "device.name": "alsa_card.generic-a",
+            "device.description": "Generic USB Audio",
+            "device.bus": "usb"
+          },
+          "parameter_ids": []
+        },
+        {
+          "id": 61,
+          "properties": {
+            "device.name": "alsa_card.generic-b",
+            "device.description": "Generic USB Audio",
+            "device.bus": "usb"
+          },
+          "parameter_ids": []
+        }
+      ],
+      "nodes": [
+        {
+          "id": 110,
+          "state": 2,
+          "error": null,
+          "properties": {
+            "device.id": 10,
+            "node.name": "alsa_output.usb-room-dac",
+            "node.description": "Main speakers",
+            "media.class": "Audio/Sink"
+          },
+          "parameter_ids": []
+        },
+        {
+          "id": 120,
+          "state": 2,
+          "error": null,
+          "properties": {
+            "device.id": 20,
+            "node.name": "alsa_output.hdmi-avr",
+            "node.description": "HDMI receiver",
+            "media.class": "Audio/Sink"
+          },
+          "parameter_ids": []
+        },
+        {
+          "id": 130,
+          "state": 2,
+          "error": null,
+          "properties": {
+            "device.id": 30,
+            "node.name": "alsa_input.tv-spdif",
+            "node.description": "TV SPDIF",
+            "media.class": "Audio/Source"
+          },
+          "parameter_ids": []
+        },
+        {
+          "id": 140,
+          "state": 3,
+          "error": null,
+          "properties": {
+            "device.id": 40,
+            "node.name": "bluez_input.phone",
+            "node.description": "Bluetooth programme source",
+            "media.class": "Audio/Source"
+          },
+          "parameter_ids": []
+        },
+        {
+          "id": 150,
+          "state": 2,
+          "error": null,
+          "properties": {
+            "device.id": 50,
+            "node.name": "bluez_output.headset",
+            "node.description": "Bluetooth headset",
+            "media.class": "Audio/Sink"
+          },
+          "parameter_ids": []
+        },
+        {
+          "id": 160,
+          "state": 2,
+          "error": null,
+          "properties": {
+            "node.name": "opencinema.camilladsp.room.input",
+            "node.description": "CamillaDSP room processor input",
+            "media.class": "Audio/Sink",
+            "open-cinema.endpoint-id": "processor:camilladsp:room:input",
+            "opencinema.processor.kind": "camilladsp",
+            "opencinema.processor.instance": "room",
+            "opencinema.processor.port": "input"
+          },
+          "parameter_ids": []
+        },
+        {
+          "id": 170,
+          "state": 2,
+          "error": null,
+          "properties": {
+            "device.id": 60,
+            "node.name": "alsa_output.generic-a",
+            "node.description": "Generic USB Audio",
+            "media.class": "Audio/Sink"
+          },
+          "parameter_ids": []
+        },
+        {
+          "id": 171,
+          "state": 2,
+          "error": null,
+          "properties": {
+            "device.id": 61,
+            "node.name": "alsa_output.generic-b",
+            "node.description": "Generic USB Audio",
+            "media.class": "Audio/Sink"
+          },
+          "parameter_ids": []
+        }
+      ],
+      "ports": [],
+      "links": [],
+      "metadata": [],
+      "parameters": [],
+      "profiles": [],
+      "routes": [],
+      "defaults": []
+    },
+    "headset_disconnected": {
+      "payload_version": 1,
+      "generation": 41,
+      "sequence": 135,
+      "captured_at": "2026-08-22T14:05:00Z",
+      "health": {"state": "connected", "generation": 41, "reason": null, "details": {}},
+      "devices": [],
+      "nodes": [],
+      "ports": [],
+      "links": [],
+      "metadata": [],
+      "parameters": [],
+      "profiles": [],
+      "routes": [],
+      "defaults": []
+    },
+    "headset_after_restart": {
+      "payload_version": 1,
+      "generation": 42,
+      "sequence": 4,
+      "captured_at": "2026-08-22T14:06:00Z",
+      "health": {"state": "connected", "generation": 42, "reason": null, "details": {}},
+      "devices": [
+        {
+          "id": 2050,
+          "properties": {
+            "device.name": "bluez_card.headset",
+            "device.description": "Living room headset",
+            "device.bus": "bluetooth",
+            "api.bluez5.address": "AA:BB:CC:00:00:02"
+          },
+          "parameter_ids": []
+        }
+      ],
+      "nodes": [
+        {
+          "id": 2150,
+          "state": 2,
+          "error": null,
+          "properties": {
+            "device.id": 2050,
+            "node.name": "bluez_output.headset",
+            "node.description": "Bluetooth headset",
+            "media.class": "Audio/Sink"
+          },
+          "parameter_ids": []
+        }
+      ],
+      "ports": [],
+      "links": [],
+      "metadata": [],
+      "parameters": [],
+      "profiles": [],
+      "routes": [],
+      "defaults": []
+    }
+  }
+}

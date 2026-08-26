@@ -1,0 +1,81 @@
+---
+contract_set: open-cinema-audio-orchestration
+contract_set_version: 1
+
+components:
+  open-cinema:
+    role: durable intent, resolution, orchestration API, and reconciliation
+    baseline: 4a2ec1a3476e612977ec11e2408d3b85e2cb8ba4
+  wyreplumber:
+    role: detached WirePlumber observation and runtime controls
+    baseline: e58456fd9b1f94b778b39f5529ba10d16bdc68c3
+  open-cinema-ui:
+    role: desired graph editing, rules, explanations, and runtime projection
+    baseline: a1933d5eccc63f7c9f811424cca5dc167967a0da
+  pcm-auto-decoder:
+    role: adaptive IEC-61937 detection and PCM decoding
+    baseline: e1be22be3759dd67b0a3bd21384eaab33f87c2c2
+  deployment:
+    role: version selection, installation, preflight, and service ordering
+    baseline: 4a2ec1a3476e612977ec11e2408d3b85e2cb8ba4
+
+contracts:
+  persistent-orchestration-schema:
+    producer: open-cinema
+    consumers: [open-cinema]
+    supported_major: 1
+    detection: backend process startup reads the singleton database marker
+    failure: refuse process startup without writing the database
+  desired-graph-document:
+    producer: open-cinema
+    consumers: [open-cinema, open-cinema-ui]
+    supported_major: 1
+    detection: validate schemaVersion before import, publication, or activation
+    failure: preserve the opaque document and reject mutation or activation
+  orchestration-http-api:
+    producer: open-cinema
+    consumers: [open-cinema-ui, deployment]
+    supported_major: 1
+    detection: GET /api/audio/v1/schema before enabling audio controls
+    failure: UI remains diagnostic and displays an incompatible API message
+  wyreplumber-runtime:
+    producer: wyreplumber
+    consumers: [open-cinema, deployment]
+    supported_major: 1
+    wireplumber_api_family: "0.5"
+    detection: import metadata and initial snapshot handshake before observation is ready
+    failure: runtime health is incompatible and reconciliation remains paused
+  decoder-status:
+    producer: pcm-auto-decoder
+    consumers: [open-cinema, deployment]
+    supported_major: 1
+    transport: newline-delimited JSON over a Unix domain socket
+    detection: status handshake before a decoder instance may enter ready state
+    failure: processor health is incompatible and its route cannot activate
+
+version_policy:
+  missing_version: reject
+  major_mismatch: reject
+  newer_minor_same_major: accept_only_when_required_fields_and_capabilities_are_supported
+  unknown_required_capability: reject
+  unknown_optional_field: preserve_or_ignore
+
+activation_gates:
+  - order: 1
+    id: deployment-preflight
+    verifies: platform and installed runtime family
+  - order: 2
+    id: persistent-schema-startup
+    verifies: persistent-orchestration-schema
+  - order: 3
+    id: runtime-handshake
+    verifies: wyreplumber-runtime and coherent initial snapshot
+  - order: 4
+    id: processor-handshake
+    verifies: decoder-status and configured processing drivers
+  - order: 5
+    id: client-handshake
+    verifies: orchestration-http-api and desired-graph-document
+  - order: 6
+    id: graph-activation
+    verifies: all preceding gates passed for the coordinated release

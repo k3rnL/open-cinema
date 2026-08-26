@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import os
 import environ
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -19,37 +20,216 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Initialize environ
 env = environ.Env(
     DJANGO_DEBUG=(bool, True),
-    DJANGO_ALLOWED_HOSTS=(list, ['*']),
+    DJANGO_ALLOWED_HOSTS=(list, ["*"]),
+    OPEN_CINEMA_AUDIO_ORCHESTRATION_API=(bool, False),
+    OPEN_CINEMA_AUDIO_RUNTIME_OBSERVATION=(bool, False),
+    OPEN_CINEMA_AUDIO_SHADOW_RESOLUTION=(bool, False),
+    OPEN_CINEMA_AUDIO_PROCESSOR_MANAGEMENT=(bool, False),
+    OPEN_CINEMA_AUDIO_LIVE_RECONCILIATION=(bool, False),
+    OPEN_CINEMA_AUDIO_LIVE_GRAPH_ALLOWLIST=(list, []),
+    OPEN_CINEMA_CAMILLADSP_INSTANCE_COUNT=(int, 1),
+    OPEN_CINEMA_DECODER_INSTANCE_COUNT=(int, 1),
+    OPEN_CINEMA_AUDIO_AUDIT_MAX_RECORDS=(int, 10000),
+    OPEN_CINEMA_AUDIO_PLAN_RETENTION_DAYS=(int, 30),
+    OPEN_CINEMA_AUDIO_AUDIT_RETENTION_DAYS=(int, 30),
+    OPEN_CINEMA_AUDIO_DIAGNOSTIC_RETENTION_HOURS=(int, 24),
+    OPEN_CINEMA_AUDIO_RUNTIME_PROJECTION_RETENTION_HOURS=(int, 24),
+    OPEN_CINEMA_AUDIO_RETENTION_BATCH_SIZE=(int, 1000),
+    OPEN_CINEMA_AUDIO_GRAPH_MAX_NODES=(int, 256),
+    OPEN_CINEMA_AUDIO_GRAPH_MAX_EDGES=(int, 1024),
+    OPEN_CINEMA_AUDIO_GRAPH_MAX_PATH_DEPTH=(int, 64),
+    OPEN_CINEMA_AUDIO_GRAPH_MAX_DOCUMENT_BYTES=(int, 1048576),
+    OPEN_CINEMA_AUDIO_SUBGRAPH_MAX_DEPTH=(int, 8),
+    OPEN_CINEMA_AUDIO_CONDITION_MAX_DEPTH=(int, 16),
+    OPEN_CINEMA_AUDIO_CONDITION_MAX_NODES=(int, 128),
+    OPEN_CINEMA_AUDIO_CONDITION_MAX_GROUP_ARGUMENTS=(int, 32),
+    OPEN_CINEMA_AUDIO_CONDITION_MAX_MEMBERSHIP_VALUES=(int, 64),
+    OPEN_CINEMA_AUDIO_CONDITION_MAX_DOCUMENT_BYTES=(int, 32768),
+    OPEN_CINEMA_AUDIO_RECONCILIATION_MAX_PENDING_GRAPHS=(int, 256),
+    OPEN_CINEMA_AUDIO_RECONCILIATION_MAX_CAUSES=(int, 32),
+    OPEN_CINEMA_AUDIO_RECONCILIATION_CATCHUP_MAX_PASSES=(int, 8),
+    OPEN_CINEMA_AUDIO_RECONCILIATION_RETRY_INITIAL_SECONDS=(float, 0.1),
+    OPEN_CINEMA_AUDIO_RECONCILIATION_RETRY_MAX_SECONDS=(float, 2.0),
+    OPEN_CINEMA_AUDIO_RECONCILIATION_RETRY_MULTIPLIER=(float, 2.0),
+    OPEN_CINEMA_AUDIO_ACTION_MAX_TIMEOUT_SECONDS=(float, 30.0),
+    OPEN_CINEMA_AUDIO_ACTION_MAX_ATTEMPTS=(int, 5),
+    OPEN_CINEMA_AUDIO_ACTION_MAX_RETRY_DELAY_SECONDS=(float, 30.0),
+    OPEN_CINEMA_SQLITE_BUSY_TIMEOUT_MS=(int, 5000),
+    OPEN_CINEMA_SQLITE_WAL_AUTOCHECKPOINT_PAGES=(int, 1000),
+    OPEN_CINEMA_ORCHESTRATOR_LOCK_RETRY_SECONDS=(float, 1.0),
+    OPEN_CINEMA_ORCHESTRATOR_CONNECTION_PROBE_SECONDS=(float, 5.0),
+    OPEN_CINEMA_RUNTIME_REDIS_TTL_SECONDS=(int, 30),
+    OPEN_CINEMA_RUNTIME_REDIS_MAX_BYTES=(int, 262144),
+    OPEN_CINEMA_RUNTIME_REDIS_MAX_ENDPOINTS=(int, 256),
+    OPEN_CINEMA_DESIRED_STATE_POLL_SECONDS=(float, 1.0),
+    OPEN_CINEMA_REDIS_EVENT_MAX_ENTRIES=(int, 2000),
+    OPEN_CINEMA_REDIS_EVENT_MAX_BYTES=(int, 65536),
+    OPEN_CINEMA_REDIS_EVENT_TTL_SECONDS=(int, 3600),
+    OPEN_CINEMA_RECONNECT_INITIAL_SECONDS=(float, 0.25),
+    OPEN_CINEMA_RECONNECT_MAX_SECONDS=(float, 30.0),
+    OPEN_CINEMA_RECONNECT_MULTIPLIER=(float, 2.0),
+    OPEN_CINEMA_RECONNECT_JITTER_RATIO=(float, 0.2),
+    OPEN_CINEMA_AUDIO_ADAPTER_RETRY_INITIAL_SECONDS=(float, 0.25),
+    OPEN_CINEMA_AUDIO_ADAPTER_RETRY_MAX_SECONDS=(float, 30.0),
+    OPEN_CINEMA_AUDIO_ADAPTER_RETRY_MULTIPLIER=(float, 2.0),
+    OPEN_CINEMA_AUDIO_ADAPTER_STOP_TIMEOUT_SECONDS=(float, 3.0),
 )
 
 # Read .env file if it exists
-environ.Env.read_env(BASE_DIR / '.env')
+environ.Env.read_env(BASE_DIR / ".env")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env('DJANGO_SECRET_KEY', default='django-insecure-avx95&06=8uya=(e89c#qf6(aml4ox055kle7u0v5z!n(d5i81')
+SECRET_KEY = env(
+    "DJANGO_SECRET_KEY",
+    default="django-insecure-avx95&06=8uya=(e89c#qf6(aml4ox055kle7u0v5z!n(d5i81",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env.bool('DJANGO_DEBUG')
+DEBUG = env.bool("DJANGO_DEBUG")
 
-ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS')
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
+
+# Incremental audio-orchestration rollout. All capabilities are disabled by
+# default; the runtime mutation gate additionally requires observation, shadow
+# resolution, processor management, and live reconciliation to be enabled.
+AUDIO_ORCHESTRATION_FEATURES = {
+    "orchestration_api": env.bool("OPEN_CINEMA_AUDIO_ORCHESTRATION_API"),
+    "runtime_observation": env.bool("OPEN_CINEMA_AUDIO_RUNTIME_OBSERVATION"),
+    "shadow_resolution": env.bool("OPEN_CINEMA_AUDIO_SHADOW_RESOLUTION"),
+    "processor_management": env.bool("OPEN_CINEMA_AUDIO_PROCESSOR_MANAGEMENT"),
+    "live_reconciliation": env.bool("OPEN_CINEMA_AUDIO_LIVE_RECONCILIATION"),
+}
+AUDIO_LIVE_GRAPH_ALLOWLIST = tuple(
+    env.list("OPEN_CINEMA_AUDIO_LIVE_GRAPH_ALLOWLIST")
+)
+AUDIO_PROCESSOR_CAPACITY = {
+    "camilladsp": env.int("OPEN_CINEMA_CAMILLADSP_INSTANCE_COUNT"),
+    "decoder": env.int("OPEN_CINEMA_DECODER_INSTANCE_COUNT"),
+}
+AUDIO_ORCHESTRATION_AUDIT_MAX_RECORDS = env.int("OPEN_CINEMA_AUDIO_AUDIT_MAX_RECORDS")
+AUDIO_ORCHESTRATION_RETENTION = {
+    "plan_days": env.int("OPEN_CINEMA_AUDIO_PLAN_RETENTION_DAYS"),
+    "audit_days": env.int("OPEN_CINEMA_AUDIO_AUDIT_RETENTION_DAYS"),
+    "diagnostic_hours": env.int("OPEN_CINEMA_AUDIO_DIAGNOSTIC_RETENTION_HOURS"),
+    "runtime_projection_hours": env.int("OPEN_CINEMA_AUDIO_RUNTIME_PROJECTION_RETENTION_HOURS"),
+    "batch_size": env.int("OPEN_CINEMA_AUDIO_RETENTION_BATCH_SIZE"),
+}
+AUDIO_GRAPH_VALIDATION_LIMITS = {
+    "max_nodes": env.int("OPEN_CINEMA_AUDIO_GRAPH_MAX_NODES"),
+    "max_edges": env.int("OPEN_CINEMA_AUDIO_GRAPH_MAX_EDGES"),
+    "max_path_depth": env.int("OPEN_CINEMA_AUDIO_GRAPH_MAX_PATH_DEPTH"),
+    "max_document_bytes": env.int("OPEN_CINEMA_AUDIO_GRAPH_MAX_DOCUMENT_BYTES"),
+}
+AUDIO_SUBGRAPH_MAX_DEPTH = env.int("OPEN_CINEMA_AUDIO_SUBGRAPH_MAX_DEPTH")
+AUDIO_CONDITION_VALIDATION_LIMITS = {
+    "max_depth": env.int("OPEN_CINEMA_AUDIO_CONDITION_MAX_DEPTH"),
+    "max_nodes": env.int("OPEN_CINEMA_AUDIO_CONDITION_MAX_NODES"),
+    "max_group_arguments": env.int("OPEN_CINEMA_AUDIO_CONDITION_MAX_GROUP_ARGUMENTS"),
+    "max_membership_values": env.int(
+        "OPEN_CINEMA_AUDIO_CONDITION_MAX_MEMBERSHIP_VALUES"
+    ),
+    "max_document_bytes": env.int("OPEN_CINEMA_AUDIO_CONDITION_MAX_DOCUMENT_BYTES"),
+}
+AUDIO_RECONCILIATION_QUEUE_LIMITS = {
+    "max_pending_graphs": env.int(
+        "OPEN_CINEMA_AUDIO_RECONCILIATION_MAX_PENDING_GRAPHS"
+    ),
+    "max_causes": env.int("OPEN_CINEMA_AUDIO_RECONCILIATION_MAX_CAUSES"),
+}
+AUDIO_RECONCILIATION_CATCHUP = {
+    "max_passes": env.int("OPEN_CINEMA_AUDIO_RECONCILIATION_CATCHUP_MAX_PASSES"),
+    "retry_initial_seconds": env.float(
+        "OPEN_CINEMA_AUDIO_RECONCILIATION_RETRY_INITIAL_SECONDS"
+    ),
+    "retry_max_seconds": env.float(
+        "OPEN_CINEMA_AUDIO_RECONCILIATION_RETRY_MAX_SECONDS"
+    ),
+    "retry_multiplier": env.float(
+        "OPEN_CINEMA_AUDIO_RECONCILIATION_RETRY_MULTIPLIER"
+    ),
+}
+AUDIO_ACTION_EXECUTION_LIMITS = {
+    "max_timeout_seconds": env.float("OPEN_CINEMA_AUDIO_ACTION_MAX_TIMEOUT_SECONDS"),
+    "max_attempts": env.int("OPEN_CINEMA_AUDIO_ACTION_MAX_ATTEMPTS"),
+    "max_retry_delay_seconds": env.float(
+        "OPEN_CINEMA_AUDIO_ACTION_MAX_RETRY_DELAY_SECONDS"
+    ),
+}
+AUDIO_ORCHESTRATOR_LOCK_PATH = env(
+    "OPEN_CINEMA_ORCHESTRATOR_LOCK_PATH",
+    default=f"/tmp/open-cinema-orchestrator-{os.getuid()}.lock",
+)
+AUDIO_ORCHESTRATOR_LOCK_RETRY_SECONDS = env.float("OPEN_CINEMA_ORCHESTRATOR_LOCK_RETRY_SECONDS")
+AUDIO_ORCHESTRATOR_CONNECTION_PROBE_SECONDS = env.float(
+    "OPEN_CINEMA_ORCHESTRATOR_CONNECTION_PROBE_SECONDS"
+)
+AUDIO_RUNTIME_REDIS_PROJECTION = {
+    "url": env(
+        "OPEN_CINEMA_RUNTIME_REDIS_URL",
+        default=env("CELERY_BROKER_URL", default="redis://172.17.0.1:6379/0"),
+    ),
+    "key": env(
+        "OPEN_CINEMA_RUNTIME_REDIS_KEY",
+        default="open-cinema:orchestration:runtime-world:v1",
+    ),
+    "ttl_seconds": env.int("OPEN_CINEMA_RUNTIME_REDIS_TTL_SECONDS"),
+    "max_bytes": env.int("OPEN_CINEMA_RUNTIME_REDIS_MAX_BYTES"),
+    "max_endpoints": env.int("OPEN_CINEMA_RUNTIME_REDIS_MAX_ENDPOINTS"),
+}
+AUDIO_DESIRED_STATE_MONITOR = {
+    "poll_seconds": env.float("OPEN_CINEMA_DESIRED_STATE_POLL_SECONDS"),
+    "channel": env(
+        "OPEN_CINEMA_DESIRED_STATE_REDIS_CHANNEL",
+        default="open-cinema:orchestration:desired-wakeup:v1",
+    ),
+}
+AUDIO_REDIS_EVENT_STREAM = {
+    "key": env(
+        "OPEN_CINEMA_REDIS_EVENT_STREAM_KEY",
+        default="open-cinema:orchestration:events:v1",
+    ),
+    "max_entries": env.int("OPEN_CINEMA_REDIS_EVENT_MAX_ENTRIES"),
+    "max_bytes": env.int("OPEN_CINEMA_REDIS_EVENT_MAX_BYTES"),
+    "ttl_seconds": env.int("OPEN_CINEMA_REDIS_EVENT_TTL_SECONDS"),
+}
+AUDIO_ORCHESTRATOR_RECONNECT = {
+    "initial_seconds": env.float("OPEN_CINEMA_RECONNECT_INITIAL_SECONDS"),
+    "max_seconds": env.float("OPEN_CINEMA_RECONNECT_MAX_SECONDS"),
+    "multiplier": env.float("OPEN_CINEMA_RECONNECT_MULTIPLIER"),
+    "jitter_ratio": env.float("OPEN_CINEMA_RECONNECT_JITTER_RATIO"),
+}
+AUDIO_ADAPTER_MEDIA_ROOT = Path(
+    env(
+        "OPEN_CINEMA_AUDIO_ADAPTER_MEDIA_ROOT",
+        default=str(BASE_DIR / "media" / "audio-adapters"),
+    )
+).resolve()
+AUDIO_ADAPTER_LIFECYCLE = {
+    "retry_initial_seconds": env.float(
+        "OPEN_CINEMA_AUDIO_ADAPTER_RETRY_INITIAL_SECONDS"
+    ),
+    "retry_max_seconds": env.float("OPEN_CINEMA_AUDIO_ADAPTER_RETRY_MAX_SECONDS"),
+    "retry_multiplier": env.float("OPEN_CINEMA_AUDIO_ADAPTER_RETRY_MULTIPLIER"),
+    "stop_timeout_seconds": env.float("OPEN_CINEMA_AUDIO_ADAPTER_STOP_TIMEOUT_SECONDS"),
+}
 
 
 # Application definition
 
 INSTALLED_APPS = [
-    'corsheaders',
-    'rest_framework',
-    'api.apps.ApiConfig',
-    'plugin.counter',  # Example plugin with models
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
+    "corsheaders",
+    "rest_framework",
+    "api.apps.ApiConfig",
+    "plugin.counter",  # Example plugin with models
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
 ]
 
 MIDDLEWARE = [
@@ -58,50 +238,66 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     # 'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = 'opencinema.urls'
+ROOT_URLCONF = "opencinema.urls"
 
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
+    "http://localhost:3000",
+    "http://localhost:3001",
     "http://localhost:5173",
 ]
 
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_EXPOSE_HEADERS = [
+    "ETag",
+    "Open-Cinema-API-Version",
 ]
 
-CSRF_EXEMPT_URLS = [r'^api/.*$']
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+CSRF_EXEMPT_URLS = [r"^api/.*$"]
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'opencinema.wsgi.application'
+WSGI_APPLICATION = "opencinema.wsgi.application"
 
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+SQLITE_BUSY_TIMEOUT_MS = env.int("OPEN_CINEMA_SQLITE_BUSY_TIMEOUT_MS")
+SQLITE_WAL_AUTOCHECKPOINT_PAGES = env.int(
+    "OPEN_CINEMA_SQLITE_WAL_AUTOCHECKPOINT_PAGES"
+)
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": Path(env("DATABASE_PATH", default=str(BASE_DIR / "db.sqlite3"))),
+        "OPTIONS": {
+            "timeout": SQLITE_BUSY_TIMEOUT_MS / 1000,
+        },
     }
 }
 
@@ -111,16 +307,16 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
@@ -128,9 +324,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = 'Europe/Paris'
+TIME_ZONE = "Europe/Paris"
 
 USE_I18N = True
 
@@ -140,42 +336,51 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = "static/"
 
 # Celery Configuration
 # In devcontainer, app service uses network_mode: service:redis, so localhost works
-CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://172.17.0.1:6379/0')
-CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://172.17.0.1:6379/0')
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://172.17.0.1:6379/0")
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://172.17.0.1:6379/0")
+CELERY_RESULT_EXPIRES = env.int("CELERY_RESULT_EXPIRES", default=3600)
+CELERY_TASK_IGNORE_RESULT = env.bool("CELERY_TASK_IGNORE_RESULT", default=True)
+CELERY_WORKER_PREFETCH_MULTIPLIER = env.int("CELERY_WORKER_PREFETCH_MULTIPLIER", default=1)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULE = {
+    "audio-orchestration-retention": {
+        "task": "api.cleanup_audio_orchestration_data",
+        "schedule": 3600.0,
+    },
+}
 
 # Logging configuration
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
-            'style': '{',
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {message}",
+            "style": "{",
         },
     },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
         },
     },
-    'root': {
-        'handlers': ['console'],
-        'level': 'INFO',
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
     },
-    'loggers': {
-        'django': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
         },
     },
 }

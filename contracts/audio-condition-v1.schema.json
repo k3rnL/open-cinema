@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-cinema.local/contracts/audio-condition-v1.schema.json",
+  "title": "Open Cinema audio condition AST v1",
+  "type": "object",
+  "required": ["version", "expression"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"const": 1},
+    "expression": {"$ref": "#/$defs/expression"}
+  },
+  "$defs": {
+    "fact": {
+      "type": "string",
+      "minLength": 1
+    },
+    "jsonValue": true,
+    "expression": {
+      "oneOf": [
+        {"$ref": "#/$defs/all"},
+        {"$ref": "#/$defs/any"},
+        {"$ref": "#/$defs/not"},
+        {"$ref": "#/$defs/eq"},
+        {"$ref": "#/$defs/ne"},
+        {"$ref": "#/$defs/lt"},
+        {"$ref": "#/$defs/lte"},
+        {"$ref": "#/$defs/gt"},
+        {"$ref": "#/$defs/gte"},
+        {"$ref": "#/$defs/in"},
+        {"$ref": "#/$defs/notIn"},
+        {"$ref": "#/$defs/exists"},
+        {"$ref": "#/$defs/stableFor"}
+      ]
+    },
+    "arguments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/expression"}
+    },
+    "all": {
+      "type": "object",
+      "required": ["op", "args"],
+      "additionalProperties": false,
+      "properties": {
+        "op": {"const": "all"},
+        "args": {"$ref": "#/$defs/arguments"}
+      }
+    },
+    "any": {
+      "type": "object",
+      "required": ["op", "args"],
+      "additionalProperties": false,
+      "properties": {
+        "op": {"const": "any"},
+        "args": {"$ref": "#/$defs/arguments"}
+      }
+    },
+    "not": {
+      "type": "object",
+      "required": ["op", "arg"],
+      "additionalProperties": false,
+      "properties": {
+        "op": {"const": "not"},
+        "arg": {"$ref": "#/$defs/expression"}
+      }
+    },
+    "comparisonProperties": {
+      "type": "object",
+      "required": ["op", "fact", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "op": {"type": "string"},
+        "fact": {"$ref": "#/$defs/fact"},
+        "value": {"$ref": "#/$defs/jsonValue"}
+      }
+    },
+    "eq": {
+      "$ref": "#/$defs/comparisonProperties",
+      "properties": {"op": {"const": "eq"}}
+    },
+    "ne": {
+      "$ref": "#/$defs/comparisonProperties",
+      "properties": {"op": {"const": "ne"}}
+    },
+    "lt": {
+      "$ref": "#/$defs/comparisonProperties",
+      "properties": {"op": {"const": "lt"}}
+    },
+    "lte": {
+      "$ref": "#/$defs/comparisonProperties",
+      "properties": {"op": {"const": "lte"}}
+    },
+    "gt": {
+      "$ref": "#/$defs/comparisonProperties",
+      "properties": {"op": {"const": "gt"}}
+    },
+    "gte": {
+      "$ref": "#/$defs/comparisonProperties",
+      "properties": {"op": {"const": "gte"}}
+    },
+    "membershipProperties": {
+      "type": "object",
+      "required": ["op", "fact", "values"],
+      "additionalProperties": false,
+      "properties": {
+        "op": {"type": "string"},
+        "fact": {"$ref": "#/$defs/fact"},
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/jsonValue"}
+        }
+      }
+    },
+    "in": {
+      "$ref": "#/$defs/membershipProperties",
+      "properties": {"op": {"const": "in"}}
+    },
+    "notIn": {
+      "$ref": "#/$defs/membershipProperties",
+      "properties": {"op": {"const": "not_in"}}
+    },
+    "exists": {
+      "type": "object",
+      "required": ["op", "fact"],
+      "additionalProperties": false,
+      "properties": {
+        "op": {"const": "exists"},
+        "fact": {"$ref": "#/$defs/fact"}
+      }
+    },
+    "stableFor": {
+      "type": "object",
+      "required": ["op", "arg", "durationMs"],
+      "additionalProperties": false,
+      "properties": {
+        "op": {"const": "stable_for"},
+        "arg": {"$ref": "#/$defs/expression"},
+        "durationMs": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

@@ -1,7 +1,4 @@
-from django.contrib import admin
+"""Django admin is intentionally not an Open Cinema end-user surface.
 
-# from api.models import Movie
-
-# Register your models here.
-
-# admin.site.register(Movie)
+Management workflows live in the dedicated apps/admin web application.
+"""

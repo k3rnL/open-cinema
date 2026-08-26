@@ -1,0 +1,19 @@
+title: Open Cinema native PipeWire validation
+description: Static fixture for the pinned CamillaDSP 4 engine parser.
+devices:
+  samplerate: 48000
+  chunksize: 1024
+  capture:
+    type: PipeWire
+    channels: 8
+    node_name: opencinema.camilladsp.fixture.capture
+    node_description: Open Cinema CamillaDSP Fixture Capture
+    node_group_name: opencinema.camilladsp.fixture.group
+    autoconnect_to: null
+  playback:
+    type: PipeWire
+    channels: 8
+    node_name: opencinema.camilladsp.fixture.playback
+    node_description: Open Cinema CamillaDSP Fixture Playback
+    node_group_name: opencinema.camilladsp.fixture.group
+    autoconnect_to: null

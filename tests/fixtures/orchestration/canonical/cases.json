@@ -1,0 +1,198 @@
+{
+  "fixtureVersion": "open-cinema.canonical-acceptance/v1",
+  "desiredGraph": "graph:canonical-home-cinema",
+  "cases": [
+    {
+      "id": "case:tv-pcm-main-speakers",
+      "trigger": "initial-snapshot",
+      "world": {
+        "version": 1,
+        "endpoints": {
+          "endpoint:tv": {"runtimeId": 41, "availability": "route-available", "activeSignal": true},
+          "endpoint:bluetooth-programme": {"availability": "unavailable", "activeSignal": false},
+          "endpoint:main-speakers": {"runtimeId": 52, "availability": "route-available", "channels": ["FL", "FR", "FC", "LFE", "SL", "SR"]},
+          "endpoint:headset": {"availability": "unavailable", "channels": ["FL", "FR"]}
+        },
+        "signals": {
+          "endpoint:tv": {"transport": {"format": "S16LE", "rate": 48000, "channels": 2}, "content": {"kind": "pcm"}, "confidence": 1.0}
+        },
+        "processors": {"decoder:tv": {"health": "ready"}, "camilladsp:main": {"health": "ready"}}
+      },
+      "expectedPlan": {
+        "status": "resolved",
+        "selectedInput": "endpoint:tv",
+        "selectedOutput": "endpoint:main-speakers",
+        "decoderMode": "pcm-bypass",
+        "decodedSignal": {"format": "S16LE", "rate": 48000, "channels": 2},
+        "camillaProfile": "camilladsp:living-room",
+        "actionIntent": ["prepare-camilladsp", "set-stream-target", "verify-route"]
+      },
+      "explanation": {
+        "input": {"selected": "endpoint:tv", "reason": "Bluetooth programme source is unavailable; TV fallback is eligible."},
+        "decoder": {"selected": "pcm-bypass", "reason": "The observed content is PCM and bypass is explicitly allowed."},
+        "output": {"selected": "endpoint:main-speakers", "reason": "Headset is unavailable; main speakers are the eligible fallback."}
+      },
+      "runtimeAssertions": [
+        {"path": "route.source.logicalEndpoint", "equals": "endpoint:tv"},
+        {"path": "route.sink.logicalEndpoint", "equals": "endpoint:main-speakers"},
+        {"path": "processors.decoder.mode", "equals": "pcm-bypass"},
+        {"path": "processors.camilladsp.profile", "equals": "camilladsp:living-room"}
+      ]
+    },
+    {
+      "id": "case:bluetooth-main-speakers",
+      "trigger": "endpoint:bluetooth-programme.activeSignal",
+      "world": {
+        "version": 2,
+        "endpoints": {
+          "endpoint:tv": {"runtimeId": 41, "availability": "route-available", "activeSignal": true},
+          "endpoint:bluetooth-programme": {"runtimeId": 63, "availability": "route-available", "activeSignal": true},
+          "endpoint:main-speakers": {"runtimeId": 52, "availability": "route-available", "channels": ["FL", "FR", "FC", "LFE", "SL", "SR"]},
+          "endpoint:headset": {"availability": "unavailable", "channels": ["FL", "FR"]}
+        },
+        "signals": {
+          "endpoint:tv": {"transport": {"format": "S16LE", "rate": 48000, "channels": 2}, "content": {"kind": "pcm"}, "confidence": 1.0},
+          "endpoint:bluetooth-programme": {"transport": {"format": "F32LE", "rate": 48000, "channels": 2}, "content": {"kind": "pcm"}, "confidence": 1.0}
+        },
+        "processors": {"decoder:bluetooth": {"health": "ready"}, "camilladsp:main": {"health": "ready"}}
+      },
+      "expectedPlan": {
+        "status": "resolved",
+        "selectedInput": "endpoint:bluetooth-programme",
+        "selectedOutput": "endpoint:main-speakers",
+        "decoderMode": "pcm-bypass",
+        "decodedSignal": {"format": "F32LE", "rate": 48000, "channels": 2},
+        "camillaProfile": "camilladsp:living-room",
+        "actionIntent": ["prepare-camilladsp", "set-stream-target", "verify-route"]
+      },
+      "explanation": {
+        "input": {"selected": "endpoint:bluetooth-programme", "reason": "Bluetooth is active and has priority 200 over TV priority 100."},
+        "decoder": {"selected": "pcm-bypass", "reason": "The Bluetooth content is PCM."},
+        "output": {"selected": "endpoint:main-speakers", "reason": "Headset is unavailable; main speakers remain eligible."}
+      },
+      "runtimeAssertions": [
+        {"path": "route.source.logicalEndpoint", "equals": "endpoint:bluetooth-programme"},
+        {"path": "route.sink.logicalEndpoint", "equals": "endpoint:main-speakers"},
+        {"path": "processors.camilladsp.profile", "equals": "camilladsp:living-room"}
+      ]
+    },
+    {
+      "id": "case:headset-overrides-output",
+      "trigger": "endpoint:headset.availability",
+      "world": {
+        "version": 3,
+        "endpoints": {
+          "endpoint:tv": {"runtimeId": 41, "availability": "route-available", "activeSignal": true},
+          "endpoint:bluetooth-programme": {"runtimeId": 63, "availability": "route-available", "activeSignal": true},
+          "endpoint:main-speakers": {"runtimeId": 52, "availability": "route-available", "channels": ["FL", "FR", "FC", "LFE", "SL", "SR"]},
+          "endpoint:headset": {"runtimeId": 78, "availability": "route-available", "channels": ["FL", "FR"]}
+        },
+        "signals": {
+          "endpoint:bluetooth-programme": {"transport": {"format": "F32LE", "rate": 48000, "channels": 2}, "content": {"kind": "pcm"}, "confidence": 1.0}
+        },
+        "processors": {"decoder:bluetooth": {"health": "ready"}, "camilladsp:headset": {"health": "ready"}}
+      },
+      "expectedPlan": {
+        "status": "resolved",
+        "selectedInput": "endpoint:bluetooth-programme",
+        "selectedOutput": "endpoint:headset",
+        "decoderMode": "pcm-bypass",
+        "decodedSignal": {"format": "F32LE", "rate": 48000, "channels": 2},
+        "camillaProfile": "camilladsp:headphone-stereo",
+        "actionIntent": ["prepare-headphone-profile", "suppress-room-output", "set-stream-target", "verify-route", "unsuppress-headset"]
+      },
+      "explanation": {
+        "input": {"selected": "endpoint:bluetooth-programme", "reason": "Bluetooth remains the highest-priority active programme source."},
+        "decoder": {"selected": "pcm-bypass", "reason": "The selected input is PCM."},
+        "output": {"selected": "endpoint:headset", "reason": "The headset is route-available and priority 300 overrides main speakers priority 100."}
+      },
+      "runtimeAssertions": [
+        {"path": "route.source.logicalEndpoint", "equals": "endpoint:bluetooth-programme"},
+        {"path": "route.sink.logicalEndpoint", "equals": "endpoint:headset"},
+        {"path": "processors.camilladsp.profile", "equals": "camilladsp:headphone-stereo"},
+        {"path": "managedOutputs.endpoint:main-speakers.audible", "equals": false}
+      ]
+    },
+    {
+      "id": "case:headset-removed-restores-speakers",
+      "trigger": "endpoint:headset.availability",
+      "world": {
+        "version": 4,
+        "endpoints": {
+          "endpoint:tv": {"runtimeId": 41, "availability": "route-available", "activeSignal": true},
+          "endpoint:bluetooth-programme": {"runtimeId": 63, "availability": "route-available", "activeSignal": true},
+          "endpoint:main-speakers": {"runtimeId": 52, "availability": "route-available", "channels": ["FL", "FR", "FC", "LFE", "SL", "SR"]},
+          "endpoint:headset": {"availability": "unavailable", "channels": ["FL", "FR"]}
+        },
+        "signals": {
+          "endpoint:bluetooth-programme": {"transport": {"format": "F32LE", "rate": 48000, "channels": 2}, "content": {"kind": "pcm"}, "confidence": 1.0}
+        },
+        "processors": {"decoder:bluetooth": {"health": "ready"}, "camilladsp:main": {"health": "ready"}}
+      },
+      "expectedPlan": {
+        "status": "resolved",
+        "selectedInput": "endpoint:bluetooth-programme",
+        "selectedOutput": "endpoint:main-speakers",
+        "decoderMode": "pcm-bypass",
+        "decodedSignal": {"format": "F32LE", "rate": 48000, "channels": 2},
+        "camillaProfile": "camilladsp:living-room",
+        "actionIntent": ["prepare-camilladsp", "set-stream-target", "verify-route"]
+      },
+      "explanation": {
+        "input": {"selected": "endpoint:bluetooth-programme", "reason": "Bluetooth remains the highest-priority active programme source."},
+        "decoder": {"selected": "pcm-bypass", "reason": "The Bluetooth content is PCM."},
+        "output": {"selected": "endpoint:main-speakers", "reason": "The headset disappeared; the still-available main speakers are selected from the unchanged graph."}
+      },
+      "runtimeAssertions": [
+        {"path": "route.source.logicalEndpoint", "equals": "endpoint:bluetooth-programme"},
+        {"path": "route.sink.logicalEndpoint", "equals": "endpoint:main-speakers"},
+        {"path": "processors.camilladsp.profile", "equals": "camilladsp:living-room"}
+      ]
+    },
+    {
+      "id": "case:tv-ac3-decoded-to-room",
+      "trigger": "signal.endpoint:tv.content.codec",
+      "world": {
+        "version": 5,
+        "endpoints": {
+          "endpoint:tv": {"runtimeId": 91, "availability": "route-available", "activeSignal": true},
+          "endpoint:bluetooth-programme": {"availability": "unavailable", "activeSignal": false},
+          "endpoint:main-speakers": {"runtimeId": 96, "availability": "route-available", "channels": ["FL", "FR", "FC", "LFE", "SL", "SR"]},
+          "endpoint:headset": {"availability": "unavailable", "channels": ["FL", "FR"]}
+        },
+        "signals": {
+          "endpoint:tv": {
+            "transport": {"format": "S16LE", "rate": 48000, "channels": 2, "framing": "IEC-61937"},
+            "content": {"kind": "encoded", "codec": "AC-3"},
+            "decoded": {"format": "F32LE", "rate": 48000, "channels": 6, "layout": ["FL", "FR", "FC", "LFE", "SL", "SR"]},
+            "confidence": 0.99
+          }
+        },
+        "processors": {"decoder:tv": {"health": "ready", "mode": "decoding"}, "camilladsp:main": {"health": "ready"}}
+      },
+      "expectedPlan": {
+        "status": "resolved",
+        "selectedInput": "endpoint:tv",
+        "selectedOutput": "endpoint:main-speakers",
+        "decoderMode": "decode",
+        "decodedSignal": {"format": "F32LE", "rate": 48000, "channels": 6, "layout": ["FL", "FR", "FC", "LFE", "SL", "SR"]},
+        "camillaProfile": "camilladsp:living-room",
+        "actionIntent": ["prepare-decoder", "prepare-camilladsp-5.1", "suppress-output", "set-stream-target", "verify-route", "unsuppress-output"]
+      },
+      "explanation": {
+        "input": {"selected": "endpoint:tv", "reason": "Bluetooth is unavailable; TV is active and eligible."},
+        "decoder": {"selected": "decode", "reason": "IEC-61937 AC-3 was observed at confidence 0.99 and encodedBehavior is decode."},
+        "signal": {"selected": "observed-decoded", "reason": "The decoder-reported six-channel output is authoritative over codec assumptions."},
+        "output": {"selected": "endpoint:main-speakers", "reason": "The six-channel main output is available and the headset is unavailable."}
+      },
+      "runtimeAssertions": [
+        {"path": "route.source.logicalEndpoint", "equals": "endpoint:tv"},
+        {"path": "route.sink.logicalEndpoint", "equals": "endpoint:main-speakers"},
+        {"path": "processors.decoder.mode", "equals": "decode"},
+        {"path": "processors.decoder.codec", "equals": "AC-3"},
+        {"path": "processors.camilladsp.input.channels", "equals": 6},
+        {"path": "processors.camilladsp.profile", "equals": "camilladsp:living-room"}
+      ]
+    }
+  ]
+}

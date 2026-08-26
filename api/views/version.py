@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from version import __version__, MAJOR, MINOR, PATCH
+from opencinema.version import MAJOR, MINOR, PATCH, __version__
 
 
 @require_http_methods(["GET"])

@@ -1,61 +1,55 @@
-import importlib
 import logging
-import pkgutil
 
 from django.apps import AppConfig
 
-# Prevent duplicate URL registration if Django calls ready() more than once
+from core.plugin_system import ApplicationLifecycleContext, PluginRegistry
+
+# Prevent duplicate URL registration if Django calls ready() more than once.
 _ALREADY_REGISTERED = False
+PLUGIN_REGISTRY = PluginRegistry()
 
 logger = logging.getLogger(__name__)
 
+
 class ApiConfig(AppConfig):
-    name = 'api'
+    name = "api"
 
     def ready(self):
-        """
-        Import all modules in the 'plugin' package so APIPlugin subclasses register
-        via __init_subclass__. Then register URLs from APIPlugin.registry.
-        """
+        from core.orchestration.sqlite_policy import install_sqlite_connection_policy
+
+        install_sqlite_connection_policy()
+
         global _ALREADY_REGISTERED
         if _ALREADY_REGISTERED:
             return
 
-        from core.plugin_system.oc_plugin import OCPlugin
+        PLUGIN_REGISTRY.discover()
 
-        logger.info("Starting plugin auto-discovery...")
+        # The built-in example is also registered directly so source-tree
+        # development works before editable package metadata is refreshed.
+        from plugin.counter.api.plugin import CounterApplicationPlugin
 
-        try:
-            import plugin # your user-installed plugin folder must be a Python package
-        except Exception as e:
-            logger.warning("No 'plugin' package found or failed to import: %s", e)
-            _ALREADY_REGISTERED = True
-            return
-
-        # Import every module under plugin.* to trigger class registration
-        for _, modname, ispkg in pkgutil.walk_packages(
-            path=plugin.__path__,
-            prefix=plugin.__name__ + ".",
-        ):
+        if PLUGIN_REGISTRY.get("counter") is None:
             try:
-                if 'migrations' not in modname:
-                    importlib.import_module(modname)
-                    print(f"Imported {"package" if ispkg else "module"}: {modname}")
+                PLUGIN_REGISTRY.register_application(CounterApplicationPlugin())
             except Exception:
-                # Don't crash if a plugin fails to load
-                logger.exception("Failed to load plugin module %s", modname)
-                print(f"Failed to load module {modname}")
+                logger.exception("Failed to register bundled counter application plugin")
 
-        # Pull plugin classes from registry (no module scanning needed)
-        plugin_classes = list(OCPlugin.registry.values())
-        print(f"Plugin auto-discovery completed. Found {len(plugin_classes)} API plugin(s).")
+        PLUGIN_REGISTRY.start_applications(ApplicationLifecycleContext())
+        for diagnostic in PLUGIN_REGISTRY.diagnostics:
+            logger.warning(
+                "Plugin %s %s: %s",
+                diagnostic.plugin_id,
+                diagnostic.code,
+                diagnostic.message,
+            )
 
-        if plugin_classes:
-            self._register_plugin_urls(plugin_classes)
-
+        plugins = PLUGIN_REGISTRY.application_plugins()
+        if plugins:
+            self._register_plugin_urls(plugins)
         _ALREADY_REGISTERED = True
 
-    def _register_plugin_urls(self, plugin_classes):
-        """Register URLs from discovered API plugins."""
+    def _register_plugin_urls(self, plugins):
         from api.urls import register_plugin_urls
-        register_plugin_urls(plugin_classes)
+
+        register_plugin_urls(plugins)
