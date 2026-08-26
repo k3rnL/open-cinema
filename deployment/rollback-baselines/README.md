@@ -40,6 +40,6 @@ restore contract. Rollback does not restore or trust those snapshots. It derives
 the minimal previous gate identity from the verified transition manifest and
 generates new readiness evidence after the restored services pass their probes.
 
-This exception is valid only for the first `0.3.1` coordinated release. Once
+This exception is valid only for the first `0.3.2` coordinated release. Once
 that release is accepted, subsequent releases must retain and identify the
 immediately previous finalized coordinated manifest and its published bytes.

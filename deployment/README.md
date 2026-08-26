@@ -204,7 +204,7 @@ An initial installation has no accepted generation to preserve and therefore
 does not manufacture an empty rollback bundle. An identical candidate reuses
 its passed contract gate and does not stop audio or create another bundle.
 Because the historical public releases cannot restore the native PipeWire
-stack, `0.3.1` uses a one-time private replacement baseline. Its privacy-safe
+stack, `0.3.2` uses a one-time private replacement baseline. Its privacy-safe
 receipt is retained in `rollback-baselines/`; the capsule itself stays in the
 protected controller store and immutable appliance directory. Later releases
 must instead retain the immediately previous finalized coordinated manifest.

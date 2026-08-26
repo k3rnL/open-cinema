@@ -22,7 +22,7 @@ ROOT = Path(__file__).parents[1]
 def test_checked_in_release_template_is_exact_and_not_directly_promotable() -> None:
     document = yaml.safe_load((ROOT / "deployment" / "release-manifest.yml").read_text())
 
-    assert document["release_id"] == "open-cinema-0.3.1-candidate"
+    assert document["release_id"] == "open-cinema-0.3.2-candidate"
     assert document["input_mode"] == "appliance"
     assert document["status"] == "experimental"
     assert document["promotable"] is False
@@ -31,7 +31,7 @@ def test_checked_in_release_template_is_exact_and_not_directly_promotable() -> N
 
     components = document["components"]
     assert components["open_cinema"] == {
-        "version": "0.3.1",
+        "version": "0.3.2",
         "repository": "k3rnL/open-cinema",
         "source_mode": "tag-build-finalization-placeholder",
         "immutable": False,
@@ -54,6 +54,21 @@ def test_release_workflow_installs_manifest_tooling_before_finalization() -> Non
     finalization = "Generate provenance and finalize the coordinated manifest"
     assert install in workflow
     assert workflow.index(install) < workflow.index(finalization)
+
+
+def test_release_workflow_verifies_public_immutability_with_its_scoped_token() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+
+    publish = "Publish the complete immutable release"
+    verify = "Verify the published release is immutable"
+    assert "/immutable-releases" not in workflow
+    assert '"repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME"' in workflow
+    assert 'has("immutable")' in workflow
+    assert 'case "$immutable" in' in workflow
+    assert "repos/$GITHUB_REPOSITORY/releases/$release_id" in workflow
+    assert workflow.index("false)") < workflow.index("--method DELETE")
+    assert workflow.index("--method DELETE") < workflow.index("*)")
+    assert workflow.index(publish) < workflow.index(verify)
 
 
 def test_release_tag_must_match_distribution_version() -> None:

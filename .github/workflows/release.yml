@@ -213,20 +213,12 @@ jobs:
           OUTPUT: "release_notes.md"
           GITHUB_REPO: ${{ github.repository }}
 
-      - name: Require repository release immutability before publication
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          test "$(gh api \
-            -H 'X-GitHub-Api-Version: 2026-03-10' \
-            "repos/$GITHUB_REPOSITORY/immutable-releases" \
-            --jq .enabled)" = true
-
       - name: Create draft GitHub release and attach every verified asset
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           body: ${{ steps.git-cliff.outputs.content }}
+          fail_on_unmatched_files: true
           files: |
             release_dist/*.whl
             release_dist/*.tar.gz
@@ -238,3 +230,40 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "$GITHUB_REF_NAME" --draft=false
+
+      - name: Verify the published release is immutable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_json=""
+          for attempt in 1 2 3 4 5; do
+            if release_json="$(gh api \
+              -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME")"; then
+              break
+            fi
+            sleep 1
+          done
+          test -n "$release_json"
+          test "$(jq -r .tag_name <<<"$release_json")" = "$GITHUB_REF_NAME"
+          test "$(jq -r .draft <<<"$release_json")" = false
+          test "$(jq -r .prerelease <<<"$release_json")" = false
+          test "$(jq -r .published_at <<<"$release_json")" != null
+          immutable="$(jq -r \
+            'if has("immutable") then (.immutable | tostring) else "unknown" end' \
+            <<<"$release_json")"
+          case "$immutable" in
+            true)
+              ;;
+            false)
+              release_id="$(jq -r .id <<<"$release_json")"
+              gh api --method DELETE \
+                "repos/$GITHUB_REPOSITORY/releases/$release_id"
+              echo "Published release was mutable and has been rejected." >&2
+              exit 1
+              ;;
+            *)
+              echo "Published release immutability was indeterminate." >&2
+              exit 1
+              ;;
+          esac

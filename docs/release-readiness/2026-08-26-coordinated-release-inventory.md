@@ -2,7 +2,7 @@
 
 Date: 2026-08-26 UTC
 
-Scope: release-preparation tasks 1.1–1.6 and corrective publication for Open Cinema `0.3.1`,
+Scope: release-preparation tasks 1.1–1.6 and corrective publication for Open Cinema `0.3.2`,
 WyrePlumber `0.2.0`, PCM Auto Decoder `0.2.2`, and Open Cinema UI `2.0.0`.
 This is evidence only: no index entry, commit, branch, tag, release, or remote
 reference was changed while collecting it.
@@ -297,7 +297,7 @@ and the corresponding branch run is green.
 
 | Project | Current source-of-truth surfaces | Required release state |
 |---|---|---|
-| Open Cinema | `opencinema/version.py` originally reported `0.2.0`; `pyproject.toml` derives package metadata from it; `/api/version` imports it. `pyproject.toml` and `uv.lock` originally resolved WyrePlumber `0.1.0` through an adjacent editable development source. Shared inventory and the development manifest also identified Open Cinema `0.2.0`. | Set all backend/package/deployment surfaces to corrective `0.3.1`/`v0.3.1`; retain failed `v0.3.0` without reuse; consume verified WyrePlumber `0.2.0` in release mode while keeping the adjacent path only as an explicit development override. README now accurately describes native PipeWire/WirePlumber, processor ownership, admin/on-box roles, Trixie appliance, validation, immutable deployment, and tag flow. |
+| Open Cinema | `opencinema/version.py` originally reported `0.2.0`; `pyproject.toml` derives package metadata from it; `/api/version` imports it. `pyproject.toml` and `uv.lock` originally resolved WyrePlumber `0.1.0` through an adjacent editable development source. Shared inventory and the development manifest also identified Open Cinema `0.2.0`. | Set all backend/package/deployment surfaces to corrective `0.3.2`/`v0.3.2`; retain failed `v0.3.0` and `v0.3.1` without reuse; consume verified WyrePlumber `0.2.0` in release mode while keeping the adjacent path only as an explicit development override. README now accurately describes native PipeWire/WirePlumber, processor ownership, admin/on-box roles, Trixie appliance, validation, immutable deployment, and tag flow. |
 | WyrePlumber | `pyproject.toml` is `0.1.0`; installed `__version__` comes from package metadata. Build family is selected in `setup.py`/CMake, with candidate release workflow fixed to WirePlumber 0.5. Public native surfaces include `_core`, `_core.pyi`, `py.typed`, and runtime contract/value schema v1. | Set metadata/lock to `0.2.0` and tag `v0.2.0`; ship CPython 3.12/3.13/3.14 wheels for x86_64/AArch64 linked to `libwireplumber-0.5` and `libpipewire-0.3`. README's GitHub-release installation, no-PyPI statement, Trixie matrix, permission/runtime ownership, validation, and release claims match the candidate workflow. |
 | PCM Auto Decoder | `Cargo.toml` and `Cargo.lock` started at `0.1.4`; Clap derives `--version` from Cargo metadata. `rust-toolchain.toml` pins 1.98.0 while package MSRV is 1.85. Status protocol is v2 and the one-output contract is implemented through native PipeWire 0.10 and system FFmpeg 8 crates/libraries. | Set Cargo/lock/binary/archive/title surfaces to corrective `0.2.2`/`v0.2.2`; retain failed `v0.2.0` and published-but-rejected `v0.2.1`, and publish native Debian Trixie x86_64/AArch64 archives linked to PipeWire/FFmpeg and forbidden from linking libpulse. README's stable output, codecs/layouts, ownership, offline fixture, dependencies, validation, asset, and immutable-tag claims match the candidate. |
 | Open Cinema UI | Root, admin, on-box, shared manifests and corresponding lock entries are `1.0.5`; both internal shared dependencies are pinned to that version. Vite emits HTML and `open-cinema-release.json` identity and embeds the v1 client contract in admin. | Deterministically set every workspace/lock/runtime surface to `2.0.0` and tag `v2.0.0`. README correctly distinguishes the administration console from the on-box placeholder and documents environment, all hard gates, separate assets, workspace versioning, and immutable tag flow. The local release example must be updated or intentionally expressed as a version placeholder during the bump. |
@@ -326,7 +326,7 @@ before the Open Cinema tag is created.
 
 | Component | Version/tag | Required published assets and target identity |
 |---|---|---|
-| Open Cinema | `0.3.1` / `v0.3.1` | `open_cinema-0.3.1-py3-none-any.whl`, `open_cinema-0.3.1.tar.gz`, the republished pinned `camilladsp-4.0.0-py3-none-any.whl`, `provenance.json`, `pycamilladsp-provenance.json`, `camilladsp-provenance.json`, `open-cinema-coordinated-manifest.yml`, and `checksums.sha256`. |
+| Open Cinema | `0.3.2` / `v0.3.2` | `open_cinema-0.3.2-py3-none-any.whl`, `open_cinema-0.3.2.tar.gz`, the republished pinned `camilladsp-4.0.0-py3-none-any.whl`, `provenance.json`, `pycamilladsp-provenance.json`, `camilladsp-provenance.json`, `open-cinema-coordinated-manifest.yml`, and `checksums.sha256`. |
 | WyrePlumber | `0.2.0` / `v0.2.0` | `wyreplumber-0.2.0.tar.gz` and six wheels `wyreplumber-0.2.0-cp{312,313,314}-cp{312,313,314}-linux_{x86_64,aarch64}.whl`; every primary artifact has adjacent `.sha256` and `.provenance.json`. Appliance selector: `cp313` + `aarch64` + Debian Trixie + WirePlumber 0.5. |
 | PCM Auto Decoder | `0.2.2` / `v0.2.2` | `pcm-auto-decoder-v0.2.2-debian-trixie-{x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu}.tar.gz`, each with `.sha256` and `.provenance.json`. Appliance selector: AArch64. |
 | Open Cinema UI | `2.0.0` / `v2.0.0` | `open-cinema-admin-v2.0.0.tar.gz`, `open-cinema-ui-v2.0.0.tar.gz`, one provenance JSON adjacent to each archive, and `checksums.sha256` covering both archives and both provenance files. |
@@ -338,7 +338,7 @@ component and point to a verified previous/replacement manifest. No editable
 path, branch, dirty-tree parent revision, mutable `latest` URL, or unverified
 adjacent worktree is permitted.
 
-## Rejected Open Cinema release attempt
+## Rejected Open Cinema release attempts
 
 - Lightweight tag `v0.3.0` remains fixed at
   `c79db4ef612696d8e25daae1e56476da446f50d7`; branch run
@@ -350,9 +350,24 @@ adjacent worktree is permitted.
   upload because the release-only manifest finalizer interpreter lacked
   PyYAML.
 - No `v0.3.0` GitHub release or release assets were created. The tag is not
-  moved or reused. Corrective `v0.3.1` pins PyYAML 6.0.3 as release tooling and
-  adds a regression assertion that it is installed before manifest
+  moved or reused. Corrective `v0.3.1` pinned PyYAML 6.0.3 as release tooling
+  and added a regression assertion that it is installed before manifest
   finalization.
+- Lightweight tag `v0.3.1` remains fixed at
+  `b322f357aa086706a28d99051ffcf4f465bbce25`. Branch run
+  `https://github.com/k3rnL/open-cinema/actions/runs/33020624682` and `master`
+  run `https://github.com/k3rnL/open-cinema/actions/runs/33020775151` passed.
+  Tag workflow `https://github.com/k3rnL/open-cinema/actions/runs/33020928960`
+  passed the complete release-commit gate, installed the corrected tooling,
+  and built and uploaded the verified workflow artifact containing the full
+  finalized manifest. It stopped before draft creation because GitHub's scoped
+  Actions token received HTTP 403 from the administration-only
+  `/immutable-releases` endpoint.
+- No `v0.3.1` GitHub release or release assets were created. The tag is not
+  moved or reused. Corrective `v0.3.2` checks the public release object's
+  `immutable` field after publication through the contents-authorized endpoint;
+  an explicitly mutable result is deleted and rejected while its tag remains
+  fixed.
 
 ## Accepted dependency release evidence
 
