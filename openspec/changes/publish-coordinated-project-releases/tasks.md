@@ -9,7 +9,7 @@
 
 ## 2. Open Cinema Release Readiness
 
-- [x] 2.1 Make `version.py`, Python package metadata, runtime version reporting, and the `v*` tag check one consistent backend version contract while leaving the final `0.3.0` bump for release preparation.
+- [x] 2.1 Make `version.py`, Python package metadata, runtime version reporting, and the `v*` tag check one consistent backend version contract while leaving the final coordinated version bump for release preparation.
 - [x] 2.2 Correct backend metadata and distribution inputs, including supported Python declarations, dependency contracts, SPDX/license data and `LICENSE`, and all package data required at runtime.
 - [x] 2.3 Include the required audio-orchestration contracts and other non-Python runtime resources in both wheel and source archives, and add archive-content tests that fail when required files or license material are missing.
 - [x] 2.4 Add an isolated distribution smoke test that installs built artifacts without adjacent worktrees and verifies import, reported version, contract discovery, Django checks, and the orchestrator entry point.
@@ -83,9 +83,9 @@
 - [x] 9.2 Materialize and verify the previous known-good manifest or its documented replacement baseline, ensuring all rollback inputs are immutable, downloadable, digest-valid, and retained before candidate promotion.
 - [x] 9.3 Convert `deployment/release-manifest.yml` into the candidate immutable template with exact dependency tags, commits, artifact URLs, hashes, provenance, platform selectors, and contract versions; remove all dirty-tree, floating, editable, and mutable release inputs.
 - [x] 9.4 Implement and run manifest validation for schema completeness, version/tag agreement, hashes, provenance, platform/ABI selection, compatibility constraints, previous-manifest identity, and the absence of mutable sources.
-- [ ] 9.5 Bump every Open Cinema version surface to `0.3.0`, regenerate lock/package data, run the complete backend suite and isolated builds using released dependencies, review and commit the release preparation, then push through the normal integration path and wait for CI.
-- [ ] 9.6 Verify the accepted remote backend commit, candidate manifest, and version surfaces; create and push `v0.3.0`, then wait for the workflow to publish the backend distributions and finalized coordinated manifest without reusing a failed tag.
-- [ ] 9.7 Download the `v0.3.0` backend artifacts, finalized manifest, checksums, and provenance; verify clean installation/version/contracts, validate every manifest entry and published byte, and record the accepted backend and manifest identities.
+- [ ] 9.5 Bump every Open Cinema version surface to corrective `0.3.1`, regenerate lock/package data, run the complete backend suite and isolated builds using released dependencies, review and commit the release preparation, then push through the normal integration path and wait for CI. Retain failed `v0.3.0` without moving or reusing it.
+- [ ] 9.6 Verify the accepted remote backend commit, candidate manifest, and version surfaces; create and push `v0.3.1`, then wait for the workflow to publish the backend distributions and finalized coordinated manifest without reusing a failed tag.
+- [ ] 9.7 Download the `v0.3.1` backend artifacts, finalized manifest, checksums, and provenance; verify clean installation/version/contracts, validate every manifest entry and published byte, and record the accepted backend and manifest identities.
 
 ## 10. Immutable Appliance Smoke and Release Closure
 

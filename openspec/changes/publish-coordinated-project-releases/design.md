@@ -33,7 +33,7 @@ The current production fixture is Debian 13 (Trixie), AArch64, on a Raspberry Pi
 
 ### 1. Treat the release as a versioned tuple, not a shared version number
 
-The coordinated release record will name four independent versions: Open Cinema `0.3.0`, WyrePlumber `0.2.0`, PCM Auto Decoder `0.2.2`, and Open Cinema UI `2.0.0`. Decoder `v0.2.0` was created once but failed before publication because its tag workflow could not read the container-owned checkout. Corrective `v0.2.1` published its artifacts, but its AArch64 post-download gate exposed an incomplete minimum-runtime package list (`libavformat61` was omitted). Both failed tags remain immutable and excluded; `v0.2.2` corrects the verification environment and must pass the complete published-byte gate. Each repository keeps its existing `v<project-version>` tag convention, while the Open Cinema deployment manifest binds the four accepted tags and their contract versions into one release identifier.
+The coordinated release record will name four independent versions: corrective Open Cinema `0.3.1`, WyrePlumber `0.2.0`, PCM Auto Decoder `0.2.2`, and Open Cinema UI `2.0.0`. Open Cinema `v0.3.0` passed source, test, package, and native-artifact gates but stopped before artifact upload because its release-only manifest finalizer environment lacked PyYAML. It remains fixed and excluded, while `v0.3.1` adds the pinned release-tool dependency. Decoder `v0.2.0` was created once but failed before publication because its tag workflow could not read the container-owned checkout. Corrective `v0.2.1` published its artifacts, but its AArch64 post-download gate exposed an incomplete minimum-runtime package list (`libavformat61` was omitted). Those failed or rejected tags remain immutable and excluded; decoder `v0.2.2` corrects its verification environment and must pass the complete published-byte gate. Each repository keeps its existing `v<project-version>` tag convention, while the Open Cinema deployment manifest binds the four accepted tags and their contract versions into one release identifier.
 
 This avoids forcing unrelated repositories into lockstep SemVer while retaining one compatibility decision. A single shared version was considered, but would make future independent patch releases misleading and needlessly coupled.
 
@@ -66,7 +66,7 @@ Publication will proceed in this order:
 
 1. WyrePlumber `0.2.0` and PCM Auto Decoder `0.2.2`, which are lower-level runtime components and can be released independently.
 2. Open Cinema UI `2.0.0`, whose contract assets must exist before the appliance manifest is finalized.
-3. Open Cinema `0.3.0`, after its dependency/version references and compatibility documents name the verified releases.
+3. Open Cinema `0.3.1`, after its dependency/version references and compatibility documents name the verified releases and the failed `v0.3.0` tag remains excluded.
 4. The coordinated immutable manifest, only after all four published artifact sets pass download verification.
 
 Independent components may build in parallel, but no consuming tag or manifest promotion may point to an asset that is not already downloadable and verified. Tagging everything simultaneously was rejected because a failed dependency release could leave consumers permanently pointing at a nonexistent or invalid artifact.
