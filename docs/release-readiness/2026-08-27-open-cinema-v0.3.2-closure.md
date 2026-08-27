@@ -89,6 +89,14 @@ remote `master` at `394612720755f913da77dcc0ca6407595a77a32e` and
 post-release documentation/workflow commits do not redefine the accepted tag
 identities above.
 
+The deployment, benchmark, and closure history through
+`28c058896cccae02b2ecb0f0b7f9a35bc3dcdd3d` passed the complete repository CI
+on both [the `pipewire` branch](https://github.com/k3rnL/open-cinema/actions/runs/33034700941)
+and [the `master` branch](https://github.com/k3rnL/open-cinema/actions/runs/33034700972).
+Those runs exercised the project/packaging gates and Ansible syntax against the
+accepted dependency releases; they harden source history without changing any
+published `v0.3.2` byte.
+
 ### Verified appliance artifacts
 
 The hashes below are the selected AArch64/Trixie appliance bytes and their
