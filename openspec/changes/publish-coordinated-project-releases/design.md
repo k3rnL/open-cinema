@@ -9,7 +9,7 @@ The release surfaces also have concrete inconsistencies:
 - PCM Auto Decoder's GitHub and devcontainer environments still install PulseAudio-era dependencies and are not aligned to the Debian Trixie ABI used by the appliance.
 - Open Cinema UI versions the workspace packages independently through npm, while current CI treats lint as optional and does not gate releases on unit or end-to-end tests.
 
-The current production fixture is Debian 13 (Trixie), AArch64, on a Raspberry Pi 5. GitHub releases are public, immutable publication events; local worktree content belongs to the user and must not be discarded or rewritten while history is curated.
+The current production fixture is Debian 13 (Trixie), AArch64, on a Raspberry Pi 5. GitHub release immutability is verified per publication surface; every appliance-selected byte must resolve through an immutable release or a digest-identical immutable coordinated mirror. Local worktree content belongs to the user and must not be discarded or rewritten while history is curated.
 
 ## Goals / Non-Goals
 
@@ -33,7 +33,7 @@ The current production fixture is Debian 13 (Trixie), AArch64, on a Raspberry Pi
 
 ### 1. Treat the release as a versioned tuple, not a shared version number
 
-The coordinated release record will name four independent versions: corrective Open Cinema `0.3.2`, WyrePlumber `0.2.0`, PCM Auto Decoder `0.2.2`, and Open Cinema UI `2.0.0`. Open Cinema `v0.3.0` passed source, test, package, and native-artifact gates but stopped before artifact upload because its release-only manifest finalizer environment lacked PyYAML. Corrective `v0.3.1` fixed that dependency and built the complete finalized manifest, but stopped before creating a draft release because the scoped Actions token cannot read the administration-only repository immutability setting. Both tags remain fixed and excluded. Corrective `v0.3.2` verifies the resulting public release's `immutable` field through the release endpoint that the scoped token can read, and rejects and removes an explicitly mutable release while retaining the failed tag. Decoder `v0.2.0` was created once but failed before publication because its tag workflow could not read the container-owned checkout. Corrective `v0.2.1` published its artifacts, but its AArch64 post-download gate exposed an incomplete minimum-runtime package list (`libavformat61` was omitted). Those failed or rejected tags remain immutable and excluded; decoder `v0.2.2` corrects its verification environment and must pass the complete published-byte gate. Each repository keeps its existing `v<project-version>` tag convention, while the Open Cinema deployment manifest binds the four accepted tags and their contract versions into one release identifier.
+The coordinated release record will name four independent versions: corrective Open Cinema `0.3.2`, WyrePlumber `0.2.0`, PCM Auto Decoder `0.2.2`, and Open Cinema UI `2.0.0`. Open Cinema `v0.3.0` passed source, test, package, and native-artifact gates but stopped before artifact upload because its release-only manifest finalizer environment lacked PyYAML. Corrective `v0.3.1` fixed that dependency and built the complete finalized manifest, but stopped before creating a draft release because the scoped Actions token cannot read the administration-only repository immutability setting. Both tags remain fixed and excluded. Corrective `v0.3.2` verifies the resulting public release's `immutable` field through the release endpoint that the scoped token can read, and rejects and removes an explicitly mutable release while retaining the failed tag. Decoder `v0.2.0` was created once but failed before publication because its tag workflow could not read the container-owned checkout. Corrective `v0.2.1` published its artifacts, but its AArch64 post-download gate exposed an incomplete minimum-runtime package list (`libavformat61` was omitted). Those failed or rejected tags remain fixed and excluded; decoder `v0.2.2` corrects its verification environment and must pass the complete published-byte gate. Each repository keeps its existing `v<project-version>` tag convention, while the Open Cinema deployment manifest binds the four accepted tags and their contract versions into one release identifier.
 
 This avoids forcing unrelated repositories into lockstep SemVer while retaining one compatibility decision. A single shared version was considered, but would make future independent patch releases misleading and needlessly coupled.
 
@@ -83,6 +83,13 @@ URL/name, SHA-256 digest, supported platform selector, and relevant API/ABI
 contract, while declaring the expected Open Cinema tag and commit identity.
 
 The Open Cinema tag workflow will build its own distribution, compute the previously unknowable digest of those exact bytes, inject its artifact URL/digest and workflow provenance into a finalized manifest, and publish that manifest plus its checksum as release assets. This avoids a circular requirement to commit an artifact's digest into the source from which that artifact is built. Deployment consumes the finalized release asset; after verification, the exact finalized manifest is recorded with release-closure evidence and becomes the current deployment pin.
+
+The coordinating release may mirror already verified UI, decoder, CamillaDSP,
+and Python-client bytes into its own immutable asset set. Mirroring does not
+replace source provenance: every manifest entry keeps the producing repository,
+tag, commit, workflow, original artifact identity, and digest, while its selected
+URL identifies the byte-for-byte coordinated mirror. This lets deployment and
+rollback resolve one retained release without weakening cross-project traceability.
 
 Local-source modes, parent-only dirty-tree revisions, mutable URLs, and editable
 dependencies are forbidden in the candidate and finalized manifests. A validator

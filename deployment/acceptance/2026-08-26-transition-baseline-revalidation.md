@@ -1,5 +1,13 @@
 # Transition rollback baseline revalidation
 
+> **Status addendum (2026-08-27):** The publication-safe
+> [Open Cinema 0.3.2 closure](../../docs/release-readiness/2026-08-27-open-cinema-v0.3.2-closure.md)
+> supersedes the promotion blockers below after the protected baseline was
+> retained, the immutable candidate was exercised in both directions, and
+> readiness passed. This historical audit remains useful for the older
+> schema-1 boundary; its appliance-specific recovery locators are not public
+> release identity.
+
 Verification time: 2026-08-26T19:45:43Z
 
 Fixture: Raspberry Pi 5 Model B Rev 1.1, 8 GB, Debian 13 `trixie`,
@@ -19,7 +27,7 @@ and database SHA-256 were verified to match their original state.
 The expected bundle is still present at:
 
 ```text
-/var/lib/open-cinema/rollback/transition-20260826T002452-ebd7b2b6d014
+[private rollback path redacted]
 ```
 
 Its manifest identifies:
@@ -27,7 +35,7 @@ Its manifest identifies:
 ```text
 schema: 1
 kind: open-cinema-coordinated-transition-backup
-bundle id: transition-20260826T002452-ebd7b2b6d014
+bundle id: [private transition identifier redacted]
 restore strategy: coordinated-full-generation
 previous candidate: d28911c2f9d7959d650c4b4a3234cd228de67c80e51e7cc05ba5a8977cac26f3
 candidate: ebd7b2b6d014478de99f262215b030491cc8696c211d8662d50932384972bc85

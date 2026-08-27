@@ -51,13 +51,13 @@
 
 ## 6. Curate Reviewable Source History
 
-- [ ] 6.1 Recheck all four worktrees against the inclusion map after release-readiness edits, inspect every staged diff for secrets/generated/local/deferred content, and update the map for newly created files before committing.
+- [x] 6.1 Recheck all four worktrees against the inclusion map after release-readiness edits, inspect every staged diff for secrets/generated/local/deferred content, and update the map for newly created files before committing.
 - [x] 6.2 Stage, review, and commit Open Cinema application/API/orchestration implementation and tests in coherent conventional commits without including deployment, documentation, or release metadata merely for convenience.
 - [x] 6.3 Stage, review, and commit Open Cinema deployment, contracts, documentation, OpenSpec history, and release-readiness work in separately understandable conventional commits.
 - [x] 6.4 Stage, review, and commit WyrePlumber binding/runtime/tests and release-readiness work in coherent conventional commits, preserving unrelated user paths.
 - [x] 6.5 Stage, review, and commit PCM Auto Decoder runtime/tests and release-readiness work in coherent conventional commits, preserving unrelated user paths.
 - [x] 6.6 Stage, review, and commit Open Cinema UI application/shared/tests and release-readiness work in coherent conventional commits, preserving deferred UI/UX work as explicitly documented rather than silently dropping it.
-- [ ] 6.7 Run each repository's complete gate set at the curated HEAD, record the commit SHAs and remaining intentionally excluded paths, and do not begin version tagging until every release-relevant worktree state is explained.
+- [x] 6.7 Run each repository's complete gate set at the curated HEAD, record the commit SHAs and remaining intentionally excluded paths, and do not begin version tagging until every release-relevant worktree state is explained.
 
 ## 7. Publish and Verify Runtime Dependencies
 
@@ -83,16 +83,16 @@
 - [x] 9.2 Materialize and verify the previous known-good manifest or its documented replacement baseline, ensuring all rollback inputs are immutable, downloadable, digest-valid, and retained before candidate promotion.
 - [x] 9.3 Convert `deployment/release-manifest.yml` into the candidate immutable template with exact dependency tags, commits, artifact URLs, hashes, provenance, platform selectors, and contract versions; remove all dirty-tree, floating, editable, and mutable release inputs.
 - [x] 9.4 Implement and run manifest validation for schema completeness, version/tag agreement, hashes, provenance, platform/ABI selection, compatibility constraints, previous-manifest identity, and the absence of mutable sources.
-- [ ] 9.5 Bump every Open Cinema version surface to corrective `0.3.2`, regenerate lock/package data, run the complete backend suite and isolated builds using released dependencies, review and commit the release preparation, then push through the normal integration path and wait for CI. Retain failed `v0.3.0` and `v0.3.1` without moving or reusing either tag.
-- [ ] 9.6 Verify the accepted remote backend commit, candidate manifest, and version surfaces; create and push `v0.3.2`, then wait for the workflow to publish the backend distributions and finalized coordinated manifest without reusing a failed tag.
-- [ ] 9.7 Download the `v0.3.2` backend artifacts, finalized manifest, checksums, and provenance; verify clean installation/version/contracts, validate every manifest entry and published byte, and record the accepted backend and manifest identities.
+- [x] 9.5 Bump every Open Cinema version surface to corrective `0.3.2`, regenerate lock/package data, run the complete backend suite and isolated builds using released dependencies, review and commit the release preparation, then push through the normal integration path and wait for CI. Retain failed `v0.3.0` and `v0.3.1` without moving or reusing either tag.
+- [x] 9.6 Verify the accepted remote backend commit, candidate manifest, and version surfaces; create and push `v0.3.2`, then wait for the workflow to publish the backend distributions and finalized coordinated manifest without reusing a failed tag.
+- [x] 9.7 Download the `v0.3.2` backend artifacts, finalized manifest, checksums, and provenance; verify clean installation/version/contracts, validate every manifest entry and published byte, and record the accepted backend and manifest identities.
 
 ## 10. Immutable Appliance Smoke and Release Closure
 
-- [ ] 10.1 Update deployment's release-mode pins, expected asset names, URLs, hashes, and compatibility data from the verified finalized manifest while preserving local-source inventory strictly as an explicit development mode.
-- [ ] 10.2 Verify deployment syntax/tests and manifest preflight, and prove release mode downloads and digest-checks published artifacts without reading any adjacent repository working directory or editable package.
-- [ ] 10.3 Apply the finalized immutable manifest to the existing Debian Trixie Raspberry Pi fixture through the deployment interface; record installed artifact hashes and exact Open Cinema, WyrePlumber, decoder, and UI versions.
-- [ ] 10.4 Verify all released services reach readiness, native WyrePlumber/decoder linkage and contracts match the manifest, and the resolved PipeWire graph contains the expected decoder and CamillaDSP processing path.
-- [ ] 10.5 Run a bounded audio-path smoke through the immutable TV/decoder/CamillaDSP/output chain and verify administrative readiness without treating deferred UI/UX details or performance measurements as release gates.
-- [ ] 10.6 Preserve the exact finalized current and previous manifests with their resolvable artifacts, update deployment's rollback pointer without executing rollback, and keep the previous manifest current if any immutable smoke gate fails.
+- [x] 10.1 Update deployment's release-mode pins, expected asset names, URLs, hashes, and compatibility data from the verified finalized manifest while preserving local-source inventory strictly as an explicit development mode.
+- [x] 10.2 Verify deployment syntax/tests and manifest preflight, and prove release mode downloads and digest-checks published artifacts without reading any adjacent repository working directory or editable package.
+- [x] 10.3 Apply the finalized immutable manifest to the existing Debian Trixie Raspberry Pi fixture through the deployment interface; record installed artifact hashes and exact Open Cinema, WyrePlumber, decoder, and UI versions.
+- [x] 10.4 Verify all released services reach readiness, native WyrePlumber/decoder linkage and contracts match the manifest, and the resolved PipeWire graph contains the expected decoder and CamillaDSP processing path.
+- [x] 10.5 Run a bounded audio-path smoke through the immutable TV/decoder/CamillaDSP/output chain and verify administrative readiness without treating deferred UI/UX details or performance measurements as release gates.
+- [x] 10.6 Preserve the exact finalized current and previous manifests with their resolvable artifacts, update deployment's rollback pointer without executing rollback, and keep the previous manifest current if any immutable smoke gate fails.
 - [ ] 10.7 Create and commit release-closure evidence containing the four tags/commits, CI and release runs, artifact names/URLs/hashes/provenance, finalized and previous manifest identities, Pi results, README review, exclusions, and known limitations; push it through CI and strictly validate the completed OpenSpec change.

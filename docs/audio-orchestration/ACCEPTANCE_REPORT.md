@@ -1,5 +1,12 @@
 # Local audio orchestration acceptance report
 
+> **Deployment addendum (2026-08-27):** The
+> [Open Cinema 0.3.2 release and appliance closure](../release-readiness/2026-08-27-open-cinema-v0.3.2-closure.md)
+> supersedes this report's statement that release packaging, physical audio,
+> and rollback are wholly pending. The local-product decision and evidence
+> below remain valid; only quantitative appliance characterization remains a
+> separate open campaign.
+
 Status: **automated local-product acceptance and explicit owner UI acceptance passed**.
 
 This report covers the non-deployment requirements of OpenSpec change

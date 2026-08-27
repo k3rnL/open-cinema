@@ -82,7 +82,7 @@ generated CamillaDSP configurations; missing endpoint/processor recovery;
 endpoint, scene, volume, and mute override lifetime; the full software fault
 matrix; ownership and generation fencing; and security/boundary behavior.
 
-[`docs/audio-orchestration/ACCEPTANCE_REPORT.md`](../../../docs/audio-orchestration/ACCEPTANCE_REPORT.md)
+[`docs/audio-orchestration/ACCEPTANCE_REPORT.md`](../../../../docs/audio-orchestration/ACCEPTANCE_REPORT.md)
 maps every specification requirement to automated evidence, a deployment or
 hardware check, or an explicit limitation. Tasks 21.7 and 21.8 remain open
 because final appliance limits must be based on measurements from each

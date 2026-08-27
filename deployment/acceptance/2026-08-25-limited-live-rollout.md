@@ -1,5 +1,12 @@
 # Limited-live rollout acceptance — 2026-08-25
 
+> **Status addendum (2026-08-27):** The
+> [Open Cinema 0.3.2 closure](../../docs/release-readiness/2026-08-27-open-cinema-v0.3.2-closure.md)
+> records the later full-runtime deployment, complete functional
+> TV/Bluetooth/headset smoke, immutable release promotion, protected rollback,
+> and no-op reapply. The exact limited-live checkpoint below remains historical
+> staged-rollout evidence.
+
 Status: **accepted for the experimental Raspberry Pi appliance**.
 
 This acceptance covers rollout stage `limited-live` for one explicitly
@@ -13,11 +20,11 @@ allowlist:
 
 ```text
 OPEN_CINEMA_AUDIO_LIVE_RECONCILIATION=true
-OPEN_CINEMA_AUDIO_LIVE_GRAPH_ALLOWLIST=fcf61f7f-f841-4cc9-aa2d-11ae0892c021
+OPEN_CINEMA_AUDIO_LIVE_GRAPH_ALLOWLIST=[graph identifier redacted]
 ```
 
 The accepted graph is `Limited live processor acceptance`, revision
-`e2d1560d-7d25-4fdd-b928-7ec747135b34`. Its route is:
+`[revision identifier redacted]`. Its route is:
 
 ```text
 managed looping WAV source
@@ -26,10 +33,10 @@ managed looping WAV source
   -> Wondom GAB8 7.1 output
 ```
 
-The source is managed adapter `4eeec59e-a983-43e2-a782-a6db88adec5e`.
+The source is a managed adapter whose appliance identifier is redacted.
 It loops `debug-loop.wav`, remains `ready`/`healthy`, and exposes the stable
 node name
-`open-cinema-adapter-4eeec59e-a983-43e2-a782-a6db88adec5e`.
+`open-cinema-adapter-[identifier redacted]`.
 The CamillaDSP profile is an immutable FLOAT32LE, 48 kHz, 7.1 passthrough
 profile. The decoder accepts a stereo S16LE 48 kHz carrier and emits the stable
 FLOAT32LE 48 kHz 7.1 working bus.
@@ -129,9 +136,8 @@ only its direction, media class, serial, USB bus ID, and stable PipeWire object
 path. A regression test changes both `hw:N` and `surround71:N` while requiring
 the generated binding to remain identical.
 
-The repeat test rebooted from boot ID
-`f2fc14a0-8b5b-4914-a493-b7c665e4e0f9` into
-`3cea0c78-5cb9-4843-9075-55c9faa1d69c` with the graph active. No graphical
+The repeat test rebooted between two distinct redacted boot identities with the
+graph active. No graphical
 login, Apply request, processor start, or post-boot service restart was used.
 Systemd monotonic activation timestamps recorded this order:
 

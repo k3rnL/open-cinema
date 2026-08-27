@@ -1,5 +1,12 @@
 # Adaptive Bluetooth routing acceptance — 2026-08-26
 
+> **Status addendum (2026-08-27):** The
+> [Open Cinema 0.3.2 closure](../../docs/release-readiness/2026-08-27-open-cinema-v0.3.2-closure.md)
+> supersedes the pending physical-TV and final-supported-tier wording below.
+> The owner subsequently accepted the complete TV, encoded processing,
+> Bluetooth source, headset takeover, and fallback functional smoke; statistical
+> timing and reliability benchmarks remain open.
+
 Status: **accepted for the Bluetooth-source/headset portion of deployment tasks
 8.2 and 9.6 on the experimental Raspberry Pi appliance**.
 

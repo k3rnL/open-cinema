@@ -66,6 +66,15 @@ no dummy digest: the Open Cinema artifact identity is deliberately absent until
 the tag workflow can bind the manifest to the wheel and source archive it just
 built. Its `candidate_notice` is removed during finalization; the published
 manifest contains only limitations that still apply to the supported release.
+Accepted public manifests are retained byte-for-byte under `releases/` after
+their downloaded artifacts and provenance pass verification. The current
+appliance input is `releases/open-cinema-0.3.2.yml` (SHA-256
+`c1838de6097050242413ab32684110287e50307513ba67b53e2619936aa38dd2`);
+this is also the checked-in release-mode default, and it contains no private
+inventory or rollback-capsule path. An inventory override remains useful when
+validating a future finalized manifest before promoting that default.
+The publication and current provisioned-fixture result are summarized in the
+[Open Cinema 0.3.2 closure](../docs/release-readiness/2026-08-27-open-cinema-v0.3.2-closure.md).
 
 For development, all edited repositories may be synchronized directly:
 
@@ -73,14 +82,14 @@ For development, all edited repositories may be synchronized directly:
 all:
   hosts:
     cinema_pi:
-      ansible_host: 192.168.1.37
+      ansible_host: cinema-pi.example.net
       ansible_user: pi
       install_from_local: true
-      open_cinema_release_manifest_source_path: /home/me/projects/open-cinema/deployment/development-manifest.yml
-      local_source_path: /home/me/projects/open-cinema
-      local_wyreplumber_source_path: /home/me/projects/wyreplumber
-      local_open_cinema_ui_source_path: /home/me/projects/open-cinema-ui
-      local_pcm_auto_decoder_source_path: /home/me/projects/pcm-auto-decoder
+      open_cinema_release_manifest_source_path: /absolute/path/open-cinema/deployment/development-manifest.yml
+      local_source_path: /absolute/path/open-cinema
+      local_wyreplumber_source_path: /absolute/path/wyreplumber
+      local_open_cinema_ui_source_path: /absolute/path/open-cinema-ui
+      local_pcm_auto_decoder_source_path: /absolute/path/pcm-auto-decoder
 ```
 
 Development mode fingerprints the synchronized backend, binding, built UI, and
@@ -146,7 +155,10 @@ migration, or live reconciliation. Its final readiness role requires:
 - both web interfaces and every referenced asset through the appliance LAN
   address;
 - anonymous diagnostic rejection, native CSRF/session login, schema metadata,
-  authorized diagnostics, and SSE cursor-gap recovery through nginx.
+  authorized diagnostics, authenticated SSE transport through nginx, and any
+  cursor-gap snapshot reported by the live event store. Cursor-gap generation
+  itself remains covered by the application suite so deployment never creates
+  or deletes user graph data merely to manufacture a readiness fixture.
 
 Before replacing candidate application files, the play compares the candidate
 content digest with the last passed contract-gate result. A changed candidate
@@ -179,6 +191,12 @@ same identity. Every audio-attached system unit checks the exact user-session
 socket before starting and has bounded startup, restart, and graceful shutdown
 behavior.
 
+Managed debug-file adapters use the explicit persistent root
+`/opt/home-cinema/open-cinema/media/audio-adapters`. The runtime environment
+pins this path in both source and wheel installs, and coordinated application
+backups retain it, so installing a wheel cannot redirect existing looping or
+recording devices into `site-packages`.
+
 Distribution unit files and WirePlumber defaults are never edited. Open Cinema
 uses `/etc/systemd/user/*.service.d/90-open-cinema.conf` and
 `/etc/wireplumber/wireplumber.conf.d/9*-open-cinema-*.conf`, so package upgrades
@@ -193,12 +211,33 @@ previously accepted candidate, deployment creates a private
 checksumming the complete recovery boundary:
 
 - the stopped SQLite database and a digest of user-owned graph intent;
-- the complete application/virtual environment and WyrePlumber binding;
+- the complete application/virtual environment, including an exact
+  wheel-installed WyrePlumber binding, plus a separate binding source archive
+  when the previous generation actually has one;
 - both packaged web applications;
 - CamillaDSP and decoder binaries plus their generated runtime configuration;
 - the installed release manifest, contract-gate result, and readiness result;
 - the controller inventory, group variables, compatibility contract, candidate
   release manifest, and managed static configuration.
+
+Transition-manifest schema 2 makes the separate WyrePlumber source archive
+conditional. A release-mode generation is recoverable when its archived
+application environment contains the exact binding version, native API,
+orchestration contract, and runtime-value schema, and its resolved virtual
+environment is inside the application archive. It therefore does not need a
+duplicate source tree. A development generation records that mode explicitly
+and requires a real non-symlink binding source directory. Rollback accepts both
+schema 2 and the retained schema-1 full-generation boundary, and in either case
+requires READY to match the declared artifact set exactly.
+
+Readiness chooses an active rollback identity only from immediate directories
+whose manifest, READY record, regular-file boundary, deployment-mode/source
+relationship, and every artifact digest verify. A partial or malformed newer
+directory cannot displace a valid recovery point. Explicit window closure
+validates active and protected bundles before pruning, verifies the retained set
+afterward, and writes its correlated release/digest marker last. A later
+unchanged deployment preserves that closed marker while all identities still
+match.
 
 An initial installation has no accepted generation to preserve and therefore
 does not manufacture an empty rollback bundle. An identical candidate reuses
@@ -275,6 +314,16 @@ replacement, remove other recovery points, and write
 `/var/lib/open-cinema/rollback/rollback-window.yml`. A failed deployment never
 reaches that closure step.
 
+If checksum verification proves that an older experimental bundle is partial
+or malformed and no verified mutable recovery point remains, an operator may
+run one deliberate maintenance transition with
+`open_cinema_reseed_rollback_boundary=true`. This snapshots the currently
+installed accepted generation, exercises the normal quiesce/install/gate/
+readiness path even though the candidate digest is unchanged, and produces a
+new checksum-verified recovery point. Keep the option false for ordinary
+reconciliation; close and prune the window only in the same reviewed run after
+the new bundle and every protected exception verify.
+
 ## Service and diagnostic commands
 
 ```bash
@@ -300,9 +349,9 @@ implementation interfaces.
 Nginx also enforces `open_cinema_management_api_networks` before proxying any
 `/api/` request. The common default permits loopback only; each appliance
 inventory must add its bounded management LAN and cannot use `0.0.0.0/0` or
-`::/0`. The current private appliance permits `192.168.1.0/24`. UI assets may
-remain reachable while the API is degraded or denied, but configuration and
-diagnostic calls cannot cross this boundary.
+`::/0`. The current private appliance supplies its controlled LAN only through
+the ignored inventory. UI assets may remain reachable while the API is degraded
+or denied, but configuration and diagnostic calls cannot cross this boundary.
 
 ## Contract-gated runtime activation
 

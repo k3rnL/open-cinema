@@ -1,5 +1,11 @@
 # Bluetooth programme-source acceptance — 2026-08-26
 
+> **Status addendum (2026-08-27):** The
+> [Open Cinema 0.3.2 closure](../../docs/release-readiness/2026-08-27-open-cinema-v0.3.2-closure.md)
+> records the later owner-accepted automatic phone priority, processing-graph
+> route, headset takeover, fallback, and complete functional smoke. The narrower
+> boundary below remains the evidence available at this test's collection time.
+
 Status: **accepted for deployment task 3.6 on the experimental Raspberry Pi
 appliance**.
 

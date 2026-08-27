@@ -1,5 +1,11 @@
 # Accepted local-product baseline — 2026-08-25
 
+> **Status addendum (2026-08-27):** The
+> [Open Cinema 0.3.2 closure](../../docs/release-readiness/2026-08-27-open-cinema-v0.3.2-closure.md)
+> supplies the immutable identities and accepted provisioned-fixture deployment
+> that were still pending at this checkpoint. The UI and local-product decision
+> below remains unchanged.
+
 Status: **accepted for experimental Raspberry Pi deployment; immutable release identities pending**.
 
 ## Acceptance decision

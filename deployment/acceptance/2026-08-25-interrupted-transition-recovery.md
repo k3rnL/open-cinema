@@ -10,12 +10,12 @@ orchestrator was killed without cleanup.
 
 ## Test procedure
 
-1. Disable graph `fcf61f7f-f841-4cc9-aa2d-11ae0892c021` through the
+1. Disable graph `[private UUID redacted]` through the
    authenticated, versioned audio API at desired-state version 3.
 2. Observe its 18 Open Cinema-owned links being removed and require the owned
    link count to reach zero.
 3. Re-activate published revision
-   `e2d1560d-7d25-4fdd-b928-7ec747135b34` at desired-state version 4.
+   `[private UUID redacted]` at desired-state version 4.
 4. Poll PipeWire while the transition is running. At `19:46:35.933 UTC`, after
    two of the expected 18 links existed, send `SIGKILL` to only the main process
    of `open-cinema-orchestrator.service`.

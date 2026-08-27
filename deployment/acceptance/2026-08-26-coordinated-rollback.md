@@ -1,5 +1,17 @@
 # Coordinated upgrade and rollback acceptance
 
+> **Status addendum (2026-08-27):** The publication-safe
+> [Open Cinema 0.3.2 closure](../../docs/release-readiness/2026-08-27-open-cinema-v0.3.2-closure.md)
+> supersedes the experimental candidate and remaining-blocker decision below
+> with the later immutable apply, protected rollback, forward reapply, and
+> no-op evidence. A later checksum-verifier audit rejected one partial
+> historical directory, deliberately reseeded a complete schema-2 snapshot of
+> the accepted generation, removed that non-restorable partial entry only after
+> verification, and ended with two verified recovery points, zero rejected
+> entries, a correlated closed window, and an `ok=302 changed=0 failed=0`
+> ordinary run. This file remains point-in-time operational detail;
+> appliance-specific recovery locators must not be copied into public reports.
+
 Date: 2026-08-26 (appliance local time)
 
 Host: Raspberry Pi 5 Model B Rev 1.1, 8 GB, Debian 13 `trixie`, aarch64
@@ -11,7 +23,7 @@ Release stage: experimental `limited-live`, exact graph allowlist
 A changed local candidate created the private, ready-marked transition bundle:
 
 ```text
-/var/lib/open-cinema/rollback/transition-20260826T002452-ebd7b2b6d014
+[private rollback path redacted]
 size: 108 MB
 checksummed artifacts: 9
 owner/mode: opencinema:opencinema, directories 0750, files 0600
@@ -30,7 +42,7 @@ The selected bundle was restored with the explicit command:
 
 ```bash
 ansible-playbook -i inventories/local.yml playbooks/rollback.yml \
-  -e open_cinema_rollback_bundle_id=transition-20260826T002452-ebd7b2b6d014
+  -e open_cinema_rollback_bundle_id=[private transition identifier redacted]
 ```
 
 The first final readiness pass exposed a permission defect in the newly added
@@ -111,7 +123,7 @@ PLAY RECAP: ok=53 changed=2 failed=1 rescued=1
 failed task: Reject every incompatible component before deployment mutation
 aggregate result: candidate-20260826T005449.json, mode 0600
 aggregate log: candidate-20260826T005449.log, mode 0600
-rollback bundle: transition-20260826T003349-ebd7b2b6d014, READY present
+rollback bundle: [private transition identifier redacted], READY present
 all eight probed services: active
 processor management/live reconciliation: false/false
 ```

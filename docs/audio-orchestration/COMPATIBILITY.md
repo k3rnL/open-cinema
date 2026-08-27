@@ -56,6 +56,6 @@ contracts and differ only in their support/acceptance status.
 ## Coordinated release record
 
 The baseline commits for the first contract set are recorded in
-[`implementation-notes.md`](../../openspec/changes/wireplumber-desired-graph-orchestration/implementation-notes.md).
+[`implementation-notes.md`](../../openspec/changes/archive/2026-08-24-wireplumber-desired-graph-orchestration/implementation-notes.md).
 Deployment pins the released component revisions and runs all handshakes before
 making new reconciliation the default.

@@ -1,5 +1,12 @@
 # Coordinated release inventory and safety boundary
 
+> **Status addendum (2026-08-27):** The
+> [Open Cinema 0.3.2 release and appliance closure](2026-08-27-open-cinema-v0.3.2-closure.md)
+> supersedes the pre-publication blocker, dirty-state, and expected-release
+> conclusions below. This point-in-time inventory remains provenance for the
+> publication decisions and rejected tag attempts; it is not the current
+> release-status record.
+
 Date: 2026-08-26 UTC
 
 Scope: release-preparation tasks 1.1–1.6 and corrective publication for Open Cinema `0.3.2`,
@@ -444,7 +451,7 @@ false`, and based on local dirty trees. It is development evidence, not the
 previous immutable manifest.
 
 The documented Pi transition bundle
-`transition-20260826T002452-ebd7b2b6d014` is therefore the only currently
+`[private transition identifier redacted]` is therefore the only currently
 identified replacement baseline. Release task 9.2 revalidated its private
 controller capsule against the committed receipt on 2026-08-26: the exact
 84,236,888-byte capsule and inner manifest/READY digests matched, all 18 regular

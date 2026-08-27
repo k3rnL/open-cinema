@@ -1,5 +1,12 @@
 # Physical TV SPDIF/I2S acceptance — 2026-08-26
 
+> **Status addendum (2026-08-27):** The
+> [Open Cinema 0.3.2 closure](../../docs/release-readiness/2026-08-27-open-cinema-v0.3.2-closure.md)
+> records the later owner-accepted TV/encoded/CamillaDSP and complete
+> TV/Bluetooth/headset functional smoke. The pending-scenario wording below is
+> retained as the point-in-time boundary; quantitative characterization still
+> remains separate and open.
+
 Status: **physical input and managed processing path accepted; final subjective
 lip-sync and complete TV/Bluetooth priority scenario pending**.
 

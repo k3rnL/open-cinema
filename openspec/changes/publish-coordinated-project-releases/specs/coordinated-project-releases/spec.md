@@ -70,12 +70,16 @@ The release process SHALL produce a machine-readable coordinated manifest that p
 - **WHEN** a manifest entry uses a floating reference, lacks a digest, lacks a required platform asset, or violates another entry's compatibility constraint
 - **THEN** manifest validation fails before deployment is permitted to consume it
 
+#### Scenario: Independently published bytes are mirrored by the coordinated release
+- **WHEN** the coordinating workflow retains a verified UI, decoder, CamillaDSP, or Python-client artifact in its immutable release
+- **THEN** the manifest selects the digest-identical coordinated URL while preserving provenance to the producing repository, tag, commit, workflow, and artifact identity
+
 ### Requirement: Dependency-ordered publication
-Projects SHALL be published in an order that makes every pinned dependency and required artifact available and verified before a consuming project or the coordinated manifest is promoted. A consumer release SHALL reference only dependency releases that are already immutable and downloadable.
+Projects SHALL be published in an order that makes every pinned dependency and required artifact available and verified before a consuming project or the coordinated manifest is promoted. A consumer release SHALL reference only dependency artifacts that are already verified and downloadable, and the appliance manifest SHALL select them through either an immutable producing release or a digest-identical immutable coordinated mirror.
 
 #### Scenario: Dependencies publish successfully
 - **WHEN** all lower-level project artifacts have passed post-publication verification
-- **THEN** dependent projects and finally the coordinated manifest may be published with those immutable dependency references
+- **THEN** dependent projects and finally the coordinated manifest may be published with digest-pinned dependency references that resolve through an immutable selected publication surface
 
 #### Scenario: Dependency publication is incomplete
 - **WHEN** a required dependency tag, release record, artifact, digest, or verification is missing

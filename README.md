@@ -36,6 +36,11 @@ between logical inputs and outputs in a desired graph. Application and
 processing plugins may extend Open Cinema, but plugins cannot introduce a
 second audio backend or take ownership of the PipeWire session.
 
+Managed endpoint adapters provide user-configured ROC inputs/outputs and
+looping or recording debug-file devices. Their media root is explicit runtime
+state rather than package data, so release-mode wheel installation preserves
+the files referenced by saved adapters.
+
 ## Audio model
 
 The orchestration API keeps four states deliberately separate:
@@ -75,7 +80,11 @@ identity. Hardware acceptance has covered the GAB8 output, an SPDIF-to-I2S TV
 input, Bluetooth programme sources and headsets, one adaptive decoder, and one
 CamillaDSP instance. See [deployment/README.md](deployment/README.md) and
 [deployment/SUPPORTED_PLATFORMS.md](deployment/SUPPORTED_PLATFORMS.md) for the
-precise boundary and deferred campaigns.
+precise boundary and deferred campaigns. The
+[Open Cinema 0.3.2 closure](docs/release-readiness/2026-08-27-open-cinema-v0.3.2-closure.md)
+records the immutable component identities, provisioned-fixture deployment,
+protected rollback/reapply, functional hardware smoke, and unclaimed
+quantitative benchmarks.
 
 Other Raspberry Pi memory tiers and clean-image/upgrade qualification are not
 currently claimed. Performance characterization is tracked separately from

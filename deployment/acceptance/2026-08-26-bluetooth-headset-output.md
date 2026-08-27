@@ -1,5 +1,11 @@
 # Bluetooth headset output acceptance — 2026-08-26
 
+> **Status addendum (2026-08-27):** The
+> [Open Cinema 0.3.2 closure](../../docs/release-readiness/2026-08-27-open-cinema-v0.3.2-closure.md)
+> records the later owner-accepted automatic headset takeover, disconnect
+> fallback, Bluetooth programme input, and complete functional smoke. The
+> narrower direct-output boundary below remains valid point-in-time evidence.
+
 Status: **accepted for deployment task 3.7 on the experimental Raspberry Pi
 appliance**.
 
