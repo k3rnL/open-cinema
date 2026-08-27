@@ -47,6 +47,24 @@ def test_checked_in_release_template_is_exact_and_not_directly_promotable() -> N
     assert components["pycamilladsp"]["immutable"] is False
 
 
+def test_retained_v032_appliance_manifest_is_exact_and_promotable() -> None:
+    manifest_path = ROOT / "deployment" / "releases" / "open-cinema-0.3.2.yml"
+    manifest_bytes = manifest_path.read_bytes()
+    document = yaml.safe_load(manifest_bytes)
+
+    assert hashlib.sha256(manifest_bytes).hexdigest() == (
+        "c1838de6097050242413ab32684110287e50307513ba67b53e2619936aa38dd2"
+    )
+    assert document["release_id"] == "open-cinema-0.3.2"
+    assert document["finalized_by"] == {
+        "repository": "k3rnL/open-cinema",
+        "commit": "4ccda8e6165da6484ac0b7590ca6f03f8f4226f6",
+        "tag": "v0.3.2",
+        "workflow_run": "https://github.com/k3rnL/open-cinema/actions/runs/33021891788",
+    }
+    validate_finalized_manifest(document)
+
+
 def test_release_workflow_installs_manifest_tooling_before_finalization() -> None:
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text()
 

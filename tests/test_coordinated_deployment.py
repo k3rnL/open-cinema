@@ -78,6 +78,13 @@ def test_active_runtime_surface_is_native_pipewire_only() -> None:
         "pulse" + "_runtime_path",
     )
     assert all(term not in active_text for term in retired_terms)
+
+
+def test_release_mode_defaults_to_the_retained_finalized_manifest() -> None:
+    inventory = read(DEPLOYMENT / "inventories/group_vars/all.yml")
+
+    assert "default(playbook_dir ~ '/../releases/open-cinema-0.3.2.yml')" in inventory
+    assert "default(playbook_dir ~ '/../release-manifest.yml')" not in inventory
     assert not (ROOT / ".github/workflows/build-" "camilladsp-arm64.yml").exists()
 
 
@@ -135,6 +142,7 @@ def test_release_installers_consume_only_selected_manifest_artifacts() -> None:
     ui = read(DEPLOYMENT / "roles/react-apps/tasks/main.yml")
     decoder = read(DEPLOYMENT / "roles/pcm-auto-decoder/tasks/main.yml")
     camilladsp = read(DEPLOYMENT / "roles/camilladsp/tasks/main.yml")
+    environment = read(APP_ROLE / "templates/env.j2")
 
     assert set(inventory["wyreplumber"]) == {
         "app_path",
@@ -155,6 +163,27 @@ def test_release_installers_consume_only_selected_manifest_artifacts() -> None:
     assert "--no-deps" in app
     assert "--force-reinstall" in app
     assert "Install only manifest-selected Python wheels in appliance mode" in app
+    assert 'environ.Env.read_env(Path(__file__).resolve().with_name(".env"))' in app
+    assert "Create the persistent managed audio-adapter media directory" in app
+    assert "open_cinema.audio_adapter_media_root" in app
+    assert "OPEN_CINEMA_AUDIO_ADAPTER_MEDIA_ROOT=" in environment
+    assert "install_from_local is defined and install_from_local" not in app
+    assert "Remove stale mutable distribution metadata in appliance mode" in app
+    assert "open_cinema.egg-info" in app
+    assert "Create an isolated decoder extraction directory" in decoder
+    assert "Locate the decoder binary within the versioned archive root" in decoder
+    assert "open_cinema_decoder_archive_binaries.matched == 1" in decoder
+    assert "open_cinema_decoder_archive_binaries.files[0].path" in decoder
+    assert "Remove the isolated decoder extraction directory" in decoder
+    assert "changed_when: false" in decoder
+    assert "Compare the installed administration UI with its selected archive" in ui
+    assert "Compare the installed on-box UI with its selected archive" in ui
+    assert "open_cinema_admin_archive_comparison.rc == 10" in ui
+    assert "open_cinema_on_box_archive_comparison.rc == 10" in ui
+    assert "open_cinema_admin_archive_comparison.rc not in [0, 10]" in ui
+    assert "open_cinema_on_box_archive_comparison.rc not in [0, 10]" in ui
+    assert "artifact_cache_root" in ui
+    assert "Clean up downloaded tarballs" not in ui
 
 
 def test_mutable_development_identity_and_exact_runtime_probes_are_diagnostic() -> None:
@@ -218,6 +247,8 @@ def test_unchanged_candidate_reuses_the_passed_contract_gate() -> None:
     assert "Fingerprint locally synchronized candidate source trees" in site
     assert "open_cinema_deployment_candidate_digest" in site
     assert "Check whether this exact candidate already passed the contract gate" in site
+    assert "open_cinema_reseed_rollback_boundary" in site
+    assert "not open_cinema_reseed_rollback_boundary" in site
     assert "open_cinema_contract_gate_previously_passed" in safety
     assert "open_cinema_contract_gate_previously_passed" in gate
     assert "candidateDigest" in preflight
@@ -252,10 +283,25 @@ def test_changed_candidate_creates_a_full_coordinated_transition_bundle() -> Non
         assert artifact in tasks
     assert "Retain the controller inventory inputs" in tasks
     assert "Mark the coordinated transition bundle restorable" in tasks
+    assert "Inspect whether the previous generation retained a WyrePlumber source tree" in tasks
+    assert "Publish whether the previous WyrePlumber source is an actual directory" in tasks
+    assert "Resolve the archived application and virtual-environment roots" in tasks
+    assert "Probe the exact appliance WyrePlumber contract" in tasks
+    assert "ORCHESTRATION_CONTRACT_VERSION == expected_contract" in tasks
+    assert "RUNTIME_VALUE_SCHEMA_VERSION == expected_runtime_schema" in tasks
+    assert "WIREPLUMBER_BUILD_API_FAMILY == expected_family" in tasks
+    assert "Require a complete binding input for the previous deployment mode" in tasks
+    assert "Normalize the previous deployment input mode" in tasks
+    assert "default('development')" in tasks
+    assert "open_cinema_transition_previous_input_mode != 'development'" in tasks
+    assert "open_cinema_transition_wyreplumber_source_available" in tasks
+    assert "open_cinema_transition_archive_roots.stdout_lines[1].startswith" in tasks
     assert "open_cinema_transition_mutable_bundle_paths" in tasks
     assert "open_cinema_protected_rollback_bundle_ids" in tasks
     assert "Require protected transition bundles to remain outside the mutable set" in tasks
     assert "previous_candidate_digest" in manifest
+    assert "schema_version: 2" in manifest
+    assert "else none" in manifest
     assert "artifacts:" in manifest
     for model in (
         "GraphDefinition",
@@ -272,6 +318,16 @@ def test_changed_candidate_creates_a_full_coordinated_transition_bundle() -> Non
 def test_rollback_restores_one_explicit_verified_generation() -> None:
     playbook = read(DEPLOYMENT / "playbooks/rollback.yml")
     tasks = read(DEPLOYMENT / "roles/rollback/tasks/main.yml")
+
+    assert "schema_version in [1, 2]" in tasks
+    assert "if 'wyreplumber.tar.gz' in open_cinema_rollback_manifest.artifacts" in tasks
+    assert "previous_input_mode | default('')" in tasks
+    assert "'development' or" in tasks
+    assert "Load the selected rollback ready marker" in tasks
+    assert "open_cinema_rollback_ready == open_cinema_rollback_manifest.artifacts" in tasks
+    assert "open_cinema_rollback_required_artifacts" in tasks
+    assert "stat.isreg" in tasks
+    assert "stat.islnk" in tasks
 
     assert "open_cinema_rollback_bundle_id" in tasks
     assert "Rollback never selects or deletes a bundle implicitly" in tasks
@@ -322,7 +378,8 @@ def test_readiness_loads_release_identity_for_independently_tagged_runs() -> Non
     assert "Load the coordinated release manifest for independently tagged runs" in readiness
     assert "open_cinema_readiness_release_manifest_stat.stat.checksum" in readiness
     assert "open_cinema_release_manifest_digest" in readiness
-    assert "Find the retained rollback identity for independently tagged runs" in readiness
+    assert "Verify retained coordinated rollback bundles before selection" in readiness
+    assert "open_cinema_verified_rollback_inventory.verifiedBundleIds" in readiness
     assert "open_cinema_rollback_id is not defined" in readiness
 
 
@@ -349,6 +406,7 @@ def test_deployment_uses_one_contract_gated_full_runtime() -> None:
     assert all(group_inventory["open_cinema"]["orchestration_features"].values())
     assert "open_cinema_release_status" not in group_inventory
     assert group_inventory["open_cinema_close_rollback_window"] is False
+    assert group_inventory["open_cinema_reseed_rollback_boundary"] is False
     assert "open_cinema_release_manifest.status in ['experimental', 'supported']" in site
     assert "open_cinema_release_manifest.runtime_profile == 'full'" in site
 
@@ -357,8 +415,17 @@ def test_deployment_uses_one_contract_gated_full_runtime() -> None:
     assert "open_cinema_feature_" not in environment
     assert "OPEN_CINEMA_AUDIO_LIVE_GRAPH_ALLOWLIST=*" in environment
     assert environment.count("open_cinema_contract_gate_complete | default(false)") == 2
-    assert 'runtimeProfile: "{{ open_cinema_release_manifest.runtime_profile }}"' in readiness
-    assert 'runtime_profile: "{{ open_cinema_release_manifest.runtime_profile }}"' in readiness
+    assert "open_cinema_release_manifest.runtime_profile | default('full')" in readiness
+    assert "import opencinema.version" not in readiness
+    assert "input_mode == 'appliance'" in readiness
+    assert "('wyreplumber', 'camilladsp')" in readiness
+    assert "Record mutable development UI identities without release markers" in readiness
+    assert "identity': 'mutable-development-tree'" in readiness
+    assert readiness.count("- --no-imports") == readiness.count("- shell")
+    assert "Verify authenticated SSE transport through nginx" in readiness
+    assert "/api/audio/v1/events?after=0&follow=false" in readiness
+    assert "GraphDefinition.objects.create(" not in readiness
+    assert "OrchestrationEvent.objects.create(" not in readiness
     assert "rolloutStage" not in readiness
     assert "rollout_stage" not in readiness
     assert "rollout-stages.yml" not in backup
@@ -524,7 +591,7 @@ def test_destructive_migration_is_backed_up_and_failure_is_diagnostic() -> None:
     assert "Determine whether a schema transition is pending" in tasks
     assert "No planned migration operations." in tasks
     assert "Stop the current application generation before a schema transition" in tasks
-    assert "Reuse the latest retained rollback identity" in tasks
+    assert "Reuse the latest retained rollback identity" not in tasks
     assert "Enforce private ownership of the live SQLite database" in tasks
     assert 'mode: "0600"' in tasks
     assert "PRAGMA quick_check" in tasks
@@ -561,7 +628,7 @@ def test_end_of_play_readiness_covers_every_coordinated_component() -> None:
         "Reject anonymous access to administrative diagnostics",
         "Require versioned API schema metadata through nginx",
         "Require authorized administrative diagnostics through nginx",
-        "authenticated SSE connection and cursor-gap recovery",
+        "authenticated SSE transport through nginx",
         "Retain readiness diagnostics",
     ):
         assert expected in tasks
@@ -631,12 +698,19 @@ def test_successful_readiness_keeps_one_active_and_verified_protected_rollback()
     assert inventory["open_cinema"]["rollback_releases_to_keep"] == 1
     assert inventory["private_rollback_capsule_path"] == ""
     assert "Require one active rollback release and any verified protected exception" in tasks
+    assert "Verify retained coordinated rollback bundles before selection" in tasks
+    assert "open_cinema_verified_rollback_inventory.verifiedBundleIds" in tasks
     assert "Record the successful one-release rollback boundary" in tasks
     assert "rollback-window.yml" in tasks
     assert "Remove rollback bundles older than the accepted previous release" in tasks
     assert "open_cinema_protected_rollback_bundle_paths" in tasks
     assert "open_cinema_expected_retained_rollback_paths" in tasks
     assert "Verify the active and protected rollback releases remain" in tasks
+    assert tasks.index("Verify the active and protected rollback releases remain") < tasks.index(
+        "Record the successful one-release rollback boundary"
+    )
+    assert "Preserve a correlated previously closed rollback window" in tasks
+    assert "rollback_window_closed: {{ open_cinema_existing_rollback_window_closed" in tasks
     assert "['verified', 'target-verified']" in tasks
 
 
@@ -745,12 +819,8 @@ def test_preflight_aggregates_compatibility_before_destructive_or_live_roles() -
     assert "Probe installed Python packages and orchestration contracts" in preflight
     assert "Verify retained rollback input for standalone preflight runs" in preflight
     assert "private-rollback-preflight.yml" in preflight
-    normalize_at = preflight.index(
-        "Normalize independent host and component probe results"
-    )
-    match_at = preflight.index(
-        "Match the normalized host against supported Raspberry Pi models"
-    )
+    normalize_at = preflight.index("Normalize independent host and component probe results")
+    match_at = preflight.index("Match the normalized host against supported Raspberry Pi models")
     classify_at = preflight.index("Classify the target platform")
     assert normalize_at < match_at < classify_at
     assert defaults["open_cinema_preflight_result_path"] == "/tmp/open-cinema-preflight-result.json"

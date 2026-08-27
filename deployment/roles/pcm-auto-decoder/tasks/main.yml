@@ -148,28 +148,58 @@
     checksum: "sha256:{{ open_cinema_release_artifacts.pcm_auto_decoder.sha256 }}"
   when: not (install_from_local | default(false) | bool)
 
-- name: Create extraction directory
-  ansible.builtin.file:
-    path: "/tmp/pcm-auto-decoder_extract"
-    state: directory
-    mode: "0755"
+- name: Install the binary from the manifest-selected decoder archive
   when: not (install_from_local | default(false) | bool)
+  block:
+    - name: Create an isolated decoder extraction directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: pcm-auto-decoder
+      register: open_cinema_decoder_extract_dir
+      changed_when: false
 
-- name: Extract decoder
-  ansible.builtin.unarchive:
-    src: "/tmp/{{ open_cinema_release_artifacts.pcm_auto_decoder.name }}"
-    dest: "/tmp/pcm-auto-decoder_extract"
-    remote_src: true
-  when: not (install_from_local | default(false) | bool)
+    - name: Extract the selected decoder archive
+      ansible.builtin.unarchive:
+        src: "/tmp/{{ open_cinema_release_artifacts.pcm_auto_decoder.name }}"
+        dest: "{{ open_cinema_decoder_extract_dir.path }}"
+        remote_src: true
+      changed_when: false
 
-- name: Install decoder binary
-  ansible.builtin.copy:
-    src: "/tmp/pcm-auto-decoder_extract/{{ pcm_auto_decoder.bin_name }}"
-    dest: "{{ pcm_auto_decoder.install_path }}"
-    remote_src: true
-    mode: "0755"
-  when: not (install_from_local | default(false) | bool)
-  notify: Reload systemd for decoder
+    - name: Locate the decoder binary within the versioned archive root
+      ansible.builtin.find:
+        paths: "{{ open_cinema_decoder_extract_dir.path }}"
+        patterns: "{{ pcm_auto_decoder.bin_name }}"
+        file_type: file
+        recurse: true
+      register: open_cinema_decoder_archive_binaries
+
+    - name: Require exactly one decoder binary in the selected archive
+      ansible.builtin.assert:
+        that:
+          - open_cinema_decoder_archive_binaries.matched == 1
+        fail_msg: >-
+          The selected decoder archive must contain exactly one regular file named
+          {{ pcm_auto_decoder.bin_name }}; found
+          {{ open_cinema_decoder_archive_binaries.matched }}.
+
+    - name: Install decoder binary
+      ansible.builtin.copy:
+        src: "{{ open_cinema_decoder_archive_binaries.files[0].path }}"
+        dest: "{{ pcm_auto_decoder.install_path }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+      notify: Reload systemd for decoder
+  always:
+    - name: Remove the isolated decoder extraction directory
+      ansible.builtin.file:
+        path: "{{ open_cinema_decoder_extract_dir.path }}"
+        state: absent
+      when:
+        - open_cinema_decoder_extract_dir is defined
+        - open_cinema_decoder_extract_dir.path is defined
+      changed_when: false
 
 - name: Verify the installed decoder version and managed status options
   ansible.builtin.command:

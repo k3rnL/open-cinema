@@ -13,7 +13,8 @@
 - name: Download open-cinema-admin build from GitHub release
   ansible.builtin.get_url:
     url: "{{ open_cinema_release_artifacts.management_ui_admin.url }}"
-    dest: "/tmp/{{ open_cinema_release_artifacts.management_ui_admin.name }}"
+    dest: >-
+      {{ release_manifest.artifact_cache_root }}/{{ open_cinema_release_manifest.release_id }}/{{ open_cinema_release_artifacts.management_ui_admin.name }}
     mode: '0644'
     checksum: "sha256:{{ open_cinema_release_artifacts.management_ui_admin.sha256 }}"
   register: admin_download
@@ -22,10 +23,46 @@
 - name: Download open-cinema-ui build from GitHub release
   ansible.builtin.get_url:
     url: "{{ open_cinema_release_artifacts.management_ui_on_box.url }}"
-    dest: "/tmp/{{ open_cinema_release_artifacts.management_ui_on_box.name }}"
+    dest: >-
+      {{ release_manifest.artifact_cache_root }}/{{ open_cinema_release_manifest.release_id }}/{{ open_cinema_release_artifacts.management_ui_on_box.name }}
     mode: '0644'
     checksum: "sha256:{{ open_cinema_release_artifacts.management_ui_on_box.sha256 }}"
   register: ui_download
+  when: not (install_from_local | default(false) | bool)
+
+- name: Install the exact UI archive comparison probe
+  ansible.builtin.copy:
+    src: compare-archive-tree.py
+    dest: /tmp/open-cinema-compare-archive-tree.py
+    owner: root
+    group: root
+    mode: "0755"
+  when: not (install_from_local | default(false) | bool)
+
+- name: Compare the installed administration UI with its selected archive
+  ansible.builtin.command:
+    argv:
+      - python3
+      - /tmp/open-cinema-compare-archive-tree.py
+      - >-
+        {{ release_manifest.artifact_cache_root }}/{{ open_cinema_release_manifest.release_id }}/{{ open_cinema_release_artifacts.management_ui_admin.name }}
+      - "{{ open_cinema_ui.admin.web_root }}"
+  register: open_cinema_admin_archive_comparison
+  changed_when: false
+  failed_when: open_cinema_admin_archive_comparison.rc not in [0, 10]
+  when: not (install_from_local | default(false) | bool)
+
+- name: Compare the installed on-box UI with its selected archive
+  ansible.builtin.command:
+    argv:
+      - python3
+      - /tmp/open-cinema-compare-archive-tree.py
+      - >-
+        {{ release_manifest.artifact_cache_root }}/{{ open_cinema_release_manifest.release_id }}/{{ open_cinema_release_artifacts.management_ui_on_box.name }}
+      - "{{ open_cinema_ui.user_ui.web_root }}"
+  register: open_cinema_on_box_archive_comparison
+  changed_when: false
+  failed_when: open_cinema_on_box_archive_comparison.rc not in [0, 10]
   when: not (install_from_local | default(false) | bool)
 
 - name: Clear admin web root before extraction
@@ -34,7 +71,7 @@
     state: absent
   when:
     - not (install_from_local | default(false) | bool)
-    - admin_download.changed
+    - open_cinema_admin_archive_comparison.rc == 10
 
 - name: Recreate admin web root
   ansible.builtin.file:
@@ -45,18 +82,19 @@
     mode: '0755'
   when:
     - not (install_from_local | default(false) | bool)
-    - admin_download.changed
+    - open_cinema_admin_archive_comparison.rc == 10
 
 - name: Extract open-cinema-admin build
   ansible.builtin.unarchive:
-    src: "/tmp/{{ open_cinema_release_artifacts.management_ui_admin.name }}"
+    src: >-
+      {{ release_manifest.artifact_cache_root }}/{{ open_cinema_release_manifest.release_id }}/{{ open_cinema_release_artifacts.management_ui_admin.name }}
     dest: "{{ open_cinema_ui.admin.web_root }}"
     remote_src: yes
     owner: www-data
     group: www-data
   when:
     - not (install_from_local | default(false) | bool)
-    - admin_download.changed
+    - open_cinema_admin_archive_comparison.rc == 10
   notify: Reload nginx
 
 - name: Verify local administration UI build exists
@@ -127,7 +165,7 @@
     state: absent
   when:
     - not (install_from_local | default(false) | bool)
-    - ui_download.changed
+    - open_cinema_on_box_archive_comparison.rc == 10
 
 - name: Recreate UI web root
   ansible.builtin.file:
@@ -138,18 +176,19 @@
     mode: '0755'
   when:
     - not (install_from_local | default(false) | bool)
-    - ui_download.changed
+    - open_cinema_on_box_archive_comparison.rc == 10
 
 - name: Extract open-cinema-ui build
   ansible.builtin.unarchive:
-    src: "/tmp/{{ open_cinema_release_artifacts.management_ui_on_box.name }}"
+    src: >-
+      {{ release_manifest.artifact_cache_root }}/{{ open_cinema_release_manifest.release_id }}/{{ open_cinema_release_artifacts.management_ui_on_box.name }}
     dest: "{{ open_cinema_ui.user_ui.web_root }}"
     remote_src: yes
     owner: www-data
     group: www-data
   when:
     - not (install_from_local | default(false) | bool)
-    - ui_download.changed
+    - open_cinema_on_box_archive_comparison.rc == 10
   notify: Reload nginx
 
 - name: Verify local on-box UI build exists
@@ -237,15 +276,6 @@
   loop:
     - "{{ open_cinema_ui.admin.web_root }}"
     - "{{ open_cinema_ui.user_ui.web_root }}"
-
-- name: Clean up downloaded tarballs
-  ansible.builtin.file:
-    path: "/tmp/{{ item }}"
-    state: absent
-  loop:
-    - "{{ open_cinema_release_artifacts.management_ui_admin.name }}"
-    - "{{ open_cinema_release_artifacts.management_ui_on_box.name }}"
-  when: not (install_from_local | default(false) | bool)
 
 - name: Apply UI web-server reload before readiness
   ansible.builtin.meta: flush_handlers

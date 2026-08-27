@@ -51,6 +51,14 @@
     group: "{{ open_cinema.group }}"
     mode: '0755'
 
+- name: Create the persistent managed audio-adapter media directory
+  ansible.builtin.file:
+    path: "{{ open_cinema.audio_adapter_media_root }}"
+    state: directory
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0700"
+
 - name: Create log directory
   ansible.builtin.file:
     path: /var/log/open-cinema
@@ -201,7 +209,7 @@
       - "--exclude=*.egg-info"
       - "--exclude=*.so"
       - "--exclude=*.so.*"
-  when: install_from_local is defined and install_from_local
+  when: install_from_local | default(false) | bool
   notify:
     - Restart open-cinema
     - Restart celery
@@ -225,6 +233,12 @@
     - not (install_from_local | default(false) | bool)
     - open_cinema_release_wheels_need_install | bool
 
+- name: Remove stale mutable distribution metadata in appliance mode
+  ansible.builtin.file:
+    path: "{{ open_cinema.app_path }}/open_cinema.egg-info"
+    state: absent
+  when: not (install_from_local | default(false) | bool)
+
 - name: Remove the development WyrePlumber checkout in appliance mode
   ansible.builtin.file:
     path: "{{ wyreplumber.app_path }}"
@@ -242,7 +256,7 @@
     - docs
     - openspec
     - tests
-  when: install_from_local is defined and install_from_local
+  when: install_from_local | default(false) | bool
 
 - name: Set ownership of application directory
   ansible.builtin.file:
@@ -250,7 +264,7 @@
     owner: "{{ open_cinema.user }}"
     group: "{{ open_cinema.group }}"
     recurse: yes
-  when: install_from_local is defined and install_from_local
+  when: install_from_local | default(false) | bool
 
 - name: Create Python virtual environment
   ansible.builtin.command:
@@ -381,6 +395,14 @@
       #!/usr/bin/env python3
       import os
       import sys
+      from pathlib import Path
+
+      import environ
+
+      # Wheel installs keep settings in site-packages, so BASE_DIR no longer
+      # identifies the managed application directory. Load the same protected
+      # environment file used by systemd before Django imports its settings.
+      environ.Env.read_env(Path(__file__).resolve().with_name(".env"))
 
       os.environ.setdefault("DJANGO_SETTINGS_MODULE", "opencinema.settings")
 
@@ -740,25 +762,6 @@
     owner: "{{ open_cinema.user }}"
     group: "{{ open_cinema.group }}"
     mode: "0600"
-
-- name: Find retained rollback bundles when no schema transition is pending
-  ansible.builtin.find:
-    paths: "{{ open_cinema.rollback_root }}"
-    recurse: false
-    file_type: directory
-  register: open_cinema_existing_rollback_bundles
-  when: not open_cinema_has_pending_migrations | bool
-
-- name: Reuse the latest retained rollback identity for readiness records
-  ansible.builtin.set_fact:
-    open_cinema_rollback_id: >-
-      {{
-        ((open_cinema_existing_rollback_bundles.files
-           | map(attribute='path') | sort | last) | basename)
-        if open_cinema_existing_rollback_bundles.matched | int > 0
-        else 'none'
-      }}
-  when: not open_cinema_has_pending_migrations | bool
 
 - name: Provision the temporary default appliance administrator
   ansible.builtin.command:

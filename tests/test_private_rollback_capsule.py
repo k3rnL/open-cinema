@@ -39,11 +39,21 @@ def write_nested_archive(path: Path, *, unsafe: bool = False) -> None:
         archive.addfile(member, io.BytesIO(payload))
 
 
-def build_capsule(tmp_path: Path, *, unsafe_archive: bool = False) -> tuple[Path, int]:
+def build_capsule(
+    tmp_path: Path,
+    *,
+    unsafe_archive: bool = False,
+    include_wyreplumber_source: bool = True,
+    schema_version: int = 1,
+    previous_input_mode: str | None = None,
+) -> tuple[Path, int]:
     tmp_path.chmod(0o700)
     bundle = tmp_path / BASELINE_ID
     bundle.mkdir()
-    for name in sorted(ARCHIVES):
+    archives = set(ARCHIVES)
+    if not include_wyreplumber_source:
+        archives.remove("wyreplumber.tar.gz")
+    for name in sorted(archives):
         write_nested_archive(
             bundle / name,
             unsafe=unsafe_archive and name == "application.tar.gz",
@@ -57,16 +67,23 @@ def build_capsule(tmp_path: Path, *, unsafe_archive: bool = False) -> tuple[Path
     (bundle / "dynamic-state.json").write_text("{}\n")
     (bundle / "release-manifest.yml").write_text("schema_version: 1\n")
 
-    artifact_names = sorted(ARCHIVES | {"db.sqlite3", "dynamic-state.json", "release-manifest.yml"})
+    artifact_names = sorted(archives | {"db.sqlite3", "dynamic-state.json", "release-manifest.yml"})
     artifacts = {name: digest(bundle / name) for name in artifact_names}
+    restore = {"strategy": "coordinated-full-generation"}
+    if schema_version == 2:
+        restore["wyreplumber_archive"] = (
+            "wyreplumber.tar.gz" if include_wyreplumber_source else None
+        )
     manifest = {
-        "schema_version": 1,
+        "schema_version": schema_version,
         "kind": "open-cinema-coordinated-transition-backup",
         "bundle_id": BASELINE_ID,
         "release_manifest_sha256": artifacts["release-manifest.yml"],
         "artifacts": artifacts,
-        "restore": {"strategy": "coordinated-full-generation"},
+        "restore": restore,
     }
+    if schema_version == 2 and previous_input_mode is not None:
+        manifest["previous_input_mode"] = previous_input_mode
     (bundle / "manifest.yml").write_text(yaml.safe_dump(manifest, sort_keys=True))
     (bundle / "READY").write_text(json.dumps(artifacts, sort_keys=True) + "\n")
 
@@ -134,6 +151,73 @@ def test_private_capsule_verifies_full_restore_boundary(tmp_path: Path) -> None:
     assert result["restoreArtifactCount"] == 9
     assert result["nestedArchiveCount"] == 6
     assert result["sqliteIntegrity"] == "ok"
+
+
+def test_schema_two_capsule_accepts_wheel_only_binding_generation(tmp_path: Path) -> None:
+    capsule, file_count = build_capsule(
+        tmp_path,
+        include_wyreplumber_source=False,
+        schema_version=2,
+        previous_input_mode="appliance",
+    )
+
+    result = verify_capsule(
+        capsule,
+        baseline_id=BASELINE_ID,
+        expected_sha256=digest(capsule),
+        expected_size_bytes=capsule.stat().st_size,
+        expected_regular_file_count=file_count,
+    )
+
+    assert result["schemaVersion"] == 1
+    assert result["transitionManifestSchemaVersion"] == 2
+    assert result["restoreArtifactCount"] == 8
+    assert result["nestedArchiveCount"] == 5
+    assert result["sqliteIntegrity"] == "ok"
+
+
+def test_schema_two_capsule_accepts_development_source_generation(tmp_path: Path) -> None:
+    capsule, file_count = build_capsule(
+        tmp_path,
+        schema_version=2,
+        previous_input_mode="development",
+    )
+
+    result = verify_capsule(
+        capsule,
+        baseline_id=BASELINE_ID,
+        expected_sha256=digest(capsule),
+        expected_size_bytes=capsule.stat().st_size,
+        expected_regular_file_count=file_count,
+    )
+
+    assert result["transitionManifestSchemaVersion"] == 2
+    assert result["restoreArtifactCount"] == 9
+
+
+@pytest.mark.parametrize(
+    ("previous_input_mode", "include_source", "message"),
+    [
+        (None, False, "previous input mode"),
+        ("mutable", True, "previous input mode"),
+        ("development", False, "requires its WyrePlumber source archive"),
+    ],
+)
+def test_schema_two_capsule_rejects_invalid_mode_source_combinations(
+    tmp_path: Path,
+    previous_input_mode: str | None,
+    include_source: bool,
+    message: str,
+) -> None:
+    capsule, _ = build_capsule(
+        tmp_path,
+        include_wyreplumber_source=include_source,
+        schema_version=2,
+        previous_input_mode=previous_input_mode,
+    )
+
+    with pytest.raises(CapsuleError, match=message):
+        verify_capsule(capsule, baseline_id=BASELINE_ID)
 
 
 @pytest.mark.parametrize(

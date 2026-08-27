@@ -3,11 +3,15 @@ project_root: "/opt/home-cinema"
 # Rollback-window closure remains an explicit operator decision. Release status
 # is owned only by the coordinated manifest.
 open_cinema_close_rollback_window: false
+# Explicit recovery maintenance may reseed a checksum-verified bundle from the
+# currently installed generation even when the candidate digest is unchanged.
+# Normal reconciliation must leave this disabled.
+open_cinema_reseed_rollback_boundary: false
 
 release_manifest:
   source_path: >-
     {{ open_cinema_release_manifest_source_path |
-       default(playbook_dir ~ '/../release-manifest.yml') }}
+       default(playbook_dir ~ '/../releases/open-cinema-0.3.2.yml') }}
   install_dir: "/etc/open-cinema"
   install_path: "/etc/open-cinema/release-manifest.yml"
   installed_identity_path: "/var/lib/open-cinema/deployment-diagnostics/installed-release.yml"
@@ -85,6 +89,7 @@ open_cinema:
   readiness_result_path: "/var/lib/open-cinema/deployment-diagnostics/readiness-result.json"
   runtime_redis_key: "open-cinema:orchestration:runtime-world:v1"
   orchestrator_lock_path: "/run/open-cinema/orchestrator.lock"
+  audio_adapter_media_root: "{{ project_root }}/open-cinema/media/audio-adapters"
   managed_static_paths:
     - /etc/open-cinema
     - /etc/nginx/sites-available/open-cinema

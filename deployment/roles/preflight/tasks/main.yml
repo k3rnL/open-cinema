@@ -187,9 +187,9 @@
         from core.orchestration.schema_version import CURRENT_ORCHESTRATION_SCHEMA_VERSION;
         from wyreplumber import WIREPLUMBER_BUILD_API_FAMILY;
         from wyreplumber.runtime import ORCHESTRATION_CONTRACT_VERSION, RUNTIME_VALUE_SCHEMA_VERSION;
-        assert metadata.version('open-cinema') == '{{ open_cinema_preflight_manifest.components.open_cinema.version }}';
-        assert metadata.version('wyreplumber') == '{{ open_cinema_preflight_manifest.components.wyreplumber.version }}';
-        assert metadata.version('camilladsp') == '{{ open_cinema_preflight_manifest.components.pycamilladsp.version }}';
+        assert metadata.version('open-cinema') == '{{ open_cinema_preflight_manifest.components.open_cinema.version }}', ('open-cinema distribution version', metadata.version('open-cinema'));
+        assert metadata.version('wyreplumber') == '{{ open_cinema_preflight_manifest.components.wyreplumber.version }}', ('wyreplumber distribution version', metadata.version('wyreplumber'));
+        assert metadata.version('camilladsp') == '{{ open_cinema_preflight_manifest.components.pycamilladsp.version }}', ('camilladsp distribution version', metadata.version('camilladsp'));
         assert API_VERSION == {{ open_cinema_preflight_manifest.contracts.audio_api | regex_replace('^.*/v', '') | int }};
         assert DESIRED_GRAPH_SCHEMA_VERSION == {{ open_cinema_preflight_manifest.contracts.desired_graph_schema }};
         assert CURRENT_ORCHESTRATION_SCHEMA_VERSION == {{ open_cinema_preflight_manifest.contracts.orchestration_schema }};

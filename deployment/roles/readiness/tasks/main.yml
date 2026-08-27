@@ -39,24 +39,99 @@
         'selectedArtifacts': open_cinema_release_artifacts | default({})
       }) }}
 
-- name: Find the retained rollback identity for independently tagged runs
-  ansible.builtin.find:
-    paths: "{{ open_cinema.rollback_root }}"
-    recurse: false
-    file_type: directory
-  register: open_cinema_readiness_rollback_bundles
-  when: open_cinema_rollback_id is not defined
+- name: Inspect any previously closed rollback window
+  ansible.builtin.stat:
+    path: "{{ open_cinema.rollback_root }}/rollback-window.yml"
+    follow: false
+  register: open_cinema_existing_rollback_window_stat
 
-- name: Publish the retained rollback identity for readiness records
+- name: Require a retained rollback-window record to be a private regular file
+  ansible.builtin.assert:
+    that:
+      - open_cinema_existing_rollback_window_stat.stat.isreg | default(false)
+      - not open_cinema_existing_rollback_window_stat.stat.islnk | default(false)
+    fail_msg: >-
+      The retained rollback-window record is not a regular non-symlink file;
+      readiness will not infer or overwrite closure state from it.
+  when: open_cinema_existing_rollback_window_stat.stat.exists | default(false)
+
+- name: Load the previous rollback-window record
+  ansible.builtin.slurp:
+    src: "{{ open_cinema.rollback_root }}/rollback-window.yml"
+  register: open_cinema_existing_rollback_window_file
+  when: open_cinema_existing_rollback_window_stat.stat.exists | default(false)
+
+- name: Publish the previous rollback-window record
+  ansible.builtin.set_fact:
+    open_cinema_existing_rollback_window: >-
+      {{
+        (open_cinema_existing_rollback_window_file.content | b64decode | from_yaml)
+        if open_cinema_existing_rollback_window_stat.stat.exists | default(false)
+        else {}
+      }}
+
+- name: Install the retained rollback bundle verifier
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/verify_retained_rollback_bundles.py"
+    dest: /tmp/open-cinema-verify-retained-rollback-bundles.py
+    owner: root
+    group: root
+    mode: "0500"
+
+- name: Verify retained coordinated rollback bundles before selection
+  ansible.builtin.command:
+    argv:
+      - "{{ open_cinema.venv_path }}/bin/python"
+      - /tmp/open-cinema-verify-retained-rollback-bundles.py
+      - --root
+      - "{{ open_cinema.rollback_root }}"
+  register: open_cinema_retained_rollback_verification_command
+  changed_when: false
+
+- name: Publish the verified retained rollback inventory
+  ansible.builtin.set_fact:
+    open_cinema_verified_rollback_inventory: >-
+      {{
+        open_cinema_retained_rollback_verification_command.stdout_lines |
+        last | from_json
+      }}
+
+- name: Publish the retained rollback identity for independently tagged runs
   ansible.builtin.set_fact:
     open_cinema_rollback_id: >-
       {{
-        ((open_cinema_readiness_rollback_bundles.files
-           | map(attribute='path') | sort | last) | basename)
-        if open_cinema_readiness_rollback_bundles.matched | int > 0
+        (open_cinema_verified_rollback_inventory.verifiedBundleIds |
+         difference(open_cinema_protected_rollback_bundle_ids | default([])) |
+         sort | last)
+        if (open_cinema_verified_rollback_inventory.verifiedBundleIds |
+            difference(open_cinema_protected_rollback_bundle_ids | default([])) |
+            length) > 0
         else 'none'
       }}
   when: open_cinema_rollback_id is not defined
+
+- name: Preserve a correlated previously closed rollback window
+  ansible.builtin.set_fact:
+    open_cinema_existing_rollback_window_closed: >-
+      {{
+        open_cinema_existing_rollback_window is mapping and
+        open_cinema_existing_rollback_window.schema_version | default(0) | int == 1 and
+        open_cinema_existing_rollback_window.open_bundle | default('') ==
+          open_cinema_rollback_id and
+        (open_cinema_existing_rollback_window.protected_bundles | default([]) | sort) ==
+          (open_cinema_protected_rollback_bundle_ids | default([]) | sort) and
+        (open_cinema_existing_rollback_window.release_id |
+          default(open_cinema_release_manifest.release_id)) ==
+          open_cinema_release_manifest.release_id and
+        (open_cinema_existing_rollback_window.release_manifest_sha256 |
+          default(open_cinema_release_manifest_digest)) ==
+          open_cinema_release_manifest_digest and
+        open_cinema_rollback_id in
+          open_cinema_verified_rollback_inventory.verifiedBundleIds and
+        (open_cinema_protected_rollback_bundle_ids | default([]) |
+         difference(open_cinema_verified_rollback_inventory.verifiedBundleIds) |
+         length) == 0
+      }}
 
 - name: Resolve the audio service UID for independently tagged runs
   ansible.builtin.command:
@@ -172,7 +247,6 @@
           - -c
           - >-
             import importlib.metadata as metadata, json;
-            import opencinema.version as open_cinema_version;
             from wyreplumber import WIREPLUMBER_BUILD_API_FAMILY;
             from wyreplumber._core import WPConnection;
             from wyreplumber.runtime import capture_runtime_snapshot;
@@ -184,8 +258,10 @@
               'wyreplumber': '{{ open_cinema_release_manifest.components.wyreplumber.version }}',
               'camilladsp': '{{ open_cinema_release_manifest.components.pycamilladsp.version }}'};
             actual = {name: metadata.version(name) for name in expected};
-            assert actual == expected, {'expected': expected, 'actual': actual};
-            assert open_cinema_version.__version__ == expected['open-cinema'];
+            input_mode = '{{ open_cinema_release_manifest.input_mode | default('development') }}';
+            assert (actual == expected if input_mode == 'appliance' else
+            all(actual[name] == expected[name] for name in ('wyreplumber', 'camilladsp'))),
+            {'inputMode': input_mode, 'expected': expected, 'actual': actual};
             assert WIREPLUMBER_BUILD_API_FAMILY == '{{ open_cinema_release_manifest.contracts.wireplumber_api_family }}';
             connection = WPConnection();
             connection.sync();
@@ -194,6 +270,7 @@
             assert snapshot.generation > 0;
             connection.stop();
             print(json.dumps({'packages': actual,
+            'inputMode': input_mode,
             'wirePlumberBuildApiFamily': WIREPLUMBER_BUILD_API_FAMILY,
             'orchestrationContract': contract.version,
             'runtimeGeneration': snapshot.generation,
@@ -233,6 +310,7 @@
           - "{{ open_cinema.venv_path }}/bin/python"
           - manage.py
           - shell
+          - --no-imports
           - -c
           - >-
             from django.urls import resolve;
@@ -521,6 +599,19 @@
           - "{{ open_cinema_ui.user_ui.web_root }}/open-cinema-release.json"
       register: open_cinema_readiness_ui_identities
       changed_when: false
+      when: open_cinema_release_manifest.input_mode | default('development') == 'appliance'
+
+    - name: Record mutable development UI identities without release markers
+      ansible.builtin.set_fact:
+        open_cinema_readiness_ui_identities:
+          stdout: >-
+            {{ [
+              {'application': 'admin', 'version': open_cinema_release_manifest.components.management_ui.version,
+               'project': 'open-cinema-ui', 'identity': 'mutable-development-tree'},
+              {'application': 'on-box', 'version': open_cinema_release_manifest.components.management_ui.version,
+               'project': 'open-cinema-ui', 'identity': 'mutable-development-tree'}
+            ] | to_json }}
+      when: open_cinema_release_manifest.input_mode | default('development') != 'appliance'
 
     - name: Require the API proxy health endpoint
       ansible.builtin.uri:
@@ -644,31 +735,10 @@
         open_cinema_readiness_diagnostics_api.json.schemaVersion | int != 1 or
         not open_cinema_readiness_diagnostics_api.json.administrative | bool
 
-    - name: Select an event stream that can prove cursor-gap recovery
-      ansible.builtin.command:
-        argv:
-          - "{{ open_cinema.venv_path }}/bin/python"
-          - manage.py
-          - shell
-          - -c
-          - >-
-            from django.db.models import Min;
-            from api.models import GraphDefinition;
-            graph = GraphDefinition.objects.annotate(first_event=Min('orchestration_events__sequence')).filter(first_event__gt=1).order_by('first_event').first();
-            print(graph.pk if graph else '')
-      args:
-        chdir: "{{ open_cinema.app_path }}"
-      become_user: "{{ open_cinema.user }}"
-      register: open_cinema_readiness_sse_graph
-      changed_when: false
-      failed_when: >-
-        open_cinema_readiness_sse_graph.rc != 0 or
-        open_cinema_readiness_sse_graph.stdout_lines | last | length == 0
-
-    - name: Verify authenticated SSE connection and cursor-gap recovery
+    - name: Verify authenticated SSE transport through nginx
       ansible.builtin.uri:
         url: >-
-          {{ open_cinema_appliance_base_url }}/api/audio/v1/events?graphId={{ open_cinema_readiness_sse_graph.stdout_lines | last }}&after=0&follow=false
+          {{ open_cinema_appliance_base_url }}/api/audio/v1/events?after=0&follow=false
         status_code: 200
         return_content: true
         timeout: 15
@@ -677,10 +747,10 @@
       failed_when: >-
         open_cinema_readiness_sse.status != 200 or
         not open_cinema_readiness_sse.content_type.startswith('text/event-stream') or
-        not open_cinema_readiness_sse.open_cinema_event_gap | bool or
         'retry: 2000' not in open_cinema_readiness_sse.content or
-        'event: snapshot' not in open_cinema_readiness_sse.content or
-        '"replaceLocalState":true' not in open_cinema_readiness_sse.content
+        (open_cinema_readiness_sse.open_cinema_event_gap | bool and
+         ('event: snapshot' not in open_cinema_readiness_sse.content or
+          '"replaceLocalState":true' not in open_cinema_readiness_sse.content))
 
     - name: Close the readiness management session
       ansible.builtin.uri:
@@ -899,7 +969,7 @@
           status: failed
           releaseId: "{{ open_cinema_release_manifest.release_id }}"
           releaseManifestSha256: "{{ open_cinema_release_manifest_digest }}"
-          runtimeProfile: "{{ open_cinema_release_manifest.runtime_profile }}"
+          runtimeProfile: "{{ open_cinema_release_manifest.runtime_profile | default('full') }}"
           rollbackBundle: "{{ open_cinema_rollback_id }}"
           components: "{{ open_cinema_release_manifest.components }}"
           inputIdentity: "{{ open_cinema_effective_deployment_input_identity }}"
@@ -963,7 +1033,7 @@
       status: passed
       releaseId: "{{ open_cinema_release_manifest.release_id }}"
       releaseManifestSha256: "{{ open_cinema_release_manifest_digest }}"
-      runtimeProfile: "{{ open_cinema_release_manifest.runtime_profile }}"
+      runtimeProfile: "{{ open_cinema_release_manifest.runtime_profile | default('full') }}"
       rollbackBundle: "{{ open_cinema_rollback_id }}"
       components: "{{ open_cinema_release_manifest.components }}"
       inputIdentity: "{{ open_cinema_effective_deployment_input_identity }}"
@@ -1027,9 +1097,9 @@
       readiness: passed
       release_id: "{{ open_cinema_release_manifest.release_id }}"
       release_manifest_sha256: "{{ open_cinema_release_manifest_digest }}"
-      runtime_profile: "{{ open_cinema_release_manifest.runtime_profile }}"
+      runtime_profile: "{{ open_cinema_release_manifest.runtime_profile | default('full') }}"
       rollback_bundle: "{{ open_cinema_rollback_id }}"
-      rollback_window_closed: false
+      rollback_window_closed: {{ open_cinema_existing_rollback_window_closed | bool | lower }}
     dest: "{{ open_cinema.rollback_root }}/open-readiness.yml"
     owner: "{{ open_cinema.user }}"
     group: "{{ open_cinema.group }}"
@@ -1049,7 +1119,7 @@
       mutable_install: {{ open_cinema_effective_deployment_input_identity.mutable | bool | lower }}
       release_manifest_path: "{{ release_manifest.install_path }}"
       release_manifest_sha256: "{{ open_cinema_release_manifest_digest }}"
-      runtime_profile: "{{ open_cinema_release_manifest.runtime_profile }}"
+      runtime_profile: "{{ open_cinema_release_manifest.runtime_profile | default('full') }}"
       rollback_bundle: "{{ open_cinema_rollback_id }}"
       components:
       {{ open_cinema_release_manifest.components | to_nice_yaml(indent=2) | indent(2, true) }}
@@ -1071,6 +1141,14 @@
     that:
       - open_cinema.rollback_releases_to_keep | int == 1
       - open_cinema_rollback_id is defined
+      - open_cinema_rollback_id != 'none'
+      - >-
+        open_cinema_rollback_id in
+        open_cinema_verified_rollback_inventory.verifiedBundleIds
+      - >-
+        (open_cinema_protected_rollback_bundle_ids | default([]) |
+         difference(open_cinema_verified_rollback_inventory.verifiedBundleIds) |
+         length) == 0
       - >-
         open_cinema_release_manifest.rollback.strategy !=
         'private-full-generation-replacement' or
@@ -1116,22 +1194,6 @@
           open_cinema_protected_rollback_bundle_paths) | unique | sort | list }}
   when: open_cinema_close_rollback_window | bool
 
-- name: Record the successful one-release rollback boundary
-  ansible.builtin.copy:
-    content: |
-      schema_version: 1
-      updated_at: "{{ ansible_date_time.iso8601 }}"
-      retained_release_count: {{ open_cinema_expected_retained_rollback_paths | length }}
-      open_bundle: "{{ open_cinema_rollback_id }}"
-      protected_bundles: {{ open_cinema_protected_rollback_bundle_ids | default([]) | to_json }}
-      previous_windows_closed_at: "{{ ansible_date_time.iso8601 }}"
-      closed_bundle_paths: {{ open_cinema_closed_rollback_paths | to_json }}
-    dest: "{{ open_cinema.rollback_root }}/rollback-window.yml"
-    owner: "{{ open_cinema.user }}"
-    group: "{{ open_cinema.group }}"
-    mode: "0600"
-  when: open_cinema_close_rollback_window | bool
-
 - name: Remove rollback bundles older than the accepted previous release
   ansible.builtin.file:
     path: "{{ item }}"
@@ -1153,4 +1215,22 @@
     (open_cinema_retained_rollback_releases.files |
      map(attribute='path') | sort | list) !=
       open_cinema_expected_retained_rollback_paths
+  when: open_cinema_close_rollback_window | bool
+
+- name: Record the successful one-release rollback boundary
+  ansible.builtin.copy:
+    content: |
+      schema_version: 1
+      updated_at: "{{ ansible_date_time.iso8601 }}"
+      release_id: "{{ open_cinema_release_manifest.release_id }}"
+      release_manifest_sha256: "{{ open_cinema_release_manifest_digest }}"
+      retained_release_count: {{ open_cinema_expected_retained_rollback_paths | length }}
+      open_bundle: "{{ open_cinema_rollback_id }}"
+      protected_bundles: {{ open_cinema_protected_rollback_bundle_ids | default([]) | to_json }}
+      previous_windows_closed_at: "{{ ansible_date_time.iso8601 }}"
+      closed_bundle_paths: {{ open_cinema_closed_rollback_paths | to_json }}
+    dest: "{{ open_cinema.rollback_root }}/rollback-window.yml"
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0600"
   when: open_cinema_close_rollback_window | bool

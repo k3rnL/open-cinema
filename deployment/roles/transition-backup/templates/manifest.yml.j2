@@ -1,9 +1,10 @@
-schema_version: 1
+schema_version: 2
 kind: open-cinema-coordinated-transition-backup
 created_at: "{{ ansible_date_time.iso8601 }}"
 host: "{{ ansible_facts['hostname'] }}"
 bundle_id: "{{ open_cinema_rollback_id }}"
 previous_candidate_digest: "{{ open_cinema_transition_previous_gate.candidateDigest | default('unknown') }}"
+previous_input_mode: "{{ open_cinema_transition_previous_input_mode }}"
 candidate_digest: "{{ open_cinema_deployment_candidate_digest }}"
 release_manifest_sha256: "{{ open_cinema_transition_installed_manifest.stat.checksum }}"
 input_identity:
@@ -16,7 +17,7 @@ managed_static_paths:
 restore:
   strategy: coordinated-full-generation
   application_archive: application.tar.gz
-  wyreplumber_archive: wyreplumber.tar.gz
+  wyreplumber_archive: {{ ('wyreplumber.tar.gz' if open_cinema_transition_wyreplumber_source_available else none) | to_json }}
   web_archive: web.tar.gz
   processor_binary_archive: processor-binaries.tar.gz
   processor_runtime_archive: processor-runtime.tar.gz

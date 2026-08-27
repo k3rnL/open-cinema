@@ -37,18 +37,73 @@
     src: "{{ open_cinema_rollback_bundle_path }}/manifest.yml"
   register: open_cinema_rollback_manifest_file
 
+- name: Load the selected rollback ready marker
+  ansible.builtin.slurp:
+    src: "{{ open_cinema_rollback_bundle_path }}/READY"
+  register: open_cinema_rollback_ready_file
+
 - name: Publish and validate the selected rollback contract
   ansible.builtin.set_fact:
     open_cinema_rollback_manifest: >-
       {{ open_cinema_rollback_manifest_file.content | b64decode | from_yaml }}
 
+- name: Publish the schema-aware rollback boundary
+  ansible.builtin.set_fact:
+    open_cinema_rollback_ready: >-
+      {{ open_cinema_rollback_ready_file.content | b64decode | from_json }}
+    open_cinema_rollback_required_artifacts:
+      - application.tar.gz
+      - db.sqlite3
+      - dynamic-state.json
+      - managed-static.tar.gz
+      - processor-binaries.tar.gz
+      - processor-runtime.tar.gz
+      - release-manifest.yml
+      - web.tar.gz
+    open_cinema_rollback_artifact_names: >-
+      {{ open_cinema_rollback_manifest.artifacts.keys() | list | sort }}
+
 - name: Require the coordinated full-generation rollback schema
   ansible.builtin.assert:
     that:
-      - open_cinema_rollback_manifest.schema_version == 1
+      - open_cinema_rollback_manifest.schema_version in [1, 2]
       - open_cinema_rollback_manifest.kind == 'open-cinema-coordinated-transition-backup'
       - open_cinema_rollback_manifest.bundle_id == open_cinema_rollback_bundle_id
       - open_cinema_rollback_manifest.restore.strategy == 'coordinated-full-generation'
+      - >-
+        (open_cinema_rollback_manifest.previous_candidate_digest | default('')) is
+        match('^[0-9a-f]{64}$')
+      - open_cinema_rollback_ready == open_cinema_rollback_manifest.artifacts
+      - >-
+        (open_cinema_rollback_manifest.artifacts.values() |
+         select('match', '^[0-9a-f]{64}$') | list | length) ==
+        open_cinema_rollback_manifest.artifacts | length
+      - >-
+        (open_cinema_rollback_manifest.schema_version == 1 and
+         open_cinema_rollback_artifact_names ==
+         (open_cinema_rollback_required_artifacts + ['wyreplumber.tar.gz']) | sort) or
+        (open_cinema_rollback_manifest.schema_version == 2 and
+         open_cinema_rollback_artifact_names in
+         [open_cinema_rollback_required_artifacts | sort,
+          (open_cinema_rollback_required_artifacts + ['wyreplumber.tar.gz']) | sort])
+      - >-
+        open_cinema_rollback_manifest.schema_version == 1 or
+        (open_cinema_rollback_manifest.restore.wyreplumber_archive | default(none)) ==
+        ('wyreplumber.tar.gz'
+         if 'wyreplumber.tar.gz' in open_cinema_rollback_manifest.artifacts
+         else none)
+      - >-
+        open_cinema_rollback_manifest.schema_version == 1 or
+        (open_cinema_rollback_manifest.previous_input_mode | default('')) in
+        ['appliance', 'development']
+      - >-
+        open_cinema_rollback_manifest.schema_version == 1 or
+        (open_cinema_rollback_manifest.previous_input_mode | default('')) !=
+        'development' or
+        'wyreplumber.tar.gz' in open_cinema_rollback_manifest.artifacts
+    fail_msg: >-
+      The selected rollback bundle does not satisfy the schema-aware complete
+      generation contract, including the deployment-mode/source invariant.
 
 - name: Verify every coordinated rollback artifact checksum
   ansible.builtin.stat:
@@ -57,7 +112,9 @@
   loop: "{{ open_cinema_rollback_manifest.artifacts | dict2items }}"
   register: open_cinema_rollback_artifact_stats
   failed_when: >-
-    not open_cinema_rollback_artifact_stats.stat.exists or
+    not open_cinema_rollback_artifact_stats.stat.exists | default(false) or
+    not open_cinema_rollback_artifact_stats.stat.isreg | default(false) or
+    open_cinema_rollback_artifact_stats.stat.islnk | default(true) or
     open_cinema_rollback_artifact_stats.stat.checksum != item.value
 
 - name: Restore the selected coordinated generation
@@ -147,13 +204,15 @@
           - "--file={{ open_cinema_rollback_bundle_path }}/{{ item }}"
           - -C
           - /
-      loop:
-        - application.tar.gz
-        - wyreplumber.tar.gz
-        - web.tar.gz
-        - managed-static.tar.gz
-        - processor-binaries.tar.gz
-        - processor-runtime.tar.gz
+      loop: >-
+        {{
+          ['application.tar.gz'] +
+          (['wyreplumber.tar.gz']
+           if 'wyreplumber.tar.gz' in open_cinema_rollback_manifest.artifacts
+           else []) +
+          ['web.tar.gz', 'managed-static.tar.gz',
+           'processor-binaries.tar.gz', 'processor-runtime.tar.gz']
+        }}
       changed_when: true
 
     - name: Restore the coordinated pre-transition database

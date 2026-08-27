@@ -104,6 +104,30 @@ Before a candidate transition, deployment records component identities and snaps
 
 Failure retains correlated diagnostics and the prior restorable state. Rollback selects the retained manifest and restores compatible application, UI, binding, decoder, processor, configuration, and database identities together.
 
+The transition record is schema-aware. A release-mode application archive
+already contains the exact wheel-installed WyrePlumber binding inside its
+virtual environment, so a separate binding-source archive is optional after an
+installed version/API/orchestration/runtime-contract probe succeeds and the
+resolved virtual environment is proven to be inside the archived application
+root. A mutable development generation is recorded explicitly and still
+requires a real, non-symlink WyrePlumber source directory. READY and the
+manifest must agree exactly on whichever restore boundary applies, and retained
+schema-1 bundles remain readable.
+
+Readiness selects an active recovery identity only from immediate rollback
+directories whose manifest, READY record, schema, mode/source relationship,
+regular-file boundary, and every artifact digest verify. A newer partial or
+malformed directory can therefore neither displace a complete bundle nor cause
+that bundle to be pruned. Window closure validates the active and protected
+sets before deletion, verifies the retained set afterward, and only then writes
+the correlated closure record. An unchanged later deployment preserves that
+closed state while its release identity and retained bundles still agree.
+If stricter verification exposes a malformed historical bundle and leaves no
+verified mutable recovery point, an explicit operator-only reseed performs the
+normal quiesce, full snapshot, install, gate, and readiness transaction against
+the unchanged accepted manifest. It is disabled by default and may be combined
+with pruning/closure only after the newly created and protected bundles verify.
+
 **Why:** Rolling back only one protocol participant can create a stack that starts but cannot reconcile safely.
 
 **Alternative considered:** Rely on package-manager downgrade and database backups independently. Rejected because they do not describe a coherent multi-repository runtime.

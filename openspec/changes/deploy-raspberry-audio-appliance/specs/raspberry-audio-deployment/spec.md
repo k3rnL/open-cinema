@@ -147,6 +147,26 @@ Before a candidate coordinated transition, deployment SHALL capture the installe
 - **WHEN** the operator selects the retained previous manifest
 - **THEN** deployment restores compatible application, UI, binding, decoder, processor, configuration, and database identities as one boundary and verifies readiness
 
+#### Scenario: A wheel-installed binding generation is retained
+- **WHEN** the previous appliance generation has no separate WyrePlumber source tree
+- **THEN** backup proves the virtual environment is inside the application archive, verifies the exact binding version and native API/orchestration/runtime contracts, records an explicit appliance-mode restore boundary without a binding-source archive, and rollback requires READY to match that declared artifact set
+
+#### Scenario: A source-installed binding generation is retained
+- **WHEN** the previous development generation depends on a separate WyrePlumber checkout
+- **THEN** backup records development mode and requires and archives a real non-symlink source directory as part of the coordinated restore boundary
+
+#### Scenario: A newer partial rollback directory exists
+- **WHEN** readiness inventories retained recovery data before selection or closure
+- **THEN** it selects only complete checksum-verified bundles, rejects the partial entry as a recovery identity, and does not let it displace a valid active or protected bundle
+
+#### Scenario: Historical recovery data has no verified mutable bundle
+- **WHEN** stricter verification rejects the historical mutable recovery point and the operator explicitly requests recovery-boundary reseeding
+- **THEN** deployment snapshots the currently accepted generation through the normal quiesce, install, contract-gate, and readiness transaction despite an unchanged candidate digest, retains the new checksum-verified bundle, and leaves reseeding disabled for ordinary reconciliation
+
 #### Scenario: Rollback evidence is closed
 - **WHEN** rollback has been exercised on the current appliance
-- **THEN** the retained artifacts, backups, irreversible boundaries, observed result, and recovery procedure are recorded explicitly
+- **THEN** the active and protected bundles are validated before pruning, the retained set is verified after pruning, and only then are the artifacts, irreversible boundaries, observed result, recovery procedure, and correlated closed-window record accepted
+
+#### Scenario: An unchanged deployment follows closure
+- **WHEN** the same release is reconciled later with rollback-window closure disabled
+- **THEN** readiness preserves the prior closed state only while the release digest, active bundle, protected bundle set, and their verified artifacts still correlate

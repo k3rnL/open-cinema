@@ -17,7 +17,7 @@ from typing import Any, BinaryIO
 
 import yaml
 
-RESTORE_ARTIFACTS = {
+REQUIRED_RESTORE_ARTIFACTS = {
     "application.tar.gz",
     "db.sqlite3",
     "dynamic-state.json",
@@ -26,8 +26,11 @@ RESTORE_ARTIFACTS = {
     "processor-runtime.tar.gz",
     "release-manifest.yml",
     "web.tar.gz",
+}
+OPTIONAL_RESTORE_ARTIFACTS = {
     "wyreplumber.tar.gz",
 }
+RESTORE_ARTIFACTS = REQUIRED_RESTORE_ARTIFACTS | OPTIONAL_RESTORE_ARTIFACTS
 ARCHIVE_ARTIFACTS = {name for name in RESTORE_ARTIFACTS if name.endswith(".tar.gz")}
 ALLOWED_ABSOLUTE_SYMLINK_TARGETS = {
     "/etc/nginx/sites-available/open-cinema",
@@ -175,18 +178,44 @@ def verify_capsule(
         ready = json.loads(ready_bytes)
         if not isinstance(manifest, dict) or not isinstance(ready, dict):
             raise CapsuleError("manifest and READY records must be mappings")
-        if manifest.get("schema_version") != 1:
+        transition_schema = manifest.get("schema_version")
+        if transition_schema not in (1, 2):
             raise CapsuleError("unsupported transition manifest schema")
         if manifest.get("kind") != "open-cinema-coordinated-transition-backup":
             raise CapsuleError("transition manifest kind is incorrect")
         if manifest.get("bundle_id") != baseline_id:
             raise CapsuleError("transition manifest baseline identity does not match")
         artifacts = manifest.get("artifacts")
-        if not isinstance(artifacts, dict) or set(artifacts) != RESTORE_ARTIFACTS:
+        if not isinstance(artifacts, dict):
             raise CapsuleError("transition manifest does not cover the full restore boundary")
+        artifact_names = set(artifacts)
+        if transition_schema == 1 and artifact_names != RESTORE_ARTIFACTS:
+            raise CapsuleError("transition manifest does not cover the full restore boundary")
+        if transition_schema == 2 and (
+            not REQUIRED_RESTORE_ARTIFACTS.issubset(artifact_names)
+            or not artifact_names.issubset(RESTORE_ARTIFACTS)
+        ):
+            raise CapsuleError("transition manifest does not cover the full restore boundary")
+        if transition_schema == 2:
+            previous_input_mode = manifest.get("previous_input_mode")
+            if previous_input_mode not in {"appliance", "development"}:
+                raise CapsuleError("schema-two transition manifest has invalid previous input mode")
+            if previous_input_mode == "development" and "wyreplumber.tar.gz" not in artifact_names:
+                raise CapsuleError(
+                    "development transition manifest requires its WyrePlumber source archive"
+                )
+            restore = _mapping(manifest.get("restore"), "transition manifest restore")
+            declared_wyreplumber_archive = restore.get("wyreplumber_archive")
+            expected_wyreplumber_archive = (
+                "wyreplumber.tar.gz" if "wyreplumber.tar.gz" in artifact_names else None
+            )
+            if declared_wyreplumber_archive != expected_wyreplumber_archive:
+                raise CapsuleError(
+                    "transition manifest binding-source restore declaration disagrees"
+                )
         if ready != artifacts:
             raise CapsuleError("READY and manifest artifact records disagree")
-        if set(RESTORE_ARTIFACTS).difference(names):
+        if artifact_names.difference(names):
             raise CapsuleError("capsule is missing one or more restore artifacts")
 
         nested_member_counts: dict[str, int] = {}
@@ -224,13 +253,14 @@ def verify_capsule(
 
     return {
         "schemaVersion": 1,
+        "transitionManifestSchemaVersion": transition_schema,
         "baselineId": baseline_id,
         "capsuleSha256": capsule_sha256,
         "capsuleSizeBytes": capsule.stat().st_size,
         "manifestSha256": manifest_sha256,
         "readySha256": ready_sha256,
         "regularFileCount": len(regular),
-        "restoreArtifactCount": len(RESTORE_ARTIFACTS),
+        "restoreArtifactCount": len(artifacts),
         "nestedArchiveCount": len(nested_member_counts),
         "sqliteIntegrity": "ok",
         "result": "verified",
