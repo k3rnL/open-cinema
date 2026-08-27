@@ -35,6 +35,13 @@ Raw journals, time series, and audio captures stay under the restricted target
 result directory. Commit only small redacted summaries, stable raw paths, and
 checksums. Never copy Bluetooth addresses, credentials, or tokens into a report.
 
+Preparation also freezes the six benchmark contracts and records SHA-256
+identities for the runner, intent adapter, and workload driver. Every
+`run-case`, `--resume`, and non-finalized `finalize` command must still match
+those frozen inputs. If contracts or implementation change, restore any active
+run before preparing a new one; evidence from different harness versions is
+never combined under one run identifier.
+
 The supported Raspberry Pi fixture uses `wlan0` for controller access. Network
 throughput and latency are outside the audio benchmark boundary, and Bluetooth
 radio measurements remain separate from the controller-network declaration.
@@ -76,6 +83,10 @@ sudo open-cinema-benchmark run-case RUN_ID decoder-pcm-stereo --resume
 Each retry receives a new immutable attempt directory. Failed, invalid, and
 interrupted attempts remain in the run as evidence; resume never deletes or
 overwrites their raw data.
+
+On resume, benchmark crash journals are restored before input-drift checks. This
+ensures a changed harness cannot strand a synthetic stream or temporary
+CamillaDSP configuration while refusing to continue the old evidence run.
 
 Every command and schedule is bounded by the checked-in case manifest. Runtime
 fault injection is restricted to the exact systemd units allowed by the case's
@@ -148,6 +159,13 @@ Every envelope records `metricCoverage` for each required metric set. Missing
 automated artifacts invalidate a sample; an unavailable required calibrated
 physical capture produces `not-measured`. Neither state can characterize or
 accept a run.
+
+Collector evidence distinguishes completed samples from missed schedule slots.
+The sustained and transition overhead distributions cover each probe through
+durable persistence of its payload; interval-accounting files are written only
+after the background collector has joined. On success, failure, timeout, or
+interruption, that join completes before workload stop and appliance
+restoration, so no collector can write into an already restored state.
 
 Finalizing an incomplete or invalid run returns nonzero and leaves it resumable.
 A characterization run can only become `characterized`; only a distinct run

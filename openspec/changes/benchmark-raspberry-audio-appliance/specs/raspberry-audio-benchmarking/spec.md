@@ -16,7 +16,7 @@ The benchmark suite SHALL identify the device under test as the available Raspbe
 - **THEN** the run is labelled exploratory and cannot replace the supported-fixture acceptance result
 
 ### Requirement: Runs are repeatable and evidence is auditable
-The benchmark suite SHALL define repeatable samples, input material, graph and processor configurations, warm-up, run duration, repetition count, measurement boundaries, clocks, collection commands, and pass criteria before an acceptance run. It SHALL retain timestamped raw samples, logs, configuration and sample digests, environment metadata, summaries, and the exact invocation needed to reproduce each result.
+The benchmark suite SHALL define repeatable samples, input material, graph and processor configurations, warm-up, run duration, repetition count, measurement boundaries, clocks, collection commands, and pass criteria before an acceptance run. It SHALL retain timestamped raw samples, logs, configuration and sample digests, environment metadata, summaries, and the exact invocation needed to reproduce each result. Preparation SHALL freeze and digest every benchmark contract and SHALL record the runner, intent-adapter, and workload-driver implementation digests. Run, resume, and finalization SHALL reject input drift instead of combining evidence across implementations.
 
 #### Scenario: An acceptance run completes
 - **WHEN** the harness finishes a benchmark case
@@ -25,6 +25,10 @@ The benchmark suite SHALL define repeatable samples, input material, graph and p
 #### Scenario: A sample is incomplete or contaminated
 - **WHEN** collection loses a required metric, the fixture changes, or unrelated workload invalidates a sample
 - **THEN** the harness marks that sample invalid with a reason and does not silently include it in accepted statistics
+
+#### Scenario: Benchmark inputs change after preparation
+- **WHEN** a contract, schema, runner, intent adapter, or workload driver differs from the identity frozen at preparation
+- **THEN** the harness restores marker-owned temporary workload state, refuses to add or classify evidence under that run identifier, and requires a newly prepared run
 
 ### Requirement: Canonical adaptive routing remains accepted and becomes quantitative
 The acceptance report SHALL import the existing successful TV-to-main-speakers, Bluetooth programme-source, headset takeover, headset removal/fallback, and active-graph reboot evidence as the functional baseline. It SHALL repeat the Bluetooth-to-headset and headset-to-main transitions enough times to report sample count, median, p95, and maximum route-switch latency and audible-gap duration without requiring graph reapplication.
@@ -75,7 +79,7 @@ The benchmark suite SHALL measure end-to-end input-to-output latency with a repr
 - **THEN** the raw evidence correlates request, discovery, decision, mutation, readiness, exact owned-topology convergence, audio loss, and audio restoration timestamps
 
 ### Requirement: Resource, thermal, and runtime health is sampled
-The benchmark suite SHALL collect per-process and appliance CPU, resident memory, available memory, temperature, clock, throttling state, PipeWire xruns or drops, processor underruns or overruns, reconciliation retries, event counts, queue pressure, and relevant service errors during every sustained workload and transition campaign. Event-throughput tests SHALL preserve the offered, processed, coalesced, retried, and dropped event counts.
+The benchmark suite SHALL collect per-process and appliance CPU, resident memory, available memory, temperature, clock, throttling state, PipeWire xruns or drops, processor underruns or overruns, reconciliation retries, event counts, queue pressure, and relevant service errors during every sustained workload and transition campaign. Event-throughput tests SHALL preserve the offered, processed, coalesced, retried, and dropped event counts. The harness SHALL distinguish completed samples from missed schedule slots, SHALL NOT schedule a sample at or after the measurement end, and SHALL measure sustained and transition collector intervals through durable payload persistence. Any background collector SHALL join before workload stop or appliance restoration, including after timeout or interruption.
 
 #### Scenario: Sustained workload is active
 - **WHEN** a benchmark workload passes warm-up and enters its measurement interval
@@ -84,6 +88,10 @@ The benchmark suite SHALL collect per-process and appliance CPU, resident memory
 #### Scenario: Endpoint events are burst or repeated
 - **WHEN** the harness generates the declared connect, disconnect, property-change, or reconciliation event sequence
 - **THEN** the report correlates event load with convergence latency, queue behavior, retries, drops, CPU, and memory without counting coalesced events as lost events
+
+#### Scenario: Collection reaches a deadline or fails
+- **WHEN** a foreground or background collector fails, is interrupted, or reaches its bounded deadline
+- **THEN** completed and missed counts reflect only their actual outcomes, the background worker is fully joined, no collector writes after restoration begins, and the sample retains an explicit invalidation reason
 
 ### Requirement: Boot, persistence, storage, and soak behavior is characterized
 The benchmark suite SHALL measure cold service boot to complete audio readiness with an active saved graph and SHALL verify that the graph, endpoint bindings, processor configuration, and accepted active state survive the documented reboot path. Every principal workload SHALL include a practical steady-state interval of at least ten minutes, and the suite SHALL sample database contention, plan and audit growth, diagnostic retention, storage writes, and convergence during repeated transitions.

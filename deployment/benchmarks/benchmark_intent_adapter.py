@@ -11,6 +11,7 @@ the restoration contract is the semantic set of enabled graph selections.
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stdout
 import hashlib
 import json
 import os
@@ -120,7 +121,10 @@ def configure_django(*, database_path: Path) -> None:
     os.environ["DATABASE_PATH"] = str(database_path)
     import django
 
-    django.setup()
+    # Third-party/plugin AppConfig hooks may print startup notices. Keep stdout
+    # reserved for the adapter's single machine-readable JSON document.
+    with redirect_stdout(sys.stderr):
+        django.setup()
 
 
 def activation_rows() -> list[dict[str, Any]]:

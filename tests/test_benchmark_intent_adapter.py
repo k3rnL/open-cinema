@@ -177,3 +177,17 @@ def test_deployment_adapter_contains_no_direct_database_mutation() -> None:
     assert "DELETE FROM" not in source
     assert "ACTIVATE_GRAPH(" in source
     assert "DEACTIVATE_GRAPH(" in source
+
+
+def test_django_startup_notices_cannot_contaminate_adapter_json(
+    monkeypatch, capsys, tmp_path
+) -> None:
+    import django
+
+    monkeypatch.setattr(django, "setup", lambda: print("plugin startup notice"))
+
+    adapter.configure_django(database_path=tmp_path / "db.sqlite3")
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "plugin startup notice\n"

@@ -46,11 +46,11 @@
 - [x] 5.2 Add runner lifecycle tests for successful, failed, timed-out, invalid, resumed, and interrupted cases and prove finalization never treats incomplete evidence as accepted.
 - [x] 5.3 Add recorded-fixture tests for collectors, monotonic ordering, topology convergence, event accounting, redaction, checksum manifests, median/nearest-rank-p95/maximum calculations, and collector-overhead invalidation.
 - [x] 5.4 Exercise every disruptive campaign against a simulated or recorded service fixture and verify restoration runs on success, failure, timeout, and interruption before enabling it on hardware.
-- [ ] 5.5 Deploy the benchmark-only roles to the Pi, run preflight and a short self-test, verify no product/static-state drift or sensitive-data leak, and record collector overhead before hardware characterization.
+- [x] 5.5 Deploy the benchmark-only roles to the Pi, run preflight and a short self-test, verify no product/static-state drift or sensitive-data leak, and record collector overhead before hardware characterization.
 
 ## 6. Run hardware characterization
 
-- [ ] 6.1 Run and retain baseline characterization, reconcile observed fixture facts with the contract, validate initial power/thermal state, and link the previously passed functional evidence without assigning it new timing values.
+- [x] 6.1 Run and retain baseline characterization, reconcile observed fixture facts with the contract, validate initial power/thermal state, and link the previously passed functional evidence without assigning it new timing values.
 - [ ] 6.2 Run all decoder and format-transition characterization cases, recording unavailable fixtures and unsupported-by-build behavior distinctly from regressions.
 - [ ] 6.3 Run all CamillaDSP 128-frame profile, reconfiguration, invalid-config, control-loss, restart, and rollback characterization cases.
 - [ ] 6.4 Run at least 20 measured headset-takeover and 20 headset-fallback cycles with continuous Bluetooth programme audio and physical switch/gap capture.

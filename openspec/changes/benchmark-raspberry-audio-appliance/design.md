@@ -37,6 +37,13 @@ The Ansible benchmark playbook will install only measurement tools and read-only
 
 The runner will expose `prepare`, `run-case`, `finalize`, and `restore` phases. Preparation records facts and a restore snapshot; each case validates preconditions and writes its own status; finalization computes checksums and a summary; restoration re-establishes the saved graph and service state even after an interrupted case. Destructive failure cases will be explicit and bounded to named services.
 
+Preparation also freezes every execution, criteria, and schema contract and
+records SHA-256 identities for the runner, intent adapter, and workload driver.
+Run, resume, and finalization reject any live/frozen contract or implementation
+drift. Resume performs marker-owned crash-journal recovery before refusing a
+drifted run, preventing temporary playback or CamillaDSP state from being
+stranded by a harness update.
+
 This reuses the current deployment and collection structure rather than introducing a second orchestration stack. Driving every case directly from Ansible was rejected because long-running audio collection, transitions, and cleanup are easier to correlate and resume on the target.
 
 ### 3. Use one evidence envelope and monotonic correlation clock
@@ -96,6 +103,14 @@ Cases that disrupt audio require an explicit case name and restoration guard. Th
 
 Transition campaigns will collect application/PipeWire topology and process readiness at 100–250 ms cadence where tool overhead permits. Sustained workloads will sample CPU, RSS, available memory, temperature, clocks, throttling, disk counters, database sizes, and service health once per second. PipeWire xruns and processor queue/underrun/overrun counters will be captured from their native sources, not inferred from CPU.
 
+The runner records completed samples separately from missed schedule slots and
+never schedules a boundary at or after the declared measurement end. Sustained
+and transition collector intervals include probes through durable payload
+persistence and are summarized separately. Interval records themselves are
+persisted after the background worker joins. The worker must join before
+workload stop, restoration, or finalization even when the case deadline has
+expired, preventing post-restoration writes and mutable workload overlap.
+
 The harness will measure its own idle overhead and record sample loss. If collection overhead materially changes the workload or misses required samples, the case is invalid and must be rerun with a justified collection profile.
 
 This two-rate approach preserves transition visibility without burdening every ten-minute soak with unnecessary high-rate subprocess polling.
@@ -123,6 +138,7 @@ Hand-maintained summary arithmetic was rejected because it is hard to reproduce 
 - **[Some encoded fixtures cannot be generated with installed tools]** → Register pre-generated, probed, checksummed material or report `fixture-unavailable`; never reinterpret absence as a decoder pass.
 - **[Fault injection leaves audio unavailable]** → Snapshot active intent, guard destructive operations by case ID, enforce timeouts, and run restoration plus exact-topology verification after every case and on interrupted-run recovery.
 - **[Measurement overhead distorts results]** → Benchmark the collector, use separate transition and sustained cadences, report lost samples, and invalidate overloaded runs.
+- **[Harness or contract changes split a run across implementations]** → Freeze and hash all contracts plus the runner, adapter, and workload driver at preparation; reject drift and require a newly prepared run after safe restoration.
 - **[A ten-minute soak misses rare long-term faults]** → Treat ten minutes as practical initial acceptance, publish the duration prominently, and retain a reusable harness for later longer campaigns.
 - **[Existing candidate budgets conflict with observed behavior]** → Treat them as characterization hypotheses, freeze reviewed thresholds before the independent acceptance campaign, and preserve both versions with rationale.
 - **[Sensitive device identifiers leak through evidence]** → Redact Bluetooth addresses, tokens, credentials, and irrelevant journal fields before export; validate redaction in the finalization step.
