@@ -28,11 +28,17 @@ def load_yaml(path: Path) -> dict[str, Any]:
 
 class FakeBackend:
     def __init__(self) -> None:
+        self.events: list[str] = []
         self.playback_calls: list[dict[str, Any]] = []
         self.stopped: list[object] = []
         self.applied: list[dict[str, Any]] = []
+        self.validation_candidates: list[dict[str, Any]] = []
+        self.activated_fixtures: list[str] = []
+        self.restored_intents: list[dict[str, Any]] = []
+        self._intent_configuration: dict[str, Any] | None = None
         self.playback_healthy = True
         self.playback_stop_ok = True
+        self.node_readiness_calls: list[tuple[str, float]] = []
         self.active = {
             "title": "Prepared active graph profile",
             "description": "Must be restored exactly",
@@ -61,6 +67,7 @@ class FakeBackend:
         }
 
     def start_file_playback(self, **arguments: Any) -> tuple[object, dict[str, Any]]:
+        self.events.append("playback-started")
         self.playback_calls.append(arguments)
         handle = f"playback-{len(self.playback_calls)}"
         (arguments["evidence_dir"] / f"{handle}-ffmpeg.log").write_text(
@@ -89,16 +96,50 @@ class FakeBackend:
             "active": self.playback_healthy,
         }
 
+    def wait_for_audio_node(self, node_name: str, *, timeout_seconds: float) -> dict[str, Any]:
+        self.node_readiness_calls.append((node_name, timeout_seconds))
+        return {"ready": True, "nodeName": node_name, "durationNs": 10}
+
     def camilladsp_active_configuration(self) -> dict[str, Any]:
         return copy.deepcopy(self.active)
 
     def apply_camilladsp_configuration(self, configuration: dict[str, Any]) -> dict[str, Any]:
+        self.validation_candidates.append(copy.deepcopy(configuration))
         if configuration["devices"]["chunksize"] < 1:
             raise driver_module.CamillaDSPConfigurationRejected("chunksize must be positive")
         candidate = copy.deepcopy(configuration)
+        self.events.append("camilladsp-applied")
         self.applied.append(candidate)
         self.active = candidate
         return {"state": "running"}
+
+    def intent_snapshot(self) -> dict[str, Any]:
+        self._intent_configuration = copy.deepcopy(self.active)
+        return {
+            "schemaVersion": 1,
+            "active": [{"definitionId": "prepared", "revisionId": "revision-1"}],
+            "semanticDigest": "a" * 64,
+            "observedVersions": [],
+        }
+
+    def activate_camilladsp_fixture(self, fixture_id: str) -> dict[str, Any]:
+        self.events.append("managed-profile-activated")
+        self.activated_fixtures.append(fixture_id)
+        self.active = {**copy.deepcopy(self.active), "title": f"Open Cinema benchmark: {fixture_id}"}
+        return {"fixtureId": fixture_id, "profileDigest": "b" * 64}
+
+    def restore_activations(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+        self.restored_intents.append(copy.deepcopy(snapshot))
+        if self._intent_configuration is not None:
+            self.active = copy.deepcopy(self._intent_configuration)
+        return {"changed": True, "snapshot": copy.deepcopy(snapshot)}
+
+    def wait_camilladsp_configuration(
+        self, configuration: dict[str, Any], *, timeout_seconds: float
+    ) -> dict[str, Any]:
+        assert timeout_seconds == 60
+        assert self.active == configuration
+        return {"ready": True, "configurationSha256": driver_module.canonical_digest(configuration)}
 
 
 def case(case_id: str) -> dict[str, Any]:
@@ -173,6 +214,9 @@ def test_service_recovery_and_scheduled_edges_restart_or_switch_programme(
     assert restored["action"] == "restart-programme-after-service-fault"
     assert len(backend.playback_calls) == 2
     assert backend.stopped == ["playback-1"]
+    assert backend.node_readiness_calls == [
+        ("open-cinema.decoder.decoder-0.capture", 30)
+    ]
     recovery.stop()
 
     soak = session(tmp_path, "soak-encoded-multichannel", backend)
@@ -187,7 +231,24 @@ def test_service_recovery_and_scheduled_edges_restart_or_switch_programme(
     soak.stop()
 
 
-def test_camilladsp_overlay_preserves_active_pipewire_devices_and_restores_exact_config(
+def test_service_recovery_restarts_a_stream_terminated_by_the_expected_fault(
+    tmp_path: Path,
+) -> None:
+    backend = FakeBackend()
+    recovery = session(tmp_path, "recovery-service-matrix", backend)
+    recovery.start()
+    backend.playback_stop_ok = False
+
+    restored = recovery.after_fault_injection(["pipewire.service"])
+
+    assert restored["stopped"]["interruptedByExpectedFault"] is True
+    assert len(backend.playback_calls) == 2
+    assert backend.stopped == ["playback-1"]
+    backend.playback_stop_ok = True
+    recovery.stop()
+
+
+def test_camilladsp_profile_uses_managed_intent_and_restores_exact_config(
     tmp_path: Path,
 ) -> None:
     backend = FakeBackend()
@@ -201,19 +262,12 @@ def test_camilladsp_overlay_preserves_active_pipewire_devices_and_restores_exact
 
     started = workload.start()
 
-    applied = backend.applied[-1]
     assert workload.requires_restoration is True
-    assert applied["devices"] == {
-        **original["devices"],
-        "samplerate": 48_000,
-        "chunksize": 128,
-    }
-    assert applied["devices"]["capture"]["node_name"] == ("opencinema.camilladsp.0.capture")
-    assert applied["devices"]["playback"]["channels"] == 8
-    coefficient = applied["filters"]["synthetic_fir_1024"]["parameters"]["filename"]
-    assert Path(coefficient).is_absolute()
-    assert Path(coefficient).name == "production-fir-1024.f32le"
     assert started["processor"]["profileFixture"] == ("camilladsp-production-fir-iir-128")
+    assert started["processor"]["driver"] == "managed-desired-graph-profile"
+    assert backend.activated_fixtures == ["camilladsp-production-fir-iir-128"]
+    assert backend.applied == []
+    assert backend.events[:2] == ["managed-profile-activated", "playback-started"]
 
     workload.stop()
 
@@ -221,7 +275,7 @@ def test_camilladsp_overlay_preserves_active_pipewire_devices_and_restores_exact
     assert workload.requires_restoration is False
 
 
-def test_stereo_overlay_filters_only_front_pair_without_changing_active_bus(
+def test_stereo_profile_is_selected_through_managed_intent(
     tmp_path: Path,
 ) -> None:
     backend = FakeBackend()
@@ -234,10 +288,8 @@ def test_stereo_overlay_filters_only_front_pair_without_changing_active_bus(
 
     workload.start()
 
-    applied = backend.applied[-1]
-    assert applied["devices"]["capture"]["channels"] == 8
-    assert applied["devices"]["playback"]["channels"] == 8
-    assert applied["pipeline"] == [{"type": "Filter", "channels": [0, 1], "names": ["stereo_gain"]}]
+    assert backend.activated_fixtures == ["camilladsp-stereo-128"]
+    assert backend.applied == []
     workload.stop()
 
 
@@ -251,6 +303,7 @@ def test_invalid_camilladsp_candidate_must_be_rejected_without_changing_active_c
     result = workload.start()
 
     assert result["action"]["rejected"] is True
+    assert backend.validation_candidates[0]["devices"]["chunksize"] == -1
     assert backend.active == original
     assert backend.applied == []
     workload.stop()
@@ -288,7 +341,7 @@ def test_playback_health_and_failed_cleanup_are_propagated(tmp_path: Path) -> No
     }
 
 
-def test_camilladsp_restore_journal_is_persisted_before_overlay_and_cleared_after(
+def test_camilladsp_restore_journal_records_managed_intent_and_clears_after(
     tmp_path: Path,
 ) -> None:
     backend = FakeBackend()
@@ -303,12 +356,15 @@ def test_camilladsp_restore_journal_is_persisted_before_overlay_and_cleared_afte
     workload.start()
     active = json.loads((tmp_path / "workload-restore.json").read_text(encoding="utf-8"))
     assert active["active"] is True
-    assert active["camilladspOriginalConfiguration"] == original
-    assert active["camilladspOriginalConfigurationSha256"] == driver_module.canonical_digest(
-        original
-    )
+    assert active["camilladspOriginalConfiguration"] is None
+    assert active["camilladspOriginalConfigurationSha256"] is None
+    assert active["managedIntentMutation"] is True
+    assert active["managedIntentSemanticDigest"] == "a" * 64
+    assert active["managedCamillaDSPFixture"] == "camilladsp-production-fir-iir-128"
 
     workload.stop()
     cleared = json.loads((tmp_path / "workload-restore.json").read_text(encoding="utf-8"))
     assert cleared["active"] is False
     assert cleared["camilladspOriginalConfiguration"] is None
+    assert cleared["managedIntentMutation"] is False
+    assert backend.active == original

@@ -12,4 +12,4 @@ export OPEN_CINEMA_INTENT_ADAPTER=/usr/local/libexec/open-cinema-benchmark-inten
 export OPEN_CINEMA_CAMILLADSP_HOST={{ camilladsp.websocket_address | quote }}
 export OPEN_CINEMA_CAMILLADSP_PORT={{ camilladsp.websocket_port | quote }}
 
-exec /usr/bin/python3 /usr/local/libexec/open-cinema-benchmark-runner "$@"
+exec {{ (open_cinema.venv_path ~ '/bin/python') | quote }} /usr/local/libexec/open-cinema-benchmark-runner "$@"

@@ -9,6 +9,7 @@ acceptance.
 from __future__ import annotations
 
 import argparse
+from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeout
 from contextlib import contextmanager
 import csv
@@ -20,6 +21,7 @@ import math
 import os
 from pathlib import Path
 import platform as python_platform
+from queue import Empty, SimpleQueue
 import re
 import shutil
 import signal
@@ -31,7 +33,7 @@ import tempfile
 import threading
 import time
 import traceback
-from typing import Any, Iterable, Iterator, Mapping, Sequence
+from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 import uuid
 
 from jsonschema import Draft202012Validator, FormatChecker
@@ -66,6 +68,11 @@ CONTRACT_FILES = (
     "fixture.schema.json",
     "cases.schema.json",
     "evidence-envelope.schema.json",
+)
+WORKLOAD_REGISTRY_FILES = (
+    "media/manifest.json",
+    "media/camilladsp/profiles.json",
+    "media/physical-path.yml",
 )
 
 RUNTIME_SERVICES = (
@@ -361,6 +368,7 @@ class LinuxPlatform:
         venv_python: Path = Path("/opt/home-cinema/open-cinema/venv/bin/python"),
         app_path: Path = Path("/opt/home-cinema/open-cinema"),
         intent_adapter: Path = Path("/usr/local/libexec/open-cinema-benchmark-intent-adapter"),
+        benchmark_contracts_root: Path = Path("/usr/local/share/open-cinema/benchmarks"),
         camilladsp_host: str = "127.0.0.1",
         camilladsp_port: int = 1234,
         command_timeout: float = 5.0,
@@ -373,12 +381,37 @@ class LinuxPlatform:
         self.venv_python = venv_python
         self.app_path = app_path
         self.intent_adapter = intent_adapter
+        self.benchmark_contracts_root = benchmark_contracts_root
         self.camilladsp_host = camilladsp_host
         self.camilladsp_port = camilladsp_port
         self.command_timeout = command_timeout
         self.audio_uid = self._resolve_audio_uid()
         self._last_cpu: tuple[int, int] | None = None
         self._playback_processes: dict[str, _PlaybackProcess] = {}
+        self._camilladsp_client: Any | None = None
+        self._camilladsp_lock = threading.Lock()
+        self._event_storage_lock = threading.Lock()
+        self._event_storage_last_sequence = 0
+        self._event_storage_counts = {
+            "offered": 0,
+            "processed": 0,
+            "coalesced": 0,
+            "retried": 0,
+            "dropped": 0,
+        }
+        self._transition_database_lock = threading.Lock()
+        self._transition_database_worker: threading.Thread | None = None
+        self._transition_database_cache: dict[str, Any] = {
+            "observedMonotonicNs": None,
+            "processorProjections": {
+                "available": False,
+                "error": "database-snapshot-pending",
+            },
+            "reconciliation": {
+                "available": False,
+                "error": "database-snapshot-pending",
+            },
+        }
 
     def _resolve_audio_uid(self) -> int:
         result = subprocess.run(
@@ -527,25 +560,26 @@ class LinuxPlatform:
             ]
         )
         process_marker = f"OPEN_CINEMA_BENCHMARK_HANDLE={token}"
-        feeder_argv = self._audio_argv(
-            [
-                "env",
-                process_marker,
-                "ffmpeg",
-                "-nostdin",
-                "-hide_banner",
-                "-loglevel",
-                "warning",
-                *input_arguments,
-                "-map",
-                "0:a:0",
-                "-vn",
-                *codec_arguments,
-                "-f",
-                "s16le",
-                "pipe:1",
-            ]
-        )
+        # FFmpeg does not need PipeWire access and deliberately stays root-side
+        # so frozen run inputs can remain private.  WAV framing lets pw-cat
+        # discover the stdin stream while preserving the exact s16 carrier.
+        feeder_argv = [
+            "env",
+            process_marker,
+            "ffmpeg",
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            "warning",
+            *input_arguments,
+            "-map",
+            "0:a:0",
+            "-vn",
+            *codec_arguments,
+            "-f",
+            "wav",
+            "pipe:1",
+        ]
         player_name = f"open-cinema.benchmark.playback.{token}"
         player_argv = self._audio_argv(
             [
@@ -649,6 +683,43 @@ class LinuxPlatform:
                 f"status={last_status}, cleanup={result}"
             )
         return token, evidence
+
+    def wait_for_audio_node(
+        self, node_name: str, *, timeout_seconds: float
+    ) -> dict[str, Any]:
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,160}", node_name):
+            raise BenchmarkError("benchmark playback target node is invalid")
+        started = self.monotonic_ns()
+        deadline = started + int(timeout_seconds * 1_000_000_000)
+        attempts = 0
+        last_error: str | None = None
+        while self.monotonic_ns() < deadline:
+            attempts += 1
+            remaining = max(0.05, (deadline - self.monotonic_ns()) / 1_000_000_000)
+            try:
+                document = self.pipewire_document(timeout_seconds=min(0.5, remaining))
+            except CaseTimeout:
+                document = {"error": "pw-dump-timeout"}
+            if isinstance(document, list):
+                for item in document:
+                    if not isinstance(item, dict) or item.get("type") != "PipeWire:Interface:Node":
+                        continue
+                    info = item.get("info") if isinstance(item.get("info"), dict) else {}
+                    props = info.get("props") if isinstance(info.get("props"), dict) else {}
+                    if props.get("node.name") == node_name:
+                        return {
+                            "ready": True,
+                            "nodeName": node_name,
+                            "attempts": attempts,
+                            "durationNs": self.monotonic_ns() - started,
+                        }
+            elif isinstance(document, dict):
+                last_error = str(document.get("error") or "pipewire-dump-unavailable")
+            self.sleep(0.1)
+        raise BenchmarkError(
+            f"benchmark playback target did not reappear after service fault: "
+            f"node={node_name!r}, attempts={attempts}, lastError={last_error!r}"
+        )
 
     @staticmethod
     def playback_link_status_from_dump(
@@ -880,7 +951,7 @@ class LinuxPlatform:
         result = self.command(
             [str(self.venv_python), "-c", script],
             audio_session=True,
-            timeout=10,
+            timeout=20,
             input_text=(json.dumps(document, sort_keys=True) if document is not None else None),
         )
         output = result["stdout"].strip() or result["stderr"].strip()
@@ -942,7 +1013,7 @@ try:
     phase = 'apply'
     client.config.set_active(document)
     phase = 'readiness'
-    deadline = time.monotonic() + 5.0
+    deadline = time.monotonic() + 15.0
     while time.monotonic() < deadline:
         state = client.general.state()
         name = getattr(state, 'name', str(state)).rsplit('.', 1)[-1].lower()
@@ -1038,15 +1109,21 @@ finally:
             raise RestorationError(f"service-state restoration mismatch: {mismatches}")
         return results
 
-    def _database(self, *, writable: bool = False) -> sqlite3.Connection | None:
+    def _database(
+        self, *, writable: bool = False, timeout_seconds: float = 5.0
+    ) -> sqlite3.Connection | None:
         if not self.database_path.is_file():
             return None
         if writable:
-            connection = sqlite3.connect(self.database_path, timeout=5)
+            connection = sqlite3.connect(self.database_path, timeout=timeout_seconds)
         else:
-            connection = sqlite3.connect(f"file:{self.database_path}?mode=ro", uri=True, timeout=5)
+            connection = sqlite3.connect(
+                f"file:{self.database_path}?mode=ro",
+                uri=True,
+                timeout=timeout_seconds,
+            )
         connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA busy_timeout=5000")
+        connection.execute(f"PRAGMA busy_timeout={max(0, int(timeout_seconds * 1000))}")
         return connection
 
     @staticmethod
@@ -1103,6 +1180,161 @@ finally:
         if not isinstance(document, dict) or not isinstance(document.get("semanticDigest"), str):
             raise BenchmarkError("active-intent adapter returned an invalid snapshot")
         return document
+
+    def _intent_adapter_json(
+        self,
+        arguments: Sequence[str],
+        *,
+        timeout: float = 30,
+        input_document: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        result = self.command(
+            (
+                str(self.venv_python),
+                str(self.intent_adapter),
+                "--database-path",
+                str(self.database_path),
+                *arguments,
+            ),
+            audio_session=True,
+            cwd=self.app_path,
+            timeout=timeout,
+            input_text=(
+                json.dumps(input_document, sort_keys=True)
+                if input_document is not None
+                else None
+            ),
+            check=True,
+        )
+        try:
+            document = json.loads(result["stdout"])
+        except json.JSONDecodeError as error:
+            raise BenchmarkError("active-intent adapter returned invalid JSON") from error
+        if not isinstance(document, dict):
+            raise BenchmarkError("active-intent adapter returned an invalid document")
+        return document
+
+    def ensure_camilladsp_benchmark_fixtures(self) -> dict[str, Any]:
+        document = self._intent_adapter_json(
+            (
+                "ensure-camilladsp-fixtures",
+                "--profiles-root",
+                str(self.benchmark_contracts_root / "media" / "camilladsp"),
+            ),
+            timeout=45,
+        )
+        if not isinstance(document.get("fixtures"), dict):
+            raise BenchmarkError("managed CamillaDSP fixture preparation returned no fixtures")
+        return document
+
+    def _managed_revision_converged(self, definition_id: str, revision_id: str) -> bool:
+        connection = self._database()
+        if connection is None:
+            return False
+        try:
+            row = connection.execute(
+                "SELECT state.status, plan.graph_revision_id "
+                "FROM api_appliedplanstate state "
+                "LEFT JOIN api_resolvedplan plan ON plan.id = state.current_plan_id "
+                "WHERE state.graph_definition_id = ?",
+                (definition_id.replace("-", ""),),
+            ).fetchone()
+            return bool(
+                row is not None
+                and row["status"] == "converged"
+                and str(row["graph_revision_id"]) == revision_id.replace("-", "")
+            )
+        finally:
+            connection.close()
+
+    def _enabled_revisions_converged(self) -> bool:
+        connection = self._database()
+        if connection is None:
+            return False
+        try:
+            row = connection.execute(
+                "SELECT COUNT(*) AS enabled_count, "
+                "SUM(CASE WHEN state.status = 'converged' "
+                "AND plan.graph_revision_id = activation.revision_id THEN 1 ELSE 0 END) "
+                "AS converged_count "
+                "FROM api_graphactivation activation "
+                "LEFT JOIN api_appliedplanstate state "
+                "ON state.graph_definition_id = activation.definition_id "
+                "LEFT JOIN api_resolvedplan plan ON plan.id = state.current_plan_id "
+                "WHERE activation.enabled = 1"
+            ).fetchone()
+            return bool(
+                row is not None
+                and int(row["enabled_count"] or 0) > 0
+                and int(row["enabled_count"] or 0) == int(row["converged_count"] or 0)
+            )
+        finally:
+            connection.close()
+
+    def wait_camilladsp_configuration(
+        self,
+        configuration: Mapping[str, Any],
+        *,
+        timeout_seconds: float,
+    ) -> dict[str, Any]:
+        expected_digest = digest_document(dict(configuration))
+        started = self.monotonic_ns()
+        deadline = started + int(timeout_seconds * 1_000_000_000)
+        observed_digest = None
+        while self.monotonic_ns() < deadline:
+            try:
+                observed = dict(self.camilladsp_active_configuration())
+                observed_digest = digest_document(observed)
+            except BenchmarkError:
+                observed_digest = None
+            if observed_digest == expected_digest and self._enabled_revisions_converged():
+                return {
+                    "ready": True,
+                    "configurationSha256": observed_digest,
+                    "durationNs": self.monotonic_ns() - started,
+                }
+            self.sleep(0.1)
+        raise BenchmarkError(
+            "managed CamillaDSP configuration did not converge before the readiness deadline"
+        )
+
+    def activate_camilladsp_fixture(self, fixture_id: str) -> dict[str, Any]:
+        started = self.monotonic_ns()
+        document = self._intent_adapter_json(
+            (
+                "activate-camilladsp-fixture",
+                "--profiles-root",
+                str(self.benchmark_contracts_root / "media" / "camilladsp"),
+                "--fixture-id",
+                fixture_id,
+            ),
+            timeout=45,
+        )
+        definition_id = document.get("definitionId")
+        revision_id = document.get("revisionId")
+        profile_title = document.get("profileTitle")
+        if not all(isinstance(value, str) for value in (definition_id, revision_id, profile_title)):
+            raise BenchmarkError("managed CamillaDSP activation returned incomplete identity")
+        deadline = started + 60_000_000_000
+        observed_title = None
+        while self.monotonic_ns() < deadline:
+            try:
+                observed_title = self.camilladsp_active_configuration().get("title")
+            except BenchmarkError:
+                observed_title = None
+            if (
+                observed_title == profile_title
+                and self._managed_revision_converged(definition_id, revision_id)
+            ):
+                return {
+                    "fixtureId": fixture_id,
+                    "profileDigest": document.get("profileDigest"),
+                    "configurationTitle": observed_title,
+                    "activationDurationNs": self.monotonic_ns() - started,
+                    "desiredStateVersion": document.get("desiredStateVersion"),
+                }
+            self.sleep(0.1)
+        raise BenchmarkError("managed CamillaDSP fixture did not converge before its deadline")
 
     def restore_activations(self, snapshot: Mapping[str, Any]) -> dict[str, Any]:
         result = self.command(
@@ -1242,8 +1474,8 @@ finally:
             "digest": digest_document(links),
         }
 
-    def pipewire_document(self) -> object:
-        result = self._audio_command(["pw-dump"], timeout=10)
+    def pipewire_document(self, *, timeout_seconds: float = 10.0) -> object:
+        result = self._audio_command(["pw-dump"], timeout=timeout_seconds)
         if result["returncode"]:
             return {"error": result["stderr"].strip(), "objects": []}
         try:
@@ -1251,8 +1483,10 @@ finally:
         except json.JSONDecodeError:
             return {"error": "invalid-pw-dump", "objects": []}
 
-    def topology(self) -> dict[str, Any]:
-        return self.topology_from_dump(self.pipewire_document())
+    def topology(self, *, timeout_seconds: float = 10.0) -> dict[str, Any]:
+        return self.topology_from_dump(
+            self.pipewire_document(timeout_seconds=timeout_seconds)
+        )
 
     def runtime_snapshot(self) -> dict[str, Any]:
         result = self.command(
@@ -1281,32 +1515,55 @@ finally:
             return {"available": False, "error": "invalid-decoder-status"}
         return {"available": result["returncode"] == 0, "value": value}
 
-    def camilladsp_status(self) -> dict[str, Any]:
-        script = """
-import json
-import camilladsp
-client = camilladsp.CamillaClient(%r, %d)
-try:
-    client.connect()
-    state = client.general.state()
-    print(json.dumps({
-        'state': getattr(state, 'name', str(state)).lower(),
-        'bufferLevelFrames': client.status.buffer_level(),
-        'clippedSamples': client.status.clipped_samples(),
-        'processingLoadPercent': client.status.processing_load(),
-        'resamplerLoadPercent': client.status.resampler_load(),
-        'captureRateRaw': client.rate.capture_raw(),
-    }, sort_keys=True))
-finally:
-    client.disconnect()
-""" % (self.camilladsp_host, self.camilladsp_port)
-        result = self.command([str(self.venv_python), "-c", script], timeout=3)
-        if result["returncode"]:
-            return {"available": False, "error": result["stderr"].strip()}
+    def camilladsp_status(self, *, blocking: bool = True) -> dict[str, Any]:
+        # This probe runs at transition cadence and from the sustained worker.
+        # Reusing one synchronized websocket avoids a Python subprocess and a
+        # fresh connection for every sample. A processor restart invalidates
+        # the client; the next sample reconnects without retaining stale state.
+        # The transition collector must not wait behind the sustained probe: a
+        # reconnect during a service restart can otherwise consume multiple
+        # 200 ms transition slots. Native health keeps the blocking observation;
+        # the transition stream records an explicit busy observation instead.
+        acquired = self._camilladsp_lock.acquire(blocking=blocking)
+        if not acquired:
+            return {
+                "available": False,
+                "error": "camilladsp-status-query-in-progress",
+            }
         try:
-            return {"available": True, "value": json.loads(result["stdout"])}
-        except json.JSONDecodeError:
-            return {"available": False, "error": "invalid-camilladsp-status"}
+            client = self._camilladsp_client
+            try:
+                if client is None:
+                    import camilladsp
+
+                    client = camilladsp.CamillaClient(self.camilladsp_host, self.camilladsp_port)
+                    client.connect()
+                    self._camilladsp_client = client
+                state = client.general.state()
+                return {
+                    "available": True,
+                    "value": {
+                        "state": getattr(state, "name", str(state)).lower(),
+                        "bufferLevelFrames": client.status.buffer_level(),
+                        "clippedSamples": client.status.clipped_samples(),
+                        "processingLoadPercent": client.status.processing_load(),
+                        "resamplerLoadPercent": client.status.resampler_load(),
+                        "captureRateRaw": client.rate.capture_raw(),
+                    },
+                }
+            except BaseException as error:
+                if client is not None:
+                    try:
+                        client.disconnect()
+                    except BaseException:
+                        pass
+                self._camilladsp_client = None
+                return {
+                    "available": False,
+                    "error": f"camilladsp-status-query-failed:{type(error).__name__}",
+                }
+        finally:
+            self._camilladsp_lock.release()
 
     def _os_release(self) -> dict[str, str]:
         values = {}
@@ -1484,8 +1741,8 @@ finally:
             },
         }
 
-    def _applied_plan_state(self) -> dict[str, Any]:
-        connection = self._database()
+    def _applied_plan_state(self, *, timeout_seconds: float = 5.0) -> dict[str, Any]:
+        connection = self._database(timeout_seconds=timeout_seconds)
         if connection is None:
             return {"available": False}
         try:
@@ -1500,11 +1757,20 @@ finally:
                 )
             ]
             return {"available": True, "states": rows}
+        except sqlite3.OperationalError as error:
+            return {
+                "available": False,
+                "error": (
+                    "database-busy"
+                    if "locked" in str(error).lower() or "busy" in str(error).lower()
+                    else "database-query-failed"
+                ),
+            }
         finally:
             connection.close()
 
-    def _processor_projection(self) -> dict[str, Any]:
-        connection = self._database()
+    def _processor_projection(self, *, timeout_seconds: float = 5.0) -> dict[str, Any]:
+        connection = self._database(timeout_seconds=timeout_seconds)
         if connection is None:
             return {"available": False}
         try:
@@ -1524,24 +1790,97 @@ finally:
                 except (TypeError, json.JSONDecodeError):
                     pass
             return {"available": True, "rows": rows}
+        except sqlite3.OperationalError as error:
+            return {
+                "available": False,
+                "error": (
+                    "database-busy"
+                    if "locked" in str(error).lower() or "busy" in str(error).lower()
+                    else "database-query-failed"
+                ),
+            }
         finally:
             connection.close()
 
+    def _transition_database_snapshot(self) -> dict[str, Any]:
+        """Return the last database observation and refresh it off the cadence path."""
+
+        def refresh() -> None:
+            projections = self._processor_projection(timeout_seconds=0.01)
+            reconciliation = self._applied_plan_state(timeout_seconds=0.01)
+            observed_ns = self.monotonic_ns()
+            with self._transition_database_lock:
+                self._transition_database_cache = {
+                    "observedMonotonicNs": observed_ns,
+                    "processorProjections": projections,
+                    "reconciliation": reconciliation,
+                }
+
+        with self._transition_database_lock:
+            worker = self._transition_database_worker
+            if worker is None or not worker.is_alive():
+                worker = threading.Thread(
+                    target=refresh,
+                    name="open-cinema-transition-database",
+                    daemon=True,
+                )
+                self._transition_database_worker = worker
+                worker.start()
+            cache = dict(self._transition_database_cache)
+            refresh_in_progress = worker.is_alive()
+        observed_ns = cache.get("observedMonotonicNs")
+        return {
+            **cache,
+            "ageNs": (
+                max(0, self.monotonic_ns() - int(observed_ns))
+                if isinstance(observed_ns, int)
+                else None
+            ),
+            "refreshInProgress": refresh_in_progress,
+        }
+
     def transition_sample(self) -> dict[str, Any]:
+        component_overheads: dict[str, int] = {}
+        component_started = self.monotonic_ns()
         runtime = self.runtime_snapshot()
+        component_overheads["runtime"] = self.monotonic_ns() - component_started
         value = runtime.get("value", {}) if runtime.get("available") else {}
-        topology = self.topology()
-        projections = self._processor_projection()
+        component_started = self.monotonic_ns()
+        try:
+            topology = self.topology(timeout_seconds=0.1)
+        except CaseTimeout:
+            topology = {
+                "available": False,
+                "error": "pw-dump-timeout",
+                "ownedLinkCount": None,
+                "links": [],
+                "digest": None,
+            }
+        component_overheads["pipewireTopology"] = self.monotonic_ns() - component_started
+        component_started = self.monotonic_ns()
+        database_snapshot = self._transition_database_snapshot()
+        component_overheads["databaseSnapshotCache"] = (
+            self.monotonic_ns() - component_started
+        )
+        projections = database_snapshot["processorProjections"]
         rows = projections.get("rows", []) if projections.get("available") else []
-        processor_ready = all(
-            not isinstance(row.get("payload"), dict)
-            or (
-                row["payload"].get("ready", True) is True
-                and row["payload"].get("health", "healthy") == "healthy"
-                and row["payload"].get("error") is None
+        processor_ready = bool(projections.get("available")) and all(
+            (
+                not isinstance(row.get("payload"), dict)
+                or (
+                    row["payload"].get("ready", True) is True
+                    and row["payload"].get("health", "healthy") == "healthy"
+                    and row["payload"].get("error") is None
+                )
             )
             for row in rows
         )
+        component_started = self.monotonic_ns()
+        decoder = self.decoder_status()
+        component_overheads["decoderStatus"] = self.monotonic_ns() - component_started
+        component_started = self.monotonic_ns()
+        camilladsp = self.camilladsp_status(blocking=False)
+        component_overheads["camilladspStatus"] = self.monotonic_ns() - component_started
         return {
             "pipewire": topology,
             "runtime": runtime,
@@ -1555,14 +1894,36 @@ finally:
             ),
             "retryState": value.get("retryState", value.get("retry")),
             "processorReadiness": {"ready": processor_ready, "projections": projections},
-            "decoder": self.decoder_status(),
-            "camilladsp": self.camilladsp_status(),
-            "reconciliation": self._applied_plan_state(),
+            "decoder": decoder,
+            "camilladsp": camilladsp,
+            "reconciliation": database_snapshot["reconciliation"],
+            "databaseObservation": {
+                "observedMonotonicNs": database_snapshot["observedMonotonicNs"],
+                "ageNs": database_snapshot["ageNs"],
+                "refreshInProgress": database_snapshot["refreshInProgress"],
+            },
+            "componentProbeOverheadsNs": component_overheads,
             "audioRestorationMarker": None,
         }
 
     def native_health(self) -> dict[str, Any]:
-        pw_top = self._audio_command(["pw-top", "-b", "-n", "1"], timeout=3)
+        component_overheads: dict[str, int] = {}
+        component_started = self.monotonic_ns()
+        try:
+            pw_top = self._audio_command(["pw-top", "-b", "-n", "1"], timeout=0.75)
+            pw_top_observation = {
+                "available": pw_top["returncode"] == 0,
+                "returncode": pw_top["returncode"],
+                "error": pw_top["stderr"].strip() or None,
+            }
+        except CaseTimeout:
+            pw_top = {"stdout": ""}
+            pw_top_observation = {
+                "available": False,
+                "returncode": None,
+                "error": "pw-top-timeout",
+            }
+        component_overheads["pipewireTop"] = self.monotonic_ns() - component_started
         errors = []
         for line in pw_top["stdout"].splitlines():
             fields = line.split()
@@ -1574,27 +1935,63 @@ finally:
                 )
             except ValueError:
                 continue
+        component_started = self.monotonic_ns()
+        decoder = self.decoder_status()
+        component_overheads["decoderStatus"] = self.monotonic_ns() - component_started
+        component_started = self.monotonic_ns()
+        camilladsp = self.camilladsp_status()
+        component_overheads["camilladspStatus"] = self.monotonic_ns() - component_started
+        component_started = self.monotonic_ns()
+        processor_projections = self._processor_projection(timeout_seconds=0.1)
+        component_overheads["processorProjections"] = (
+            self.monotonic_ns() - component_started
+        )
         return {
             "pipewireObjects": errors,
             "pipewireMaximumErrors": max((item["errors"] for item in errors), default=None),
-            "decoder": self.decoder_status(),
-            "camilladsp": self.camilladsp_status(),
-            "processorProjections": self._processor_projection(),
+            "pipewireTopObservation": pw_top_observation,
+            "decoder": decoder,
+            "camilladsp": camilladsp,
+            "processorProjections": processor_projections,
+            "componentProbeOverheadsNs": component_overheads,
         }
+
+    def begin_sustained_collection(self) -> dict[str, Any]:
+        """Anchor event accounting before the timed one-second collection window."""
+
+        last_sequence = 0
+        connection = self._database(timeout_seconds=0.1)
+        if connection is not None:
+            try:
+                if self._table_exists(connection, "api_orchestrationevent"):
+                    row = connection.execute(
+                        "SELECT COALESCE(MAX(sequence), 0) FROM api_orchestrationevent"
+                    ).fetchone()
+                    last_sequence = int(row[0]) if row is not None else 0
+            except sqlite3.OperationalError:
+                last_sequence = 0
+            finally:
+                connection.close()
+        with self._event_storage_lock:
+            self._event_storage_last_sequence = last_sequence
+            self._event_storage_counts = {
+                "offered": 0,
+                "processed": 0,
+                "coalesced": 0,
+                "retried": 0,
+                "dropped": 0,
+            }
+        return {"orchestrationEventBaselineSequence": last_sequence}
 
     def event_storage_sample(self) -> dict[str, Any]:
         started = self.monotonic_ns()
-        connection = self._database()
+        connection = self._database(timeout_seconds=0.1)
         counts: dict[str, int] = {}
         busy = False
         quick_check = "database-unavailable"
-        events: dict[str, int] = {
-            "offered": 0,
-            "processed": 0,
-            "coalesced": 0,
-            "retried": 0,
-            "dropped": 0,
-        }
+        with self._event_storage_lock:
+            event_sequence = self._event_storage_last_sequence
+            events = dict(self._event_storage_counts)
         if connection is not None:
             try:
                 for table in COUNT_TABLES:
@@ -1605,14 +2002,17 @@ finally:
                 quick_check = str(connection.execute("PRAGMA quick_check").fetchone()[0])
                 if self._table_exists(connection, "api_orchestrationevent"):
                     for row in connection.execute(
-                        "SELECT event_type, payload FROM api_orchestrationevent ORDER BY sequence"
+                        "SELECT sequence, event_type, payload FROM api_orchestrationevent "
+                        "WHERE sequence > ? ORDER BY sequence",
+                        (event_sequence,),
                     ):
-                        name = str(row[0]).lower()
+                        event_sequence = max(event_sequence, int(row[0]))
+                        name = str(row[1]).lower()
                         for category in events:
                             if category in name:
                                 events[category] += 1
                         try:
-                            payload = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                            payload = json.loads(row[2]) if isinstance(row[2], str) else row[2]
                         except json.JSONDecodeError:
                             payload = {}
                         if isinstance(payload, dict):
@@ -1625,6 +2025,10 @@ finally:
                 quick_check = f"error:{error}"
             finally:
                 connection.close()
+        with self._event_storage_lock:
+            if event_sequence >= self._event_storage_last_sequence:
+                self._event_storage_last_sequence = event_sequence
+                self._event_storage_counts = dict(events)
         redis = self.command(["redis-cli", "-h", "127.0.0.1", "INFO", "memory"])
         stat = self.database_path.stat() if self.database_path.exists() else None
         return {
@@ -1661,12 +2065,17 @@ finally:
         deadline = self.monotonic_ns() + int(timeout_seconds * 1_000_000_000)
         expected_topology = snapshot["topology"]
         observed_topology = self.topology()
+        intent_converged = self._enabled_revisions_converged()
         while (
-            observed_topology.get("digest") != expected_topology.get("digest")
+            (
+                observed_topology.get("digest") != expected_topology.get("digest")
+                or not intent_converged
+            )
             and self.monotonic_ns() < deadline
         ):
             self.sleep(0.25)
             observed_topology = self.topology()
+            intent_converged = self._enabled_revisions_converged()
         static_digest = self.static_digest()
         active_intent = self.intent_snapshot()
         intent_digest = active_intent["semanticDigest"]
@@ -1682,12 +2091,14 @@ finally:
             "staticDigestVerified": static_digest == snapshot["staticDigest"],
             "dynamicDigest": intent_digest,
             "dynamicDigestVerified": intent_digest == snapshot["intentDigest"],
+            "activeIntentConverged": intent_converged,
         }
         if not all(
             (
                 result["topologyVerified"],
                 result["staticDigestVerified"],
                 result["dynamicDigestVerified"],
+                result["activeIntentConverged"],
             )
         ):
             raise RestorationError(f"restoration verification failed: {result}")
@@ -1733,14 +2144,7 @@ class BenchmarkRunner:
         self.transition_interval = transition_interval_seconds or (
             float(measurement["transition_interval_milliseconds"]) / 1000
         )
-        self.workload_driver_factory = workload_driver_factory or (
-            lambda **arguments: BenchmarkWorkloadDriver(
-                contracts_root=self.contracts.root,
-                fixture=self.contracts.fixture,
-                backend=self.platform,
-                **arguments,
-            )
-        )
+        self.workload_driver_factory = workload_driver_factory
         default_intent_adapter = getattr(
             self.platform,
             "intent_adapter",
@@ -1803,6 +2207,85 @@ class BenchmarkRunner:
             }
         return {"schemaVersion": 1, "components": components}
 
+    @staticmethod
+    def _safe_benchmark_input(root: Path, relative: object, *, label: str) -> Path:
+        if not isinstance(relative, str) or not relative:
+            raise ContractError(f"{label} path must be non-empty")
+        candidate_relative = Path(relative)
+        if candidate_relative.is_absolute():
+            raise ContractError(f"{label} path must be relative: {relative}")
+        resolved_root = root.resolve()
+        candidate = (resolved_root / candidate_relative).resolve()
+        try:
+            candidate.relative_to(resolved_root)
+        except ValueError as error:
+            raise ContractError(f"{label} path escapes the benchmark root: {relative}") from error
+        if not candidate.is_file():
+            raise ContractError(f"{label} file is missing: {relative}")
+        return candidate
+
+    def _workload_input_files(self) -> tuple[Path, ...]:
+        root = self.contracts.root.resolve()
+        media_registry_path = self._safe_benchmark_input(
+            root, WORKLOAD_REGISTRY_FILES[0], label="media registry"
+        )
+        profile_registry_path = self._safe_benchmark_input(
+            root, WORKLOAD_REGISTRY_FILES[1], label="CamillaDSP profile registry"
+        )
+        physical_path = self._safe_benchmark_input(
+            root, WORKLOAD_REGISTRY_FILES[2], label="physical timing declaration"
+        )
+        try:
+            media_registry = json.loads(media_registry_path.read_text(encoding="utf-8"))
+            profile_registry = json.loads(profile_registry_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as error:
+            raise ContractError(f"invalid workload registry JSON: {error}") from error
+        if not isinstance(media_registry, Mapping) or not isinstance(profile_registry, Mapping):
+            raise ContractError("workload registries must contain objects")
+
+        paths = {media_registry_path, profile_registry_path, physical_path}
+
+        def add_assets(
+            records: object,
+            *,
+            asset_root: Path,
+            label: str,
+        ) -> None:
+            if not isinstance(records, list):
+                raise ContractError(f"{label} registry must contain an array")
+            for record in records:
+                if not isinstance(record, Mapping):
+                    raise ContractError(f"{label} registry contains an invalid entry")
+                asset = self._safe_benchmark_input(
+                    root,
+                    str((asset_root / str(record.get("path", ""))).as_posix()),
+                    label=label,
+                )
+                expected_size = record.get("sizeBytes")
+                expected_digest = record.get("sha256")
+                if not isinstance(expected_size, int) or asset.stat().st_size != expected_size:
+                    raise ContractError(f"{label} size differs from registry: {asset.name}")
+                if not isinstance(expected_digest, str) or sha256_file(asset) != expected_digest:
+                    raise ContractError(f"{label} digest differs from registry: {asset.name}")
+                paths.add(asset)
+
+        add_assets(
+            media_registry.get("fixtures"),
+            asset_root=Path("media/generated"),
+            label="media asset",
+        )
+        add_assets(
+            profile_registry.get("profiles"),
+            asset_root=Path("media/camilladsp"),
+            label="CamillaDSP profile",
+        )
+        add_assets(
+            profile_registry.get("assets"),
+            asset_root=Path("media/camilladsp"),
+            label="CamillaDSP profile asset",
+        )
+        return tuple(sorted(path.relative_to(root) for path in paths))
+
     def _assert_implementation_identity(self, state: Mapping[str, Any]) -> None:
         expected = state.get("implementationIdentity")
         if not isinstance(expected, Mapping):
@@ -1823,6 +2306,23 @@ class BenchmarkRunner:
                 "benchmark implementation changed after prepare "
                 f"({', '.join(changed)}); prepare a new run"
             )
+        frozen_path = self.run_dir(str(state["runId"])) / "manifests/implementation-identity.json"
+        manifest_digests = state.get("manifestDigests")
+        expected_digest = (
+            manifest_digests.get(frozen_path.name)
+            if isinstance(manifest_digests, Mapping)
+            else None
+        )
+        try:
+            frozen = json.loads(frozen_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise BenchmarkError("frozen implementation identity is unavailable") from error
+        if (
+            frozen != expected
+            or not isinstance(expected_digest, str)
+            or sha256_file(frozen_path) != expected_digest
+        ):
+            raise BenchmarkError("frozen implementation identity changed after prepare")
 
     def _assert_contract_identity(self, state: Mapping[str, Any]) -> None:
         expected = state.get("manifestDigests")
@@ -1830,14 +2330,26 @@ class BenchmarkRunner:
             raise BenchmarkError("prepared run has no benchmark contract identity")
         run_manifests = self.run_dir(str(state["runId"])) / "manifests"
         changed: list[str] = []
-        for name in CONTRACT_FILES:
-            expected_digest = expected.get(name)
-            live_path = self.contracts.root / name
-            frozen_path = run_manifests / name
+        required = {*CONTRACT_FILES, *WORKLOAD_REGISTRY_FILES}
+        changed.extend(sorted(required - set(expected)))
+        for name, expected_digest in expected.items():
+            if name == "implementation-identity.json":
+                continue
+            if not isinstance(name, str):
+                changed.append(str(name))
+                continue
+            try:
+                live_path = self._safe_benchmark_input(
+                    self.contracts.root, name, label="prepared benchmark input"
+                )
+                frozen_path = self._safe_benchmark_input(
+                    run_manifests, name, label="frozen benchmark input"
+                )
+            except ContractError:
+                changed.append(name)
+                continue
             if (
                 not isinstance(expected_digest, str)
-                or not live_path.is_file()
-                or not frozen_path.is_file()
                 or sha256_file(live_path) != expected_digest
                 or sha256_file(frozen_path) != expected_digest
             ):
@@ -1845,7 +2357,8 @@ class BenchmarkRunner:
         if changed:
             raise BenchmarkError(
                 "benchmark contracts changed after prepare "
-                f"({', '.join(changed)}); restore the run if needed, then prepare a new run"
+                f"({', '.join(sorted(set(changed)))}); restore the run if needed, "
+                "then prepare a new run"
             )
 
     def _assert_prepared_identity(self, state: Mapping[str, Any]) -> None:
@@ -1916,6 +2429,7 @@ class BenchmarkRunner:
         run_id: str | None = None,
     ) -> str:
         selected = self.contracts.selected_cases(case_ids, campaign)
+        workload_inputs = self._workload_input_files()
         run_id = checked_identifier(run_id) if run_id else self._new_run_id()
         run_dir = self.run_dir(run_id)
         self.runs_root.mkdir(parents=True, exist_ok=True)
@@ -1927,12 +2441,14 @@ class BenchmarkRunner:
         manifests_dir = run_dir / "manifests"
         manifests_dir.mkdir(mode=0o750)
         manifest_digests = {}
-        for name in CONTRACT_FILES:
-            source = self.contracts.root / name
-            destination = manifests_dir / name
+        prepared_inputs = tuple(Path(name) for name in CONTRACT_FILES) + workload_inputs
+        for relative in prepared_inputs:
+            source = self.contracts.root / relative
+            destination = manifests_dir / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
             os.chmod(destination, 0o640)
-            manifest_digests[name] = sha256_file(destination)
+            manifest_digests[relative.as_posix()] = sha256_file(destination)
         implementation_identity = self._implementation_identity()
         identity_path = manifests_dir / "implementation-identity.json"
         write_json(identity_path, implementation_identity)
@@ -1949,6 +2465,27 @@ class BenchmarkRunner:
                     or criteria.get("platform_acceptance_allowed") is not True
                 ):
                     raise ContractError("acceptance is disabled until reviewed criteria are frozen")
+        managed_camilladsp_required = any(
+            (
+                self.contracts.fixture["processor_fixtures"][fixture_name]
+                .get("automation", {})
+                .get("driver")
+                == "managed-camilladsp-profile"
+            )
+            for case in selected
+            for fixture_name in (
+                case.get("processor_fixture_matrix") or [case["processor_fixture"]]
+            )
+        )
+        camilladsp_fixtures = None
+        if managed_camilladsp_required:
+            ensure = getattr(self.platform, "ensure_camilladsp_benchmark_fixtures", None)
+            if not callable(ensure):
+                raise BenchmarkError(
+                    "selected CamillaDSP cases require managed desired-graph fixtures"
+                )
+            camilladsp_fixtures = ensure()
+            write_json(run_dir / "camilladsp-managed-fixtures.json", camilladsp_fixtures)
         journal = self.platform.journal_marker(run_id)
         facts = redact_document(self.platform.fixture_facts(self.contracts.fixture))
         fixture_comparison = self._fixture_comparison(facts)
@@ -1998,6 +2535,7 @@ class BenchmarkRunner:
             "journalMarker": journal,
             "manifestDigests": manifest_digests,
             "implementationIdentity": implementation_identity,
+            "camillaDSPManagedFixtures": camilladsp_fixtures,
             "selectedCaseIds": sorted(cases),
             "cases": cases,
             "status": "prepared",
@@ -2035,6 +2573,28 @@ class BenchmarkRunner:
                     )
                 variant_index += 1
         return units
+
+    def _workload_driver(
+        self,
+        *,
+        state: Mapping[str, Any],
+        case: Mapping[str, Any],
+        unit: Mapping[str, Any],
+        sample_dir: Path,
+    ) -> Any:
+        arguments = {
+            "case": case,
+            "unit": unit,
+            "sample_dir": sample_dir,
+        }
+        if self.workload_driver_factory is not None:
+            return self.workload_driver_factory(**arguments)
+        return BenchmarkWorkloadDriver(
+            contracts_root=self.run_dir(str(state["runId"])) / "manifests",
+            fixture=self.contracts.fixture,
+            backend=self.platform,
+            **arguments,
+        )
 
     def _sample_id(self, case_id: str, unit_index: int) -> str:
         return f"{case_id}-sample-{unit_index + 1:04d}"
@@ -2256,10 +2816,6 @@ class BenchmarkRunner:
         duration_ns = int(float(case["duration_seconds"]) * 1_000_000_000)
         sustained_ns = max(1, int(self.sustained_interval * 1_000_000_000))
         transition_ns = max(1, int(self.transition_interval * 1_000_000_000))
-        started_ns = self.platform.monotonic_ns()
-        end_ns = started_ns + duration_ns
-        next_sustained = started_ns
-        next_transition = started_ns
         sustained_sequence = 0
         transition_sequence = 0
         sustained_completed = 0
@@ -2268,27 +2824,67 @@ class BenchmarkRunner:
         transition_missed = 0
         sustained_intervals: list[dict[str, Any]] = []
         transition_intervals: list[dict[str, Any]] = []
+        injection_started = not services
         injection_done = not services
-        injection_at = started_ns + min(duration_ns // 2, 1_000_000_000)
-        scheduled = [
-            started_ns + int(second * 1_000_000_000)
-            for second in case.get("transition_schedule_seconds", [])
-        ]
         scheduled_index = 0
         final_topology_converged = False
         final_processors_ready = False
-        last_audio_marker = self._emit_event(sample_dir, "measurement-start", sampleId=sample_id)
         initial_workload_health = workload.health()
         self._emit_event(
             sample_dir,
             "workload-health-verified",
             result=redact_document(initial_workload_health),
         )
+        if hasattr(self.platform, "begin_sustained_collection"):
+            sustained_preflight = self.platform.begin_sustained_collection()
+            self._emit_event(
+                sample_dir,
+                "sustained-collection-prepared",
+                result=redact_document(sustained_preflight),
+            )
         sustained_executor = ThreadPoolExecutor(
             max_workers=1,
             thread_name_prefix="open-cinema-sustained-collector",
         )
+        sustained_probe_executor = ThreadPoolExecutor(
+            max_workers=4,
+            thread_name_prefix="open-cinema-sustained-probe",
+        )
+        sustained_persistence_executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="open-cinema-sustained-persistence",
+        )
+        transition_executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="open-cinema-transition-persistence",
+        )
+        fault_executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="open-cinema-fault-injection",
+        )
+        scheduled_executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="open-cinema-scheduled-transition",
+        )
+        last_audio_marker = self._emit_event(
+            sample_dir, "measurement-start", sampleId=sample_id
+        )
+        started_ns = self.platform.monotonic_ns()
+        end_ns = started_ns + duration_ns
+        next_sustained = started_ns
+        next_transition = started_ns
+        injection_at = started_ns + min(duration_ns // 2, 1_000_000_000)
+        scheduled = [
+            started_ns + int(second * 1_000_000_000)
+            for second in case.get("transition_schedule_seconds", [])
+        ]
         sustained_future: Future[dict[str, Any]] | None = None
+        sustained_persistence_futures: deque[Future[dict[str, Any]]] = deque()
+        transition_futures: deque[Future[dict[str, Any]]] = deque()
+        case_event_futures: deque[Future[dict[str, Any]]] = deque()
+        fault_future: Future[dict[str, Any]] | None = None
+        scheduled_future: Future[dict[str, Any]] | None = None
+        fault_events: SimpleQueue[dict[str, Any]] = SimpleQueue()
         sustained_cancelled = threading.Event()
         sustained_wait_exhausted = False
 
@@ -2296,38 +2892,48 @@ class BenchmarkRunner:
             started: threading.Event,
             sequence: int,
             scheduled_ns: int,
-            workload_health: Mapping[str, Any],
+            fault_injection_in_progress: bool,
         ) -> dict[str, Any]:
+            def timed_probe(probe: Callable[[], Any]) -> tuple[str, int, int, Any]:
+                timestamp = self.platform.utc_now()
+                probe_started = self.platform.monotonic_ns()
+                value = probe()
+                probe_completed = self.platform.monotonic_ns()
+                return timestamp, probe_started, probe_completed, value
+
+            def workload_health_probe() -> dict[str, Any]:
+                if fault_injection_in_progress:
+                    return {
+                        "required": case["workload_state"] == "programme-audio",
+                        "healthy": None,
+                        "state": "fault-injection-in-progress",
+                    }
+                return workload.health()
+
             started.set()
             if sustained_cancelled.is_set():
                 raise BenchmarkError("sustained collector was cancelled")
             deadline.check()
             batch_started = self.platform.monotonic_ns()
             batch_timestamp = self.platform.utc_now()
-            system_started = self.platform.monotonic_ns()
-            system = self.platform.sustained_sample()
-            system_completed = self.platform.monotonic_ns()
-            system_timestamp = self.platform.utc_now()
+            probe_futures = (
+                sustained_probe_executor.submit(timed_probe, workload_health_probe),
+                sustained_probe_executor.submit(timed_probe, self.platform.sustained_sample),
+                sustained_probe_executor.submit(timed_probe, self.platform.native_health),
+                sustained_probe_executor.submit(
+                    timed_probe, self.platform.event_storage_sample
+                ),
+            )
+            (
+                (_health_timestamp, health_started, health_completed, workload_health),
+                (system_timestamp, system_started, system_completed, system),
+                (native_timestamp, native_started, native_completed, native_health),
+                (storage_timestamp, storage_started, storage_completed, event_storage),
+            ) = tuple(future.result() for future in probe_futures)
             if sustained_cancelled.is_set():
                 raise BenchmarkError("sustained collector was cancelled")
             deadline.check()
-            native_started = self.platform.monotonic_ns()
-            native_health = self.platform.native_health()
-            native_completed = self.platform.monotonic_ns()
-            native_timestamp = self.platform.utc_now()
-            if sustained_cancelled.is_set():
-                raise BenchmarkError("sustained collector was cancelled")
-            deadline.check()
-            storage_started = self.platform.monotonic_ns()
-            event_storage = self.platform.event_storage_sample()
-            storage_completed = self.platform.monotonic_ns()
-            storage_timestamp = self.platform.utc_now()
-            if sustained_cancelled.is_set():
-                raise BenchmarkError("sustained collector was cancelled")
-            deadline.check()
-            append_jsonl(
-                sample_dir / "system.jsonl",
-                {
+            system_document = {
                     "sampleId": f"{sample_id}-system-{sequence:06d}",
                     "sequence": sequence,
                     "timestampUtc": system_timestamp,
@@ -2337,61 +2943,81 @@ class BenchmarkRunner:
                     "probeOverheadNs": system_completed - system_started,
                     "workloadHealth": redact_document(workload_health),
                     **system,
-                },
-            )
+                }
             if sustained_cancelled.is_set():
                 raise BenchmarkError("sustained collector was cancelled")
             deadline.check()
-            append_jsonl(
-                sample_dir / "native-health.jsonl",
-                {
+            native_document = {
                     "sampleId": f"{sample_id}-native-{sequence:06d}",
                     "sequence": sequence,
                     "timestampUtc": native_timestamp,
                     "monotonicNs": native_started,
                     "probeOverheadNs": native_completed - native_started,
                     **native_health,
-                },
-            )
+                }
             if sustained_cancelled.is_set():
                 raise BenchmarkError("sustained collector was cancelled")
             deadline.check()
-            append_jsonl(
-                sample_dir / "event-storage.jsonl",
-                {
+            storage_document = {
                     "sampleId": f"{sample_id}-storage-{sequence:06d}",
                     "sequence": sequence,
                     "timestampUtc": storage_timestamp,
                     "monotonicNs": storage_started,
                     "probeOverheadNs": storage_completed - storage_started,
                     **event_storage,
-                },
-            )
+                }
             deadline.check()
-            batch_completed = self.platform.monotonic_ns()
             return {
-                "sampleId": f"{sample_id}-collector-{sequence:06d}",
-                "sequence": sequence,
-                "timestampUtc": batch_timestamp,
-                "monotonicNs": batch_started,
-                "scheduledMonotonicNs": scheduled_ns,
-                "latenessNs": max(0, batch_started - scheduled_ns),
-                "collectorOverheadNs": batch_completed - batch_started,
-                "componentProbeOverheadsNs": {
-                    "system": system_completed - system_started,
-                    "nativeHealth": native_completed - native_started,
-                    "eventStorage": storage_completed - storage_started,
+                "batchStartedNs": batch_started,
+                "probeCompletedNs": self.platform.monotonic_ns(),
+                "documents": (
+                    ("system.jsonl", system_document),
+                    ("native-health.jsonl", native_document),
+                    ("event-storage.jsonl", storage_document),
+                ),
+                "interval": {
+                    "sampleId": f"{sample_id}-collector-{sequence:06d}",
+                    "sequence": sequence,
+                    "timestampUtc": batch_timestamp,
+                    "monotonicNs": batch_started,
+                    "scheduledMonotonicNs": scheduled_ns,
+                    "latenessNs": max(0, batch_started - scheduled_ns),
+                    "componentProbeOverheadsNs": {
+                        "workloadHealth": health_completed - health_started,
+                        "system": system_completed - system_started,
+                        "nativeHealth": native_completed - native_started,
+                        "eventStorage": storage_completed - storage_started,
+                    },
                 },
             }
 
+        def persist_sustained_batch(batch: Mapping[str, Any]) -> dict[str, Any]:
+            persistence_started = self.platform.monotonic_ns()
+            for name, document in batch["documents"]:
+                append_jsonl(sample_dir / str(name), document)
+            persistence_completed = self.platform.monotonic_ns()
+            interval = dict(batch["interval"])
+            interval.update(
+                {
+                    "probeOverheadNs": int(batch["probeCompletedNs"])
+                    - int(batch["batchStartedNs"]),
+                    "persistenceOverheadNs": persistence_completed - persistence_started,
+                    "collectorOverheadNs": persistence_completed
+                    - int(batch["batchStartedNs"]),
+                }
+            )
+            return interval
+
         def consume_sustained_batch(*, timeout: float | None = None) -> None:
-            nonlocal sustained_completed, sustained_future, sustained_wait_exhausted
+            nonlocal sustained_future, sustained_wait_exhausted
             if sustained_future is None or (timeout is None and not sustained_future.done()):
                 return
             future = sustained_future
             try:
-                sustained_intervals.append(future.result(timeout=timeout))
-                sustained_completed += 1
+                batch = future.result(timeout=timeout)
+                sustained_persistence_futures.append(
+                    sustained_persistence_executor.submit(persist_sustained_batch, batch)
+                )
             except FutureTimeout as error:
                 sustained_wait_exhausted = True
                 raise CaseTimeout("sustained collector exceeded the case deadline") from error
@@ -2399,48 +3025,192 @@ class BenchmarkRunner:
                 if future.done():
                     sustained_future = None
 
+        def consume_sustained_persistence(*, block: bool = False) -> None:
+            nonlocal sustained_completed
+            while sustained_persistence_futures and (
+                block or sustained_persistence_futures[0].done()
+            ):
+                future = sustained_persistence_futures.popleft()
+                timeout = deadline.remaining() if block else None
+                try:
+                    sustained_intervals.append(future.result(timeout=timeout))
+                    sustained_completed += 1
+                except FutureTimeout as error:
+                    raise CaseTimeout(
+                        "sustained persistence exceeded the case deadline"
+                    ) from error
+
+        def persist_transition(
+            payload: Mapping[str, Any],
+            *,
+            sequence: int,
+            scheduled_ns: int,
+            collection_started: int,
+            probe_completed: int,
+        ) -> dict[str, Any]:
+            append_jsonl(sample_dir / "transition.jsonl", payload)
+            persistence_completed = self.platform.monotonic_ns()
+            return {
+                "sampleId": f"{sample_id}-transition-collector-{sequence:06d}",
+                "sequence": sequence,
+                "timestampUtc": self.platform.utc_now(),
+                "monotonicNs": collection_started,
+                "scheduledMonotonicNs": scheduled_ns,
+                "latenessNs": max(0, collection_started - scheduled_ns),
+                "probeOverheadNs": probe_completed - collection_started,
+                "collectorOverheadNs": persistence_completed - collection_started,
+            }
+
+        def consume_transition_persistence(*, block: bool = False) -> None:
+            while transition_futures and (block or transition_futures[0].done()):
+                future = transition_futures.popleft()
+                timeout = deadline.remaining() if block else None
+                try:
+                    transition_intervals.append(future.result(timeout=timeout))
+                except FutureTimeout as error:
+                    raise CaseTimeout(
+                        "transition persistence exceeded the case deadline"
+                    ) from error
+
+        def persist_case_event(event: Mapping[str, Any]) -> dict[str, Any]:
+            append_jsonl(sample_dir / "case-events.jsonl", event)
+            return dict(event)
+
+        def queue_case_event(event: Mapping[str, Any]) -> dict[str, Any]:
+            document = dict(event)
+            case_event_futures.append(
+                transition_executor.submit(persist_case_event, document)
+            )
+            return document
+
+        def consume_case_event_persistence(*, block: bool = False) -> None:
+            while case_event_futures and (block or case_event_futures[0].done()):
+                future = case_event_futures.popleft()
+                timeout = deadline.remaining() if block else None
+                try:
+                    future.result(timeout=timeout)
+                except FutureTimeout as error:
+                    raise CaseTimeout(
+                        "case-event persistence exceeded the case deadline"
+                    ) from error
+
+        def fault_event(event: str, **fields: Any) -> dict[str, Any]:
+            return {
+                "event": event,
+                "timestampUtc": self.platform.utc_now(),
+                "monotonicNs": self.platform.monotonic_ns(),
+                **fields,
+            }
+
+        def inject_and_restore_workload() -> dict[str, Any]:
+            results = self.platform.inject_services(services)
+            fault_events.put(
+                fault_event(
+                    "fault-injection-complete",
+                    results=redact_document(results),
+                )
+            )
+            recovery = workload.after_fault_injection(list(services))
+            health = workload.health()
+            fault_events.put(
+                fault_event(
+                    "workload-restored-after-fault",
+                    result=redact_document(recovery),
+                )
+            )
+            return {"results": results, "recovery": recovery, "health": health}
+
+        def execute_scheduled_transition(
+            schedule_kind: str,
+            schedule_index: int,
+            scheduled_ns: int,
+        ) -> dict[str, Any]:
+            action = workload.transition(schedule_kind, schedule_index)
+            health = workload.health()
+            fault_events.put(
+                fault_event(
+                    "scheduled-transition-executed",
+                    scheduleKind=schedule_kind,
+                    scheduleIndex=schedule_index,
+                    scheduledMonotonicNs=scheduled_ns,
+                    result=redact_document(action),
+                )
+            )
+            return {"action": action, "health": health}
+
+        def drain_fault_events() -> None:
+            nonlocal last_audio_marker
+            while True:
+                try:
+                    event = fault_events.get_nowait()
+                except Empty:
+                    return
+                last_audio_marker = queue_case_event(event)
+
+        def consume_fault_injection(*, block: bool = False) -> None:
+            nonlocal fault_future, injection_done
+            drain_fault_events()
+            if fault_future is None or (not block and not fault_future.done()):
+                return
+            timeout = deadline.remaining() if block else None
+            try:
+                fault_future.result(timeout=timeout)
+            except FutureTimeout as error:
+                raise CaseTimeout("fault injection exceeded the case deadline") from error
+            fault_future = None
+            injection_done = True
+            drain_fault_events()
+
+        def consume_scheduled_transition(*, block: bool = False) -> None:
+            nonlocal scheduled_future
+            drain_fault_events()
+            if scheduled_future is None or (not block and not scheduled_future.done()):
+                return
+            timeout = deadline.remaining() if block else None
+            try:
+                scheduled_future.result(timeout=timeout)
+            except FutureTimeout as error:
+                raise CaseTimeout("scheduled transition exceeded the case deadline") from error
+            scheduled_future = None
+            drain_fault_events()
+
         collection_error: BaseException | None = None
         try:
             while self.platform.monotonic_ns() < end_ns:
                 deadline.check()
                 consume_sustained_batch()
+                consume_sustained_persistence()
+                consume_transition_persistence()
+                consume_case_event_persistence()
+                consume_fault_injection()
+                consume_scheduled_transition()
                 now = self.platform.monotonic_ns()
-                if not injection_done and now >= injection_at:
-                    consume_sustained_batch(timeout=deadline.remaining())
-                    deadline.check()
-                    last_audio_marker = self._emit_event(
-                        sample_dir, "fault-injection-start", services=list(services)
+                if not injection_started and now >= injection_at:
+                    last_audio_marker = queue_case_event(
+                        fault_event("fault-injection-start", services=list(services))
                     )
-                    results = self.platform.inject_services(services)
-                    last_audio_marker = self._emit_event(
-                        sample_dir, "fault-injection-complete", results=results
-                    )
-                    deadline.check()
-                    recovery = workload.after_fault_injection(list(services))
-                    last_audio_marker = self._emit_event(
-                        sample_dir,
-                        "workload-restored-after-fault",
-                        result=redact_document(recovery),
-                    )
-                    workload.health()
-                    injection_done = True
+                    fault_future = fault_executor.submit(inject_and_restore_workload)
+                    injection_started = True
                     now = self.platform.monotonic_ns()
                 while scheduled_index < len(scheduled) and now >= scheduled[scheduled_index]:
-                    consume_sustained_batch(timeout=deadline.remaining())
-                    deadline.check()
+                    if scheduled_future is not None:
+                        break
                     schedule_kind = case.get("transition_schedule_kind")
-                    action = workload.transition(str(schedule_kind), scheduled_index)
-                    last_audio_marker = self._emit_event(
-                        sample_dir,
-                        "scheduled-transition-executed",
-                        scheduleKind=schedule_kind,
-                        scheduleIndex=scheduled_index,
-                        scheduledMonotonicNs=scheduled[scheduled_index],
-                        result=redact_document(action),
+                    last_audio_marker = queue_case_event(
+                        fault_event(
+                            "scheduled-transition-start",
+                            scheduleKind=schedule_kind,
+                            scheduleIndex=scheduled_index,
+                            scheduledMonotonicNs=scheduled[scheduled_index],
+                        )
                     )
-                    workload.health()
+                    scheduled_future = scheduled_executor.submit(
+                        execute_scheduled_transition,
+                        str(schedule_kind),
+                        scheduled_index,
+                        scheduled[scheduled_index],
+                    )
                     scheduled_index += 1
-                    deadline.check()
                     now = self.platform.monotonic_ns()
                 if now >= end_ns:
                     break
@@ -2459,33 +3229,28 @@ class BenchmarkRunner:
                     final_processors_ready = bool(sample.get("processorReadiness", {}).get("ready"))
                     sample["expectedOwnedTopology"] = expected_topology
                     sample["exactOwnedTopologyConverged"] = final_topology_converged
-                    append_jsonl(
-                        sample_dir / "transition.jsonl",
-                        {
-                            "sampleId": f"{sample_id}-transition-{transition_sequence + 1:06d}",
-                            "sequence": transition_sequence + 1,
-                            "timestampUtc": self.platform.utc_now(),
-                            "monotonicNs": collection_started,
-                            "scheduledMonotonicNs": next_transition + missed * transition_ns,
-                            "latenessNs": lateness,
-                            "probeOverheadNs": self.platform.monotonic_ns() - collection_started,
-                            **sample,
-                        },
-                    )
-                    collection_completed = self.platform.monotonic_ns()
-                    transition_intervals.append(
-                        {
-                            "sampleId": (
-                                f"{sample_id}-transition-collector-"
-                                f"{transition_sequence + 1:06d}"
-                            ),
-                            "sequence": transition_sequence + 1,
-                            "timestampUtc": self.platform.utc_now(),
-                            "monotonicNs": collection_started,
-                            "scheduledMonotonicNs": next_transition + missed * transition_ns,
-                            "latenessNs": lateness,
-                            "collectorOverheadNs": collection_completed - collection_started,
-                        }
+                    probe_completed = self.platform.monotonic_ns()
+                    sequence = transition_sequence + 1
+                    scheduled_ns = next_transition + missed * transition_ns
+                    payload = {
+                        "sampleId": f"{sample_id}-transition-{sequence:06d}",
+                        "sequence": sequence,
+                        "timestampUtc": self.platform.utc_now(),
+                        "monotonicNs": collection_started,
+                        "scheduledMonotonicNs": scheduled_ns,
+                        "latenessNs": lateness,
+                        "probeOverheadNs": probe_completed - collection_started,
+                        **sample,
+                    }
+                    transition_futures.append(
+                        transition_executor.submit(
+                            persist_transition,
+                            payload,
+                            sequence=sequence,
+                            scheduled_ns=scheduled_ns,
+                            collection_started=collection_started,
+                            probe_completed=probe_completed,
+                        )
                     )
                     transition_sequence += 1
                     transition_completed += 1
@@ -2513,7 +3278,6 @@ class BenchmarkRunner:
                         sustained_sequence += int(missed) + 1
                         scheduled_ns = next_sustained + missed * sustained_ns
                         next_sustained += due * sustained_ns
-                        workload_health = workload.health()
                         deadline.check()
                         worker_started = threading.Event()
                         sustained_future = sustained_executor.submit(
@@ -2521,7 +3285,7 @@ class BenchmarkRunner:
                             worker_started,
                             sustained_sequence,
                             scheduled_ns,
-                            workload_health,
+                            fault_future is not None or scheduled_future is not None,
                         )
                         start_timeout = min(1.0, deadline.remaining())
                         if not worker_started.wait(timeout=start_timeout):
@@ -2531,15 +3295,29 @@ class BenchmarkRunner:
                 if sleep_seconds > 0:
                     self.platform.sleep(min(sleep_seconds, deadline.remaining()))
             consume_sustained_batch(timeout=deadline.remaining())
+            consume_sustained_persistence(block=True)
+            consume_transition_persistence(block=True)
+            consume_fault_injection(block=True)
+            consume_scheduled_transition(block=True)
+            consume_case_event_persistence(block=True)
         except BaseException as error:
             collection_error = error
             raise
         finally:
             sustained_cancelled.set()
             worker_error: BaseException | None = None
+            sustained_persistence_worker_error: BaseException | None = None
+            transition_worker_error: BaseException | None = None
+            case_event_worker_error: BaseException | None = None
+            fault_worker_error: BaseException | None = None
+            scheduled_worker_error: BaseException | None = None
             drain_remaining = deadline.remaining()
             drain_deadline_exhausted = sustained_wait_exhausted or (
-                sustained_future is not None and drain_remaining == 0
+                drain_remaining == 0
+                and (
+                    sustained_future is not None
+                    or bool(sustained_persistence_futures)
+                )
             )
             try:
                 future = sustained_future
@@ -2548,12 +3326,59 @@ class BenchmarkRunner:
                         # A running thread cannot be cancelled safely. Join it even
                         # after the case deadline so cleanup/restoration never races
                         # a collector or a durability write.
-                        future.result()
+                        batch = future.result()
+                        sustained_persistence_futures.append(
+                            sustained_persistence_executor.submit(
+                                persist_sustained_batch, batch
+                            )
+                        )
                     except BaseException as error:
                         worker_error = error
                     sustained_future = None
             finally:
                 sustained_executor.shutdown(wait=True, cancel_futures=True)
+                sustained_probe_executor.shutdown(wait=True, cancel_futures=True)
+                sustained_persistence_executor.shutdown(
+                    wait=True, cancel_futures=False
+                )
+                while sustained_persistence_futures:
+                    future = sustained_persistence_futures.popleft()
+                    try:
+                        sustained_intervals.append(future.result())
+                        sustained_completed += 1
+                    except BaseException as error:
+                        if sustained_persistence_worker_error is None:
+                            sustained_persistence_worker_error = error
+                fault_executor.shutdown(wait=True, cancel_futures=False)
+                if fault_future is not None:
+                    try:
+                        fault_future.result()
+                    except BaseException as error:
+                        fault_worker_error = error
+                    fault_future = None
+                scheduled_executor.shutdown(wait=True, cancel_futures=False)
+                if scheduled_future is not None:
+                    try:
+                        scheduled_future.result()
+                    except BaseException as error:
+                        scheduled_worker_error = error
+                    scheduled_future = None
+                drain_fault_events()
+                transition_executor.shutdown(wait=True, cancel_futures=False)
+                while transition_futures:
+                    future = transition_futures.popleft()
+                    try:
+                        transition_intervals.append(future.result())
+                    except BaseException as error:
+                        if transition_worker_error is None:
+                            transition_worker_error = error
+                while case_event_futures:
+                    future = case_event_futures.popleft()
+                    try:
+                        future.result()
+                    except BaseException as error:
+                        if case_event_worker_error is None:
+                            case_event_worker_error = error
             drain_deadline_exhausted = drain_deadline_exhausted or (
                 drain_remaining > 0 and deadline.remaining() == 0
             )
@@ -2569,6 +3394,40 @@ class BenchmarkRunner:
                     raise worker_error
                 collection_error.add_note(
                     f"sustained collector also failed while draining: {worker_error}"
+                )
+            if sustained_persistence_worker_error is not None:
+                if collection_error is None:
+                    raise sustained_persistence_worker_error
+                collection_error.add_note(
+                    "sustained persistence also failed while draining: "
+                    f"{sustained_persistence_worker_error}"
+                )
+            if transition_worker_error is not None:
+                if collection_error is None:
+                    raise transition_worker_error
+                collection_error.add_note(
+                    "transition persistence also failed while draining: "
+                    f"{transition_worker_error}"
+                )
+            if case_event_worker_error is not None:
+                if collection_error is None:
+                    raise case_event_worker_error
+                collection_error.add_note(
+                    "case-event persistence also failed while draining: "
+                    f"{case_event_worker_error}"
+                )
+            if fault_worker_error is not None:
+                if collection_error is None:
+                    raise fault_worker_error
+                collection_error.add_note(
+                    f"fault injection also failed while draining: {fault_worker_error}"
+                )
+            if scheduled_worker_error is not None:
+                if collection_error is None:
+                    raise scheduled_worker_error
+                collection_error.add_note(
+                    "scheduled transition also failed while draining: "
+                    f"{scheduled_worker_error}"
                 )
         for interval in sustained_intervals:
             append_jsonl(sample_dir / "collector-batches.jsonl", interval)
@@ -2628,7 +3487,7 @@ class BenchmarkRunner:
         if resume and hasattr(self.platform, "restore_workload_journals"):
             recovered = self.platform.restore_workload_journals(self.run_dir(run_id))
             if recovered.get("activeJournalCount"):
-                self.platform.restore(snapshot, timeout_seconds=30)
+                self.platform.restore(snapshot, timeout_seconds=60)
                 write_json(self.run_dir(run_id) / "resume-workload-restoration.json", recovered)
         self._assert_prepared_identity(state)
         case = self.contracts.case(case_id)
@@ -2682,7 +3541,8 @@ class BenchmarkRunner:
                     invalid_reasons: list[str] = []
                     status = "running"
                     workload_stop_failed = False
-                    workload = self.workload_driver_factory(
+                    workload = self._workload_driver(
+                        state=state,
                         case=case,
                         unit=unit,
                         sample_dir=sample_dir,
@@ -2785,7 +3645,7 @@ class BenchmarkRunner:
                                     )
                                 restored = self.platform.restore(
                                     snapshot,
-                                    timeout_seconds=min(30, float(case["timeout_seconds"])),
+                                    timeout_seconds=min(60, float(case["timeout_seconds"])),
                                 )
                                 if workload_restoration is not None:
                                     restored = {
@@ -2918,7 +3778,7 @@ class BenchmarkRunner:
             if hasattr(self.platform, "restore_workload_journals")
             else {"activeJournalCount": 0}
         )
-        result = self.platform.restore(snapshot, timeout_seconds=30)
+        result = self.platform.restore(snapshot, timeout_seconds=60)
         result = {**result, "workloadRestoration": workload_result}
         write_json(self.run_dir(run_id) / "manual-restoration.json", result)
         for case_state in state["cases"].values():
@@ -3334,6 +4194,7 @@ def build_runner(arguments: argparse.Namespace) -> BenchmarkRunner:
         venv_python=arguments.venv_python,
         app_path=arguments.app_path,
         intent_adapter=arguments.intent_adapter,
+        benchmark_contracts_root=arguments.contracts.resolve(),
         camilladsp_host=arguments.camilladsp_host,
         camilladsp_port=arguments.camilladsp_port,
     )

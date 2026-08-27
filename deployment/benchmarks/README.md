@@ -11,6 +11,18 @@ management UI, installation from a clean image, releases, another Pi tier,
 multiple processor instances, arbitrary graph capacity, or advanced link
 shapes.
 
+Recorded characterization summaries are kept in `results/`. The current
+manifest-driven records are:
+
+- `results/2026-08-27-pi5-baseline-characterization.md`
+- `results/2026-08-27-pi5-decoder-characterization.md`
+- `results/2026-08-27-pi5-camilladsp-characterization.md`
+- `results/2026-08-27-pi5-service-recovery-characterization.md`
+- `results/2026-08-27-pi5-soak-and-capability-characterization.md`
+
+These summaries are evidence indexes, not acceptance declarations. Their raw
+bundles remain on the appliance and are addressed by detached SHA-256.
+
 ## Contracts and evidence
 
 - `fixtures.yml` fixes the physical and runtime fixture plus each input and
@@ -35,12 +47,15 @@ Raw journals, time series, and audio captures stay under the restricted target
 result directory. Commit only small redacted summaries, stable raw paths, and
 checksums. Never copy Bluetooth addresses, credentials, or tokens into a report.
 
-Preparation also freezes the six benchmark contracts and records SHA-256
-identities for the runner, intent adapter, and workload driver. Every
-`run-case`, `--resume`, and non-finalized `finalize` command must still match
-those frozen inputs. If contracts or implementation change, restore any active
-run before preparing a new one; evidence from different harness versions is
-never combined under one run identifier.
+Preparation freezes the six core benchmark contracts, the physical-path
+declaration, both workload registries, and every registry-referenced media,
+profile, and filter asset. It also records SHA-256 identities for the runner,
+intent adapter, and workload driver. Samples read workload bytes only from that
+run's frozen manifest tree. Every `run-case`, `--resume`, and non-finalized
+`finalize` command must still match the live and frozen identities. If any input
+or implementation changes, restore an active workload if needed and prepare a
+new run; evidence from different harness versions is never combined under one
+run identifier.
 
 The supported Raspberry Pi fixture uses `wlan0` for controller access. Network
 throughput and latency are outside the audio benchmark boundary, and Bluetooth
@@ -114,7 +129,26 @@ SHA-256, loops it in real time through FFmpeg, and creates an ephemeral
 `pw-cat` stream targeted only at the declared decoder or CamillaDSP capture
 node. It stops that process on success, failure, timeout, and interruption. A
 PipeWire or processor service fault also restarts the synthetic programme
-stream so recovery is measured under audio rather than silence.
+stream so recovery is measured under audio rather than silence. Fault mutation
+and stream recovery execute in one bounded worker so the main transition and
+sustained collectors keep observing the outage. The worker's timestamped
+markers are persisted in order and it is always joined before workload cleanup
+or graph restoration.
+
+A PipeWire restart normally terminates the benchmark `pw-cat` client. The
+workload records that non-zero exit as an expected fault interruption, clears
+the owned handle, and attaches a fresh programme stream after the service
+restart. Before that attachment, a bounded 30-second readiness gate waits for
+the exact declared target node to re-register and retains its attempts and
+duration. An unexpected failed cleanup outside fault recovery still fails the
+sample.
+
+The recovery matrix observes each restart for 60 seconds. The supported
+18-link processor graph can require a safe rollback and a fresh generation when
+a runtime node changes during sequential link creation; a 30-second diagnostic
+window was shown to truncate that bounded retry while restoration was still in
+progress. The longer window measures the complete retry path without changing
+the configured reconciliation policy.
 
 Startup succeeds only after the feeder and player are alive and PipeWire shows
 an active link to the exact declared target. The runner repeats those checks
@@ -122,12 +156,24 @@ during sustained and transition sampling; an early process exit or lost link
 fails the sample. Playback logs are retained inside the sample envelope,
 checksummed, and included in the redacted export.
 
-CamillaDSP profile cases read the current active configuration and apply only a
-checked-in processing overlay. The active PipeWire capture/playback device
-names, groups, and channel bus remain unchanged. The exact prior configuration
-is restored before the graph/service restoration check. The 7.1-to-stereo
-profile is deliberately unavailable because it changes the active output bus
-and therefore needs its own published desired-graph fixture.
+CamillaDSP profile cases remain under Open Cinema orchestration. During
+`prepare`, the intent adapter idempotently publishes four benchmark-only,
+device-independent profiles and corresponding revisions of a dedicated
+benchmark graph. Existing user graph revisions are not edited. A sample uses
+the same compare-and-swap activation services as the management API to select
+one benchmark revision, then waits for that exact resolved revision and
+CamillaDSP configuration to converge before attaching synthetic programme
+audio. The prior active intent and exact engine configuration are restored
+through the same managed path after the sample. Raw `SetConfig` is reserved for
+the rejected-invalid-configuration probe and never establishes a supported
+profile workload.
+
+CamillaDSP recreates its PipeWire nodes during profile changes, so managed
+selection and restoration use a 60-second bounded readiness window and retain
+their measured duration. The active capture/playback identities and eight-
+channel bus remain unchanged. The 7.1-to-stereo profile is deliberately
+unavailable because it changes that bus and requires a separately published
+topology-changing graph fixture.
 
 The automatically executable control-plane set includes PCM, AC-3, E-AC-3, DTS,
 unsupported-carrier safe behavior, decoder failure recovery, compatible
@@ -137,6 +183,10 @@ and DSP soaks. Scheduled soak markers execute their declared stream switch,
 stream refresh, or profile reapply/restore action; they are not passive labels.
 Cases that require calibrated physical-audio capture still execute their safe
 control-plane work, but remain `not-measured` until that capture is available.
+
+Each soak has one measured interval and no duplicate warm-up interval. Workload
+startup still completes its readiness gate before the ten-minute measurement
+boundary, and startup transients remain part of the retained case evidence.
 
 The runner does not connect/disconnect a headset, start phone/TV programme
 audio, remove the physical SPDIF carrier, reboot the appliance, inject product
@@ -159,6 +209,48 @@ Every envelope records `metricCoverage` for each required metric set. Missing
 automated artifacts invalidate a sample; an unavailable required calibrated
 physical capture produces `not-measured`. Neither state can characterize or
 accept a run.
+
+The supported Pi fixture samples transition state every 200 ms. The runner
+reuses one synchronized CamillaDSP status connection instead of starting a
+Python client and WebSocket for every sample; the optimized full transition
+probe measured about 56 ms p95 on the Pi 5. A transition probe never waits
+behind the one-second native-health CamillaDSP query: it records an explicit
+`camilladsp-status-query-in-progress` observation when that synchronized client
+is busy. Each transition also retains component probe durations so an outage
+can be distinguished from collector contention. Transition-only SQLite
+projection reads have a 10 ms busy bound and record `database-busy` instead of
+waiting across a sampling boundary. Projection and reconciliation refresh runs
+in one daemon read worker; the 200 ms stream samples its timestamped cache and
+records cache age/refresh state, so page I/O cannot block the cadence.
+Transition-only `pw-dump` snapshots have a 100 ms bound and record
+`pw-dump-timeout` while PipeWire is rebuilding nodes; the sustained and
+restoration paths retain their full command/database timeouts. This keeps useful
+timing resolution and scheduling margin inside the specified 100–250 ms range. An
+ordered writer makes each transition payload durable without allowing an
+isolated SD-card `fsync` spike to skip the next sampling boundary; its
+end-to-end persistence latency remains part of collector overhead. Zero sample
+loss remains mandatory.
+
+Programme-playback health is checked and timed inside the one-second sustained
+worker. Its PipeWire query therefore cannot pause the main 200 ms transition
+scheduler during node recreation. Workload health, system, native-health, and
+event/storage probes run concurrently because they are independent read-only
+observations; each component duration and the batch wall time remain visible in
+collector evidence, and a slowest component can still invalidate the sustained
+cadence.
+
+Event accounting records the retained-table sizes and integrity result, but it
+anchors the orchestration-event sequence before each measurement and only
+decodes new events inside the one-second window. It does not repeatedly scan
+the full retained history. The native `pw-top` observation has a 750 ms bound;
+an outage records `pw-top-timeout` plus per-component durations rather than
+blocking the next sustained boundary.
+
+The sustained worker returns its system, native-health, and event/storage
+payloads after probing. A separate ordered writer performs their three durable
+appends, allowing the next one-second probe to start even if an SD-card `fsync`
+spikes. Final sample completion joins that writer, and each batch records probe,
+persistence, queue-inclusive collector overhead, and missed schedule slots.
 
 Collector evidence distinguishes completed samples from missed schedule slots.
 The sustained and transition overhead distributions cover each probe through

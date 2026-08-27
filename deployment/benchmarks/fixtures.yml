@@ -217,7 +217,7 @@ processor_fixtures:
     minimum_input_channels: 8
     minimum_output_channels: 8
     automation:
-      driver: camilladsp-processing-overlay
+      driver: managed-camilladsp-profile
       profile_fixture_id: camilladsp-passthrough-128
   camilladsp-stereo-128:
     profile_status: generated-by-benchmark-fixture-role
@@ -225,7 +225,7 @@ processor_fixtures:
     minimum_input_channels: 2
     minimum_output_channels: 2
     automation:
-      driver: camilladsp-processing-overlay
+      driver: managed-camilladsp-profile
       profile_fixture_id: camilladsp-stereo-128
   camilladsp-multichannel-128:
     profile_status: generated-by-benchmark-fixture-role
@@ -233,7 +233,7 @@ processor_fixtures:
     minimum_input_channels: 8
     minimum_output_channels: 8
     automation:
-      driver: camilladsp-processing-overlay
+      driver: managed-camilladsp-profile
       profile_fixture_id: camilladsp-multichannel-128
   camilladsp-channel-adaptation-128:
     profile_status: pending-registration
@@ -247,12 +247,16 @@ processor_fixtures:
     minimum_input_channels: 8
     minimum_output_channels: 8
     automation:
-      driver: camilladsp-processing-overlay
+      driver: managed-camilladsp-profile
       profile_fixture_id: camilladsp-production-fir-iir-128
 
 measurement:
   sustained_interval_seconds: 1
   transition_interval_milliseconds: 200
+  transition_interval_rationale: >-
+    The persistent CamillaDSP status connection reduced the full Pi 5
+    transition-probe p95 to approximately 56 ms, leaving reliable scheduling
+    margin at the selected 200 ms cadence.
   physical_timing:
     state: uncalibrated
     acceptance_metrics_available: false

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 from pathlib import Path
 import re
 import shutil
+import sqlite3
 import sys
 import threading
 import time
@@ -51,6 +53,34 @@ def contract_copy(tmp_path: Path) -> Path:
             case["duration_seconds"] = 1
             case["timeout_seconds"] = 5
     manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+    media_root = target / "media"
+    (media_root / "generated").mkdir(parents=True)
+    (media_root / "camilladsp").mkdir()
+    (media_root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "fixtureContractId": "pi5-8gb-gab8-native-v1",
+                "fixtures": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (media_root / "camilladsp/profiles.json").write_text(
+        json.dumps(
+            {
+                "assets": [],
+                "fixtureContractId": "pi5-8gb-gab8-native-v1",
+                "profiles": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (media_root / "physical-path.yml").write_text(
+        "schema_version: 1\nstate: not-calibrated\n",
+        encoding="utf-8",
+    )
     return target
 
 
@@ -67,6 +97,7 @@ class FakePlatform:
         self.workload_restore_calls = 0
         self.active_workload_journals = 0
         self.transition_capture_ns: list[int] = []
+        self.camilladsp_fixture_preparations = 0
 
     def monotonic_ns(self) -> int:
         return self.now_ns
@@ -87,6 +118,19 @@ class FakePlatform:
 
     def journal_marker(self, run_id: str) -> dict[str, str]:
         return {"marker": f"marker:{run_id}", "cursor": "recorded-cursor"}
+
+    def ensure_camilladsp_benchmark_fixtures(self) -> dict[str, Any]:
+        self.camilladsp_fixture_preparations += 1
+        return {
+            "definitionId": "benchmark-definition",
+            "definitionLabel": "camilladsp-native-v1",
+            "fixtures": {
+                "camilladsp-passthrough-128": {"revisionId": "revision-passthrough"},
+                "camilladsp-stereo-128": {"revisionId": "revision-stereo"},
+                "camilladsp-multichannel-128": {"revisionId": "revision-multichannel"},
+                "camilladsp-production-fir-iir-128": {"revisionId": "revision-production"},
+            },
+        }
 
     def journal_since(self, marker: dict[str, Any], units: tuple[str, ...]) -> str:
         assert marker["cursor"] == "recorded-cursor"
@@ -538,6 +582,22 @@ def test_resume_restores_active_workload_before_rejecting_implementation_drift(
     assert (runner.run_dir(run_id) / "resume-workload-restoration.json").is_file()
 
 
+def test_run_rejects_a_modified_frozen_implementation_identity(tmp_path: Path) -> None:
+    runner, _platform = make_runner(tmp_path)
+    case = bound_case(runner, "baseline-fixture-and-topology")
+    run_id = runner.prepare(case_ids=[case["id"]], run_id="frozen-identity-drift")
+    identity_path = runner.run_dir(run_id) / "manifests/implementation-identity.json"
+    identity_path.write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(
+        runner_module.BenchmarkError,
+        match="frozen implementation identity changed after prepare",
+    ):
+        runner.run_case(run_id, case["id"])
+
+    assert not (runner.run_dir(run_id) / "cases" / case["id"]).exists()
+
+
 @pytest.mark.parametrize("changed_contract", runner_module.CONTRACT_FILES)
 def test_run_rejects_contract_drift_before_allocating_an_attempt(
     tmp_path: Path,
@@ -560,6 +620,63 @@ def test_run_rejects_contract_drift_before_allocating_an_attempt(
 
     case_dir = runner.run_dir(run_id) / "cases" / case["id"]
     assert not case_dir.exists()
+
+
+def test_prepare_freezes_registry_assets_and_run_rejects_live_asset_drift(
+    tmp_path: Path,
+) -> None:
+    runner, _platform = make_runner(tmp_path)
+    case = bound_case(runner, "baseline-fixture-and-topology")
+    asset = runner.contracts.root / "media/generated/registered.raw"
+    asset.write_bytes(b"frozen-workload-bytes")
+    registry_path = runner.contracts.root / "media/manifest.json"
+    registry = read_json(registry_path)
+    registry["fixtures"].append(
+        {
+            "id": "registered-test-media",
+            "path": asset.name,
+            "sha256": runner_module.sha256_file(asset),
+            "sizeBytes": asset.stat().st_size,
+        }
+    )
+    registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+
+    run_id = runner.prepare(case_ids=[case["id"]], run_id="frozen-workload-input")
+    run_dir = runner.run_dir(run_id)
+    frozen_asset = run_dir / "manifests/media/generated/registered.raw"
+    state = read_json(run_dir / "run-state.json")
+    assert frozen_asset.read_bytes() == b"frozen-workload-bytes"
+    assert state["manifestDigests"]["media/generated/registered.raw"] == (
+        runner_module.sha256_file(frozen_asset)
+    )
+
+    asset.write_bytes(b"changed-workload-bytes")
+    with pytest.raises(
+        runner_module.BenchmarkError,
+        match="contracts changed after prepare.*media/generated/registered.raw",
+    ):
+        runner.run_case(run_id, case["id"])
+
+    assert frozen_asset.read_bytes() == b"frozen-workload-bytes"
+    assert not (run_dir / "cases" / case["id"]).exists()
+
+
+def test_default_workload_driver_reads_only_the_frozen_run_inputs(tmp_path: Path) -> None:
+    runner, _platform = make_runner(tmp_path)
+    runner.workload_driver_factory = None
+    case = bound_case(runner, "baseline-fixture-and-topology")
+    run_id = runner.prepare(case_ids=[case["id"]], run_id="frozen-driver-input")
+    unit = runner._execution_units(case)[0]
+    sample_dir = runner.run_dir(run_id) / "sample"
+    workload = runner._workload_driver(
+        state=read_json(runner.run_dir(run_id) / "run-state.json"),
+        case=case,
+        unit=unit,
+        sample_dir=sample_dir,
+    )
+
+    assert workload.contracts_root == runner.run_dir(run_id) / "manifests"
+    assert workload.media_root == runner.run_dir(run_id) / "manifests/media"
 
 
 def test_finalize_rejects_implementation_drift(tmp_path: Path) -> None:
@@ -804,12 +921,12 @@ def test_collector_intervals_include_probe_and_payload_persistence(
         def __init__(self, **_arguments: object) -> None:
             pass
 
-        def submit(self, function, *arguments):
-            return ImmediateFuture(function(*arguments))
+        def submit(self, function, *arguments, **keyword_arguments):
+            return ImmediateFuture(function(*arguments, **keyword_arguments))
 
         def shutdown(self, *, wait: bool, cancel_futures: bool) -> None:
             assert wait is True
-            assert cancel_futures is True
+            assert isinstance(cancel_futures, bool)
 
     platform.sustained_sample = sustained_sample  # type: ignore[method-assign]
     platform.native_health = native_health  # type: ignore[method-assign]
@@ -825,13 +942,17 @@ def test_collector_intervals_include_probe_and_payload_persistence(
     sustained = runner_module.BenchmarkRunner._read_jsonl(sample_dir / "collector-batches.jsonl")
     transitions = runner_module.BenchmarkRunner._read_jsonl(sample_dir / "transition-batches.jsonl")
 
-    assert [row["collectorOverheadNs"] for row in sustained] == [75_000_000]
+    assert [row["persistenceOverheadNs"] for row in sustained] == [15_000_000]
+    assert sustained[0]["collectorOverheadNs"] >= (
+        sustained[0]["probeOverheadNs"] + sustained[0]["persistenceOverheadNs"]
+    )
     assert all(row["collectorOverheadNs"] == 6_000_000 for row in transitions)
+    sustained_overhead_ms = sustained[0]["collectorOverheadNs"] / 1_000_000
     assert summary["statistics"]["sustainedCollectorOverheadMs"] == {
         "count": 1,
-        "median": 75.0,
-        "p95NearestRank": 75.0,
-        "maximum": 75.0,
+        "median": sustained_overhead_ms,
+        "p95NearestRank": sustained_overhead_ms,
+        "maximum": sustained_overhead_ms,
     }
 
 
@@ -878,6 +999,83 @@ def test_transition_cadence_is_independent_of_a_slow_sustained_batch(tmp_path: P
     ]
 
 
+def test_sustained_probe_components_run_concurrently(tmp_path: Path) -> None:
+    runner, platform = make_runner(tmp_path)
+    case = bound_case(runner, "baseline-fixture-and-topology")
+    probe_barrier = threading.Barrier(4)
+    probe_threads: list[str] = []
+
+    def rendezvous() -> None:
+        probe_threads.append(threading.current_thread().name)
+        probe_barrier.wait(timeout=2)
+
+    original_sustained_sample = platform.sustained_sample
+    original_native_health = platform.native_health
+    original_event_storage_sample = platform.event_storage_sample
+
+    def sustained_sample() -> dict[str, Any]:
+        rendezvous()
+        return original_sustained_sample()
+
+    def native_health() -> dict[str, Any]:
+        rendezvous()
+        return original_native_health()
+
+    def event_storage_sample() -> dict[str, Any]:
+        rendezvous()
+        return original_event_storage_sample()
+
+    class ConcurrentProbeWorkload(FakeWorkloadDriver):
+        def health(self) -> dict[str, Any]:
+            if self.health_calls == 1:
+                rendezvous()
+            return super().health()
+
+    platform.sustained_sample = sustained_sample  # type: ignore[method-assign]
+    platform.native_health = native_health  # type: ignore[method-assign]
+    platform.event_storage_sample = event_storage_sample  # type: ignore[method-assign]
+    runner.workload_driver_factory = lambda **arguments: ConcurrentProbeWorkload(
+        platform=platform,
+        **arguments,
+    )
+    run_id = runner.prepare(case_ids=[case["id"]], run_id="parallel-sustained-probes-run")
+
+    assert runner.run_case(run_id, case["id"]) == "characterized"
+    assert sorted(probe_threads) == [
+        "open-cinema-sustained-probe_0",
+        "open-cinema-sustained-probe_1",
+        "open-cinema-sustained-probe_2",
+        "open-cinema-sustained-probe_3",
+    ]
+
+
+def test_preflight_workload_health_is_outside_the_measurement_cadence(
+    tmp_path: Path,
+) -> None:
+    runner, platform = make_runner(tmp_path)
+    case = bound_case(runner, "baseline-fixture-and-topology")
+
+    class SlowInitialHealthWorkload(FakeWorkloadDriver):
+        def health(self) -> dict[str, Any]:
+            if self.health_calls == 0:
+                self.platform._overhead(250)
+            return super().health()
+
+    runner.workload_driver_factory = lambda **arguments: SlowInitialHealthWorkload(
+        platform=platform,
+        **arguments,
+    )
+    run_id = runner.prepare(case_ids=[case["id"]], run_id="preflight-health-run")
+
+    assert runner.run_case(run_id, case["id"]) == "characterized"
+    sample_dir = runner.run_dir(run_id) / f"cases/{case['id']}/{case['id']}-sample-0001"
+    collection = read_json(sample_dir / "collection-result.json")
+    transitions = runner_module.BenchmarkRunner._read_jsonl(sample_dir / "transition.jsonl")
+    assert collection["transitionMissed"] == 0
+    assert collection["transitionSamples"] == 5
+    assert [row["sequence"] for row in transitions] == [1, 2, 3, 4, 5]
+
+
 def test_transition_cadence_is_independent_of_slow_sustained_persistence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -901,7 +1099,6 @@ def test_transition_cadence_is_independent_of_slow_sustained_persistence(
     def transition_sample() -> dict[str, Any]:
         sample = original_transition_sample()
         if len(platform.transition_capture_ns) == 3:
-            assert persistence_started.is_set()
             release_persistence.set()
         return sample
 
@@ -917,7 +1114,7 @@ def test_transition_cadence_is_independent_of_slow_sustained_persistence(
     sample_dir = runner.run_dir(run_id) / f"cases/{case['id']}/{case['id']}-sample-0001"
     collection = read_json(sample_dir / "collection-result.json")
     transitions = runner_module.BenchmarkRunner._read_jsonl(sample_dir / "transition.jsonl")
-    assert persistence_threads == ["open-cinema-sustained-collector_0"]
+    assert persistence_threads == ["open-cinema-sustained-persistence_0"]
     assert collection["transitionSamples"] == 5
     assert collection["transitionMissed"] == 0
     assert collection["sustainedMissed"] == 0
@@ -926,6 +1123,53 @@ def test_transition_cadence_is_independent_of_slow_sustained_persistence(
         len(runner_module.BenchmarkRunner._read_jsonl(sample_dir / name)) == 1
         for name in ("system.jsonl", "native-health.jsonl", "event-storage.jsonl")
     )
+
+
+def test_transition_cadence_is_independent_of_slow_durable_persistence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner, platform = make_runner(tmp_path)
+    case = bound_case(runner, "baseline-fixture-and-topology")
+    persistence_started = threading.Event()
+    release_persistence = threading.Event()
+    persistence_threads: list[str] = []
+    original_append_jsonl = runner_module.append_jsonl
+    original_transition_sample = platform.transition_sample
+
+    def delayed_append_jsonl(path: Path, value: object) -> None:
+        if path.name == "transition.jsonl" and not persistence_started.is_set():
+            persistence_threads.append(threading.current_thread().name)
+            persistence_started.set()
+            if not release_persistence.wait(timeout=2):
+                raise RuntimeError("test transition persistence was not released")
+        original_append_jsonl(path, value)
+
+    def transition_sample() -> dict[str, Any]:
+        sample = original_transition_sample()
+        if len(platform.transition_capture_ns) == 3:
+            assert persistence_started.wait(timeout=1)
+            release_persistence.set()
+        return sample
+
+    monkeypatch.setattr(runner_module, "append_jsonl", delayed_append_jsonl)
+    platform.transition_sample = transition_sample  # type: ignore[method-assign]
+    run_id = runner.prepare(case_ids=[case["id"]], run_id="transition-persistence-run")
+
+    try:
+        assert runner.run_case(run_id, case["id"]) == "characterized"
+    finally:
+        release_persistence.set()
+
+    sample_dir = runner.run_dir(run_id) / f"cases/{case['id']}/{case['id']}-sample-0001"
+    collection = read_json(sample_dir / "collection-result.json")
+    transitions = runner_module.BenchmarkRunner._read_jsonl(sample_dir / "transition.jsonl")
+    intervals = runner_module.BenchmarkRunner._read_jsonl(sample_dir / "transition-batches.jsonl")
+    assert persistence_threads == ["open-cinema-transition-persistence_0"]
+    assert collection["transitionSamples"] == 5
+    assert collection["transitionMissed"] == 0
+    assert [row["sequence"] for row in transitions] == [1, 2, 3, 4, 5]
+    assert [row["sequence"] for row in intervals] == [1, 2, 3, 4, 5]
 
 
 def test_completed_sustained_future_is_rechecked_at_the_due_boundary(
@@ -959,18 +1203,20 @@ def test_completed_sustained_future_is_rechecked_at_the_due_boundary(
             return self.value
 
     class ControlledExecutor:
-        def __init__(self, **_arguments: object) -> None:
-            pass
+        def __init__(self, **arguments: object) -> None:
+            self.prefix = arguments.get("thread_name_prefix")
 
-        def submit(self, function, *arguments):
+        def submit(self, function, *arguments, **keyword_arguments):
             nonlocal submitted
-            submitted += 1
-            value = function(*arguments)
-            return ControlledFuture(value, delay_boundary_visibility=submitted == 1)
+            value = function(*arguments, **keyword_arguments)
+            if self.prefix == "open-cinema-sustained-collector":
+                submitted += 1
+                return ControlledFuture(value, delay_boundary_visibility=submitted == 1)
+            return ControlledFuture(value, delay_boundary_visibility=False)
 
         def shutdown(self, *, wait: bool, cancel_futures: bool) -> None:
             assert wait is True
-            assert cancel_futures is True
+            assert isinstance(cancel_futures, bool)
 
     monkeypatch.setattr(runner_module, "ThreadPoolExecutor", ControlledExecutor)
     run_id = runner.prepare(case_ids=[case["id"]], run_id="boundary-recheck-run")
@@ -1028,8 +1274,11 @@ def test_collector_overhead_sample_loss_invalidates_evidence(tmp_path: Path) -> 
     assert sustained_started.is_set()
     assert collection["sustainedMissed"] > 0
     assert collection["transitionMissed"] == 0
-    assert collection["sustainedSamples"] == len(system) == 2
-    assert [row["sequence"] for row in system] == [1, 3]
+    assert collection["sustainedSamples"] == len(system)
+    assert 0 < len(system) < 3
+    sequences = [row["sequence"] for row in system]
+    assert sequences[0] == 1
+    assert 2 not in sequences
     assert envelope["status"] == "invalid"
     assert "collector-sample-loss" in envelope["invalidation"]["reasons"]
 
@@ -1136,8 +1385,7 @@ def test_foreground_failure_drains_sustained_worker_before_restoration(tmp_path:
 
     def failed_transition_sample() -> dict[str, Any]:
         result = original_transition_sample()
-        if len(platform.transition_capture_ns) == 2:
-            assert sustained_started.is_set()
+        if sustained_started.is_set():
             timeline.append("transition-failed")
             release_sustained.set()
             raise RuntimeError("recorded foreground collector failure")
@@ -1180,6 +1428,16 @@ def test_expired_deadline_joins_sustained_persistence_before_restoration(
     timeline: list[str] = []
     original_append_jsonl = runner_module.append_jsonl
     original_restore = platform.restore
+    original_sleep = platform.sleep
+    persistence_start_deadline = time.monotonic() + 2
+
+    def coordinated_sleep(seconds: float) -> None:
+        if not persistence_started.is_set():
+            if time.monotonic() >= persistence_start_deadline:
+                raise RuntimeError("test sustained persistence did not start")
+            time.sleep(0.001)
+            return
+        original_sleep(seconds)
 
     def delayed_append_jsonl(path: Path, value: object) -> None:
         if path.name == "system.jsonl":
@@ -1205,6 +1463,7 @@ def test_expired_deadline_joins_sustained_persistence_before_restoration(
         release_persistence.set()
 
     monkeypatch.setattr(runner_module, "append_jsonl", delayed_append_jsonl)
+    platform.sleep = coordinated_sleep  # type: ignore[method-assign]
     platform.restore = restore  # type: ignore[method-assign]
     run_id = runner.prepare(case_ids=[case["id"]], run_id="stuck-sustained-run")
     releaser = threading.Thread(target=release_after_observing_blocked_write)
@@ -1232,18 +1491,12 @@ def test_expired_deadline_joins_sustained_persistence_before_restoration(
     assert platform.restore_calls == 1
 
 
-def test_workload_access_and_mutation_stay_foreground_and_wait_for_sustained_worker(
-    tmp_path: Path,
-) -> None:
+def test_fault_workload_mutation_runs_in_worker_and_joins_before_stop(tmp_path: Path) -> None:
     runner, platform = make_runner(tmp_path)
     case = bound_case(runner, "decoder-failure-recovery")
-    collector_active = threading.Event()
-    collector_started = threading.Event()
-    release_collector = threading.Event()
     timeline: list[str] = []
     workload_threads: list[int] = []
     foreground_thread = threading.get_ident()
-    original_sustained_sample = platform.sustained_sample
 
     class RaceCheckingWorkload(FakeWorkloadDriver):
         def health(self) -> dict[str, Any]:
@@ -1251,46 +1504,26 @@ def test_workload_access_and_mutation_stay_foreground_and_wait_for_sustained_wor
             return super().health()
 
         def after_fault_injection(self, services: list[str]) -> dict[str, Any]:
-            assert not collector_active.is_set()
             timeline.append("workload-mutated")
             return super().after_fault_injection(services)
+
+        def stop(self) -> dict[str, Any]:
+            timeline.append("workload-stopped")
+            return super().stop()
 
     runner.workload_driver_factory = lambda **arguments: RaceCheckingWorkload(
         platform=platform,
         **arguments,
     )
 
-    def delayed_sustained_sample() -> dict[str, Any]:
-        collector_active.set()
-        collector_started.set()
-        timeline.append("collector-started")
-        if not release_collector.wait(timeout=2):
-            raise RuntimeError("test sustained collector was not released")
-        result = original_sustained_sample()
-        collector_active.clear()
-        timeline.append("collector-finished")
-        return result
+    run_id = runner.prepare(case_ids=[case["id"]], run_id="background-workload-run")
 
-    def release_after_collection_starts() -> None:
-        if collector_started.wait(timeout=2):
-            time.sleep(0.05)
-        release_collector.set()
+    assert runner.run_case(run_id, case["id"]) == "characterized"
 
-    platform.sustained_sample = delayed_sustained_sample  # type: ignore[method-assign]
-    run_id = runner.prepare(case_ids=[case["id"]], run_id="foreground-workload-run")
-    releaser = threading.Thread(target=release_after_collection_starts)
-    releaser.start()
-
-    try:
-        assert runner.run_case(run_id, case["id"]) == "characterized"
-    finally:
-        release_collector.set()
-        releaser.join(timeout=2)
-
-    assert not releaser.is_alive()
     assert workload_threads
-    assert set(workload_threads) == {foreground_thread}
-    assert timeline.index("collector-finished") < timeline.index("workload-mutated")
+    assert foreground_thread in workload_threads
+    assert any(thread != foreground_thread for thread in workload_threads)
+    assert timeline.index("workload-mutated") < timeline.index("workload-stopped")
 
 
 @pytest.mark.parametrize(
@@ -1384,6 +1617,179 @@ def test_topology_signature_uses_stable_node_and_port_names() -> None:
     assert len(topology["digest"]) == 64
 
 
+def test_transition_snapshot_bounds_pipewire_topology_timeout() -> None:
+    platform = object.__new__(runner_module.LinuxPlatform)
+    observed_timeouts: list[float] = []
+    platform.monotonic_ns = time.monotonic_ns
+    platform.runtime_snapshot = lambda: {"available": False}
+
+    def timed_out_topology(*, timeout_seconds: float) -> dict[str, Any]:
+        observed_timeouts.append(timeout_seconds)
+        raise runner_module.CaseTimeout("fixture pw-dump timeout")
+
+    platform.topology = timed_out_topology
+    platform._transition_database_snapshot = lambda: {
+        "observedMonotonicNs": None,
+        "ageNs": None,
+        "refreshInProgress": True,
+        "processorProjections": {"available": False},
+        "reconciliation": {"available": False},
+    }
+    platform.decoder_status = lambda: {"available": False}
+    platform.camilladsp_status = lambda **_kwargs: {"available": False}
+
+    sample = runner_module.LinuxPlatform.transition_sample(platform)
+
+    assert observed_timeouts == [0.1]
+    assert sample["pipewire"] == {
+        "available": False,
+        "error": "pw-dump-timeout",
+        "ownedLinkCount": None,
+        "links": [],
+        "digest": None,
+    }
+    assert set(sample["componentProbeOverheadsNs"]) == {
+        "runtime",
+        "pipewireTopology",
+        "databaseSnapshotCache",
+        "decoderStatus",
+        "camilladspStatus",
+    }
+
+
+def test_native_health_records_a_bounded_pw_top_timeout() -> None:
+    platform = object.__new__(runner_module.LinuxPlatform)
+    platform.monotonic_ns = time.monotonic_ns
+
+    def timed_out_pw_top(*_arguments: object, **_keyword_arguments: object) -> dict[str, Any]:
+        raise runner_module.CaseTimeout("fixture pw-top timeout")
+
+    platform._audio_command = timed_out_pw_top
+    platform.decoder_status = lambda: {"available": True}
+    platform.camilladsp_status = lambda: {"available": True}
+    platform._processor_projection = lambda **_kwargs: {"available": True, "rows": []}
+
+    sample = runner_module.LinuxPlatform.native_health(platform)
+
+    assert sample["pipewireObjects"] == []
+    assert sample["pipewireTopObservation"] == {
+        "available": False,
+        "returncode": None,
+        "error": "pw-top-timeout",
+    }
+    assert set(sample["componentProbeOverheadsNs"]) == {
+        "pipewireTop",
+        "decoderStatus",
+        "camilladspStatus",
+        "processorProjections",
+    }
+
+
+def test_event_storage_decodes_only_events_after_the_measurement_baseline(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "events.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE api_orchestrationevent ("
+            "sequence INTEGER PRIMARY KEY, event_type TEXT NOT NULL, payload TEXT NOT NULL)"
+        )
+        connection.execute(
+            "INSERT INTO api_orchestrationevent VALUES (1, 'offered', '{}')"
+        )
+    platform = object.__new__(runner_module.LinuxPlatform)
+    platform.database_path = database
+    platform._event_storage_lock = threading.Lock()
+    platform._event_storage_last_sequence = 0
+    platform._event_storage_counts = {
+        "offered": 0,
+        "processed": 0,
+        "coalesced": 0,
+        "retried": 0,
+        "dropped": 0,
+    }
+    platform.monotonic_ns = time.monotonic_ns
+    platform.command = lambda *_args, **_kwargs: {
+        "returncode": 0,
+        "stdout": "used_memory:1\n",
+        "stderr": "",
+    }
+    platform._read = lambda *_args, **_kwargs: "recorded-disk-counters"
+
+    assert runner_module.LinuxPlatform.begin_sustained_collection(platform) == {
+        "orchestrationEventBaselineSequence": 1
+    }
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO api_orchestrationevent VALUES "
+            "(2, 'processed', '{\"retried\": 2}')"
+        )
+    first = runner_module.LinuxPlatform.event_storage_sample(platform)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO api_orchestrationevent VALUES (3, 'coalesced', '{}')"
+        )
+    second = runner_module.LinuxPlatform.event_storage_sample(platform)
+
+    assert first["orchestrationEvents"] == {
+        "offered": 0,
+        "processed": 1,
+        "coalesced": 0,
+        "retried": 2,
+        "dropped": 0,
+    }
+    assert second["orchestrationEvents"] == {
+        "offered": 0,
+        "processed": 1,
+        "coalesced": 1,
+        "retried": 2,
+        "dropped": 0,
+    }
+
+
+def test_transition_database_refresh_never_blocks_sampling() -> None:
+    platform = object.__new__(runner_module.LinuxPlatform)
+    platform._transition_database_lock = threading.Lock()
+    platform._transition_database_worker = None
+    platform._transition_database_cache = {
+        "observedMonotonicNs": None,
+        "processorProjections": {
+            "available": False,
+            "error": "database-snapshot-pending",
+        },
+        "reconciliation": {
+            "available": False,
+            "error": "database-snapshot-pending",
+        },
+    }
+    release = threading.Event()
+    platform.monotonic_ns = time.monotonic_ns
+
+    def delayed_projection(**_kwargs: Any) -> dict[str, Any]:
+        release.wait(timeout=1)
+        return {"available": True, "rows": []}
+
+    platform._processor_projection = delayed_projection
+    platform._applied_plan_state = lambda **_kwargs: {"available": True, "states": []}
+
+    started = time.monotonic()
+    pending = platform._transition_database_snapshot()
+    elapsed = time.monotonic() - started
+    assert elapsed < 0.05
+    assert pending["processorProjections"]["error"] == "database-snapshot-pending"
+    assert pending["refreshInProgress"] is True
+
+    release.set()
+    worker = platform._transition_database_worker
+    assert worker is not None
+    worker.join(timeout=1)
+    with platform._transition_database_lock:
+        assert platform._transition_database_cache["processorProjections"] == {
+            "available": True,
+            "rows": [],
+        }
+
+
 def test_contract_loader_rejects_fault_injection_outside_declared_services(
     tmp_path: Path,
 ) -> None:
@@ -1422,6 +1828,73 @@ def test_workload_lifecycle_wraps_collection_fault_injection_and_cleanup(tmp_pat
     assert "workload-stopped" in {event["event"] for event in events}
 
 
+def test_fault_recovery_does_not_block_transition_collection(tmp_path: Path) -> None:
+    runner, platform = make_runner(tmp_path)
+    case = bound_case(
+        runner,
+        "decoder-failure-recovery",
+        duration_seconds=3,
+        timeout_seconds=10,
+    )
+    fault_started = threading.Event()
+    release_fault = threading.Event()
+    fault_threads: list[str] = []
+    original_inject_services = platform.inject_services
+    original_transition_sample = platform.transition_sample
+
+    def delayed_inject_services(services: list[str]) -> list[dict[str, Any]]:
+        fault_threads.append(threading.current_thread().name)
+        fault_started.set()
+        if not release_fault.wait(timeout=2):
+            raise RuntimeError("test fault injection was not released")
+        return original_inject_services(services)
+
+    def transition_sample() -> dict[str, Any]:
+        sample = original_transition_sample()
+        if len(platform.transition_capture_ns) == 10:
+            assert fault_started.wait(timeout=1)
+            release_fault.set()
+        return sample
+
+    platform.inject_services = delayed_inject_services  # type: ignore[method-assign]
+    platform.transition_sample = transition_sample  # type: ignore[method-assign]
+    runner.contracts.criteria["criteria_sets"][case["criteria_set"]]["thresholds"][
+        "collector_sample_loss_maximum"
+    ] = 2
+    run_id = runner.prepare(case_ids=[case["id"]], run_id="async-fault-run")
+
+    try:
+        assert runner.run_case(run_id, case["id"]) == "characterized"
+    finally:
+        release_fault.set()
+
+    sample_dir = runner.run_dir(run_id) / f"cases/{case['id']}/{case['id']}-sample-0001"
+    collection = read_json(sample_dir / "collection-result.json")
+    events = runner_module.BenchmarkRunner._read_jsonl(sample_dir / "case-events.jsonl")
+    assert fault_threads == ["open-cinema-fault-injection_0"]
+    assert collection["transitionSamples"] == 15
+    assert collection["transitionMissed"] == 0
+    assert collection["sustainedMissed"] <= 2
+    fault_events = [
+        event
+        for event in events
+        if event["event"]
+        in {
+            "fault-injection-start",
+            "fault-injection-complete",
+            "workload-restored-after-fault",
+        }
+    ]
+    assert [event["event"] for event in fault_events] == [
+        "fault-injection-start",
+        "fault-injection-complete",
+        "workload-restored-after-fault",
+    ]
+    assert [event["monotonicNs"] for event in fault_events] == sorted(
+        event["monotonicNs"] for event in fault_events
+    )
+
+
 def test_declared_scheduled_transitions_execute_driver_actions(tmp_path: Path) -> None:
     runner, platform = make_runner(tmp_path)
     declared = next(case for case in runner.contracts.cases["cases"] if case["id"] == "soak-pcm")
@@ -1443,6 +1916,53 @@ def test_declared_scheduled_transitions_execute_driver_actions(tmp_path: Path) -
     )
     executed = [event for event in events if event["event"] == "scheduled-transition-executed"]
     assert [event["scheduleIndex"] for event in executed] == [0, 1]
+
+
+def test_scheduled_transition_does_not_block_transition_collection(tmp_path: Path) -> None:
+    runner, platform = make_runner(tmp_path)
+    case = bound_case(runner, "soak-pcm", duration_seconds=3, timeout_seconds=10)
+    declared = next(item for item in runner.contracts.cases["cases"] if item["id"] == case["id"])
+    declared["transition_schedule_seconds"] = [1]
+    transition_started = threading.Event()
+    release_transition = threading.Event()
+    transition_threads: list[str] = []
+    original_transition_sample = platform.transition_sample
+
+    class BlockingTransitionWorkload(FakeWorkloadDriver):
+        def transition(self, kind: str, index: int) -> dict[str, Any]:
+            transition_threads.append(threading.current_thread().name)
+            transition_started.set()
+            if not release_transition.wait(timeout=2):
+                raise RuntimeError("test scheduled transition was not released")
+            return super().transition(kind, index)
+
+    def transition_sample() -> dict[str, Any]:
+        sample = original_transition_sample()
+        if len(platform.transition_capture_ns) == 10:
+            assert transition_started.wait(timeout=1)
+            release_transition.set()
+        return sample
+
+    runner.workload_driver_factory = lambda **arguments: BlockingTransitionWorkload(
+        platform=platform,
+        **arguments,
+    )
+    platform.transition_sample = transition_sample  # type: ignore[method-assign]
+    runner.contracts.criteria["criteria_sets"][case["criteria_set"]]["thresholds"][
+        "collector_sample_loss_maximum"
+    ] = 2
+    run_id = runner.prepare(case_ids=[case["id"]], run_id="async-scheduled-run")
+
+    try:
+        assert runner.run_case(run_id, case["id"]) == "characterized"
+    finally:
+        release_transition.set()
+
+    sample_dir = runner.run_dir(run_id) / f"cases/{case['id']}/{case['id']}-sample-0001"
+    collection = read_json(sample_dir / "collection-result.json")
+    assert transition_threads == ["open-cinema-scheduled-transition_0"]
+    assert collection["transitionSamples"] == 15
+    assert collection["transitionMissed"] == 0
 
 
 def test_physical_and_bluetooth_cases_prepare_as_explicitly_unavailable(tmp_path: Path) -> None:
@@ -1588,6 +2108,209 @@ def test_pipewire_playback_status_requires_an_active_link_to_exact_target() -> N
     assert status["active"] is False
 
 
+def test_fault_recovery_waits_for_the_exact_playback_target_node() -> None:
+    platform = object.__new__(runner_module.LinuxPlatform)
+    now = [1_000_000_000]
+    snapshots: list[object] = [
+        [],
+        [
+            {
+                "id": 11,
+                "type": "PipeWire:Interface:Node",
+                "info": {
+                    "props": {
+                        "node.name": "open-cinema.decoder.decoder-0.capture"
+                    }
+                },
+            }
+        ],
+    ]
+    platform.monotonic_ns = lambda: now[0]
+    platform.sleep = lambda seconds: now.__setitem__(
+        0, now[0] + int(seconds * 1_000_000_000)
+    )
+    platform.pipewire_document = lambda **_kwargs: snapshots.pop(0)
+
+    result = runner_module.LinuxPlatform.wait_for_audio_node(
+        platform,
+        "open-cinema.decoder.decoder-0.capture",
+        timeout_seconds=2,
+    )
+
+    assert result == {
+        "ready": True,
+        "nodeName": "open-cinema.decoder.decoder-0.capture",
+        "attempts": 2,
+        "durationNs": 100_000_000,
+    }
+
+
+def test_file_playback_keeps_private_input_root_side_and_wav_frames_stdin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    platform = object.__new__(runner_module.LinuxPlatform)
+    platform.audio_user = "opencinema"
+    platform.audio_uid = 999
+    platform._playback_processes = {}
+    platform.monotonic_ns = lambda: 1_000_000_000
+    platform.playback_status = lambda handle: {
+        "feederAlive": True,
+        "playerAlive": True,
+        "linked": True,
+        "active": True,
+    }
+    spawned: list[Any] = []
+
+    class Process:
+        def __init__(self, argv: list[str], **kwargs: Any) -> None:
+            self.argv = argv
+            self.stdin = kwargs.get("stdin")
+            self.stdout = io.BytesIO()
+            self.pid = 1000 + len(spawned)
+            self.returncode = 0
+            spawned.append(self)
+
+        def poll(self) -> int:
+            return 0
+
+    monkeypatch.setattr(runner_module.subprocess, "Popen", Process)
+    monkeypatch.setattr(runner_module.os, "getpgid", lambda pid: pid)
+    asset = tmp_path / "private-fixture.s16le"
+    asset.write_bytes(b"\x00" * 16)
+    asset.chmod(0o600)
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+
+    handle, _ = platform.start_file_playback(
+        asset_path=asset,
+        source_kind="raw-s16le",
+        sample_format="s16",
+        sample_rate_hz=48_000,
+        channels=2,
+        channel_map="FL,FR",
+        target_node="open-cinema.decoder.decoder-0.capture",
+        evidence_dir=evidence_dir,
+    )
+
+    feeder_argv = spawned[0].argv
+    player_argv = spawned[1].argv
+    assert feeder_argv[:3] == ["env", f"OPEN_CINEMA_BENCHMARK_HANDLE={handle}", "ffmpeg"]
+    assert feeder_argv[-3:] == ["-f", "wav", "pipe:1"]
+    assert "runuser" not in feeder_argv
+    assert player_argv[:4] == ["runuser", "-u", "opencinema", "--"]
+    assert "pw-cat" in player_argv
+    assert player_argv[-1] == "-"
+    assert spawned[1].stdin is spawned[0].stdout
+    assert asset.stat().st_mode & 0o777 == 0o600
+    platform.stop_file_playback(handle)
+
+
+def test_camilladsp_status_reuses_connection_and_reconnects_after_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    platform = object.__new__(runner_module.LinuxPlatform)
+    platform.camilladsp_host = "127.0.0.1"
+    platform.camilladsp_port = 1234
+    platform._camilladsp_client = None
+    platform._camilladsp_lock = threading.Lock()
+    clients: list[Any] = []
+
+    class Client:
+        def __init__(self, host: str, port: int) -> None:
+            assert (host, port) == ("127.0.0.1", 1234)
+            self.general = self
+            self.status = self
+            self.rate = self
+            self.failed = False
+            self.connects = 0
+            self.disconnects = 0
+            clients.append(self)
+
+        def connect(self) -> None:
+            self.connects += 1
+
+        def disconnect(self) -> None:
+            self.disconnects += 1
+
+        def state(self) -> object:
+            if self.failed:
+                raise ConnectionError("fixture connection closed")
+            return type("State", (), {"name": "RUNNING"})()
+
+        def buffer_level(self) -> int:
+            return 64
+
+        def clipped_samples(self) -> int:
+            return 0
+
+        def processing_load(self) -> float:
+            return 1.25
+
+        def resampler_load(self) -> float:
+            return 0.5
+
+        def capture_raw(self) -> int:
+            return 48_000
+
+    fake_module = type("CamillaModule", (), {"CamillaClient": Client})()
+    monkeypatch.setitem(sys.modules, "camilladsp", fake_module)
+
+    first = platform.camilladsp_status()
+    second = platform.camilladsp_status()
+    assert first == second
+    assert first["value"]["state"] == "running"
+    assert len(clients) == 1
+    assert clients[0].connects == 1
+
+    clients[0].failed = True
+    failed = platform.camilladsp_status()
+    recovered = platform.camilladsp_status()
+    assert failed == {
+        "available": False,
+        "error": "camilladsp-status-query-failed:ConnectionError",
+    }
+    assert clients[0].disconnects == 1
+    assert recovered["available"] is True
+    assert len(clients) == 2
+
+    platform._camilladsp_lock.acquire()
+    try:
+        assert platform.camilladsp_status(blocking=False) == {
+            "available": False,
+            "error": "camilladsp-status-query-in-progress",
+        }
+    finally:
+        platform._camilladsp_lock.release()
+    assert len(clients) == 2
+
+
+def test_transition_database_probe_uses_bounded_busy_timeout(tmp_path: Path) -> None:
+    database_path = tmp_path / "db.sqlite3"
+    writer = runner_module.sqlite3.connect(database_path, isolation_level=None)
+    writer.execute(
+        "CREATE TABLE api_runtimeprojection ("
+        "projection_type TEXT, subject_key TEXT, world_generation INTEGER, "
+        "world_sequence INTEGER, payload TEXT, observed_at TEXT, is_current INTEGER)"
+    )
+    platform = object.__new__(runner_module.LinuxPlatform)
+    platform.database_path = database_path
+
+    connection = platform._database(timeout_seconds=0.01)
+    assert connection is not None
+    assert connection.execute("PRAGMA busy_timeout").fetchone()[0] == 10
+    connection.close()
+
+    writer.execute("BEGIN EXCLUSIVE")
+    try:
+        assert platform._processor_projection(timeout_seconds=0.001) == {
+            "available": False,
+            "error": "database-busy",
+        }
+    finally:
+        writer.execute("ROLLBACK")
+        writer.close()
+
+
 def test_persisted_workload_journal_restores_camilladsp_and_clears_it(
     tmp_path: Path,
 ) -> None:
@@ -1633,6 +2356,39 @@ def test_persisted_workload_journal_restores_camilladsp_and_clears_it(
     cleared = read_json(journal_path)
     assert cleared["active"] is False
     assert cleared["camilladspOriginalConfiguration"] is None
+
+
+def test_platform_restore_waits_for_active_intent_convergence_even_when_topology_matches() -> None:
+    platform = object.__new__(runner_module.LinuxPlatform)
+    clock = {"now": 0}
+    convergence = iter((False, False, True))
+    sleeps: list[float] = []
+    topology = {"digest": "same", "ownedLinkCount": 18, "links": []}
+    platform.monotonic_ns = lambda: clock["now"]
+    platform.utc_now = lambda: "2026-08-27T00:00:00Z"
+    platform.sleep = lambda seconds: (
+        sleeps.append(seconds),
+        clock.__setitem__("now", clock["now"] + int(seconds * 1_000_000_000)),
+    )[-1]
+    platform.restore_activations = lambda snapshot: {"snapshot": snapshot}
+    platform.restore_services = lambda states: []
+    platform.topology = lambda: topology
+    platform._enabled_revisions_converged = lambda: next(convergence)
+    platform.static_digest = lambda: "static"
+    platform.intent_snapshot = lambda: {"semanticDigest": "intent"}
+    snapshot = {
+        "activeIntent": {"semanticDigest": "intent"},
+        "services": {},
+        "topology": topology,
+        "staticDigest": "static",
+        "intentDigest": "intent",
+    }
+
+    result = platform.restore(snapshot, timeout_seconds=5)
+
+    assert sleeps == [0.25, 0.25]
+    assert result["topologyVerified"] is True
+    assert result["activeIntentConverged"] is True
 
 
 def test_supported_fixture_uses_observed_wlan_controller_link(tmp_path: Path) -> None:

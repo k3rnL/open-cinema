@@ -17,8 +17,6 @@ from pathlib import Path
 import tempfile
 from typing import Any, Mapping, Protocol
 
-import yaml
-
 
 class WorkloadError(RuntimeError):
     """A bounded workload action failed."""
@@ -58,6 +56,16 @@ class WorkloadBackend(Protocol):
 
     def apply_camilladsp_configuration(
         self, configuration: Mapping[str, Any]
+    ) -> Mapping[str, Any]: ...
+
+    def intent_snapshot(self) -> Mapping[str, Any]: ...
+
+    def activate_camilladsp_fixture(self, fixture_id: str) -> Mapping[str, Any]: ...
+
+    def restore_activations(self, snapshot: Mapping[str, Any]) -> Mapping[str, Any]: ...
+
+    def wait_camilladsp_configuration(
+        self, configuration: Mapping[str, Any], *, timeout_seconds: float
     ) -> Mapping[str, Any]: ...
 
 
@@ -149,7 +157,8 @@ class BenchmarkWorkloadDriver:
         self._log_paths: list[str] = []
         self._input_fixture_name: str | None = None
         self._original_camilladsp: dict[str, Any] | None = None
-        self._workload_camilladsp: dict[str, Any] | None = None
+        self._original_intent: dict[str, Any] | None = None
+        self._managed_profile_fixture: str | None = None
         self._profile_fixture_name: str | None = None
         self._started = False
         self._restore_journal_path = self.sample_dir / "workload-restore.json"
@@ -166,14 +175,23 @@ class BenchmarkWorkloadDriver:
         self.sample_dir.mkdir(parents=True, exist_ok=True)
         document = {
             "schemaVersion": 1,
-            "active": self._playback_record is not None or self._original_camilladsp is not None,
+            "active": (
+                self._playback_record is not None
+                or self._original_camilladsp is not None
+                or self._original_intent is not None
+            ),
             "playback": copy.deepcopy(self._playback_record),
-            "camilladspOriginalConfiguration": copy.deepcopy(self._original_camilladsp),
-            "camilladspOriginalConfigurationSha256": (
-                canonical_digest(self._original_camilladsp)
-                if self._original_camilladsp is not None
+            # Managed profile mutations are restored through the run-level
+            # active-intent snapshot, never by writing a raw engine config.
+            "camilladspOriginalConfiguration": None,
+            "camilladspOriginalConfigurationSha256": None,
+            "managedIntentMutation": self._original_intent is not None,
+            "managedIntentSemanticDigest": (
+                self._original_intent.get("semanticDigest")
+                if self._original_intent is not None
                 else None
             ),
+            "managedCamillaDSPFixture": self._managed_profile_fixture,
         }
         descriptor, temporary_name = tempfile.mkstemp(
             prefix=".workload-restore.", dir=self.sample_dir
@@ -202,7 +220,7 @@ class BenchmarkWorkloadDriver:
 
     @property
     def requires_restoration(self) -> bool:
-        return self._original_camilladsp is not None
+        return self._original_intent is not None
 
     def _verified_media_asset(self, fixture_id: str) -> tuple[Path, dict[str, Any]]:
         try:
@@ -290,17 +308,22 @@ class BenchmarkWorkloadDriver:
             "backend": backend_result,
         }
 
-    def _stop_input(self) -> dict[str, Any]:
+    def _stop_input(self, *, allow_interrupted: bool = False) -> dict[str, Any]:
         if self._playback_handle is None:
             return {"stopped": False, "reason": "no-playback-process"}
         handle = self._playback_handle
         result = dict(self.backend.stop_file_playback(handle))
-        if result.get("ok") is False:
+        interrupted = result.get("ok") is False
+        if interrupted and not allow_interrupted:
             raise WorkloadError(f"benchmark playback failed before cleanup: {result}")
         self._playback_handle = None
         self._playback_record = None
         self._write_restore_journal()
-        return {"stopped": True, "backend": result}
+        return {
+            "stopped": True,
+            "interruptedByExpectedFault": interrupted,
+            "backend": result,
+        }
 
     def health(self) -> dict[str, Any]:
         """Fail the sample if its synthetic programme stream is not usable."""
@@ -326,74 +349,6 @@ class BenchmarkWorkloadDriver:
             "captures": [],
         }
 
-    @staticmethod
-    def _rewrite_relative_filter_assets(value: object, *, root: Path) -> object:
-        if isinstance(value, list):
-            return [
-                BenchmarkWorkloadDriver._rewrite_relative_filter_assets(item, root=root)
-                for item in value
-            ]
-        if not isinstance(value, dict):
-            return copy.deepcopy(value)
-        result = {
-            str(key): BenchmarkWorkloadDriver._rewrite_relative_filter_assets(item, root=root)
-            for key, item in value.items()
-        }
-        filename = result.get("filename")
-        if isinstance(filename, str) and filename and not Path(filename).is_absolute():
-            result["filename"] = str(_safe_asset(root, filename, label="CamillaDSP filter"))
-        return result
-
-    def _profile_overlay(
-        self,
-        *,
-        active: Mapping[str, Any],
-        profile_path: Path,
-        registry: Mapping[str, Any],
-    ) -> dict[str, Any]:
-        profile = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
-        if not isinstance(profile, dict):
-            raise WorkloadContractError("CamillaDSP profile must contain an object")
-        devices = active.get("devices")
-        if not isinstance(devices, Mapping):
-            raise WorkloadContractError("active CamillaDSP config has no devices object")
-        capture = devices.get("capture")
-        playback = devices.get("playback")
-        if not isinstance(capture, Mapping) or not isinstance(playback, Mapping):
-            raise WorkloadContractError("active CamillaDSP config lacks PipeWire devices")
-        active_input = capture.get("channels")
-        active_output = playback.get("channels")
-        if not isinstance(active_input, int) or not isinstance(active_output, int):
-            raise WorkloadContractError("active CamillaDSP channel counts are unavailable")
-        required_input = int(registry["inputChannels"])
-        required_output = int(registry["outputChannels"])
-        binding = self.fixture["processor_fixtures"][self._profile_fixture_name or ""]
-        if active_input < int(binding.get("minimum_input_channels", required_input)):
-            raise WorkloadContractError("active CamillaDSP input bus is too small for profile")
-        if active_output < int(binding.get("minimum_output_channels", required_output)):
-            raise WorkloadContractError("active CamillaDSP output bus is too small for profile")
-        if required_input != required_output:
-            raise WorkloadContractError(
-                "a channel-count-changing profile requires a desired-graph fixture"
-            )
-
-        candidate = copy.deepcopy(dict(active))
-        candidate_devices = copy.deepcopy(dict(devices))
-        candidate_devices["samplerate"] = int(registry["sampleRateHz"])
-        candidate_devices["chunksize"] = int(registry["periodFrames"])
-        candidate["devices"] = candidate_devices
-        for key in ("filters", "mixers", "pipeline"):
-            candidate.pop(key, None)
-            if key in profile:
-                candidate[key] = self._rewrite_relative_filter_assets(
-                    profile[key], root=self.profile_root
-                )
-        candidate["title"] = str(profile.get("title") or "Open Cinema benchmark workload")
-        candidate["description"] = str(
-            profile.get("description") or "Synthetic benchmark processing overlay"
-        )
-        return candidate
-
     def _apply_profile(self, fixture_name: str) -> dict[str, Any]:
         try:
             fixture = self.fixture["processor_fixtures"][fixture_name]
@@ -407,7 +362,7 @@ class BenchmarkWorkloadDriver:
             return {"driver": "none", "processorFixture": fixture_name}
         if driver == "manual":
             raise ManualActionRequired(str(automation.get("reason") or fixture_name))
-        if driver != "camilladsp-processing-overlay":
+        if driver != "managed-camilladsp-profile":
             raise WorkloadContractError(f"unsupported processor driver: {driver!r}")
         profile_id = automation.get("profile_fixture_id")
         if not isinstance(profile_id, str):
@@ -415,27 +370,22 @@ class BenchmarkWorkloadDriver:
                 f"processor fixture lacks profile_fixture_id: {fixture_name}"
             )
         profile_path, registry = self._verified_profile_asset(profile_id)
-        if self._original_camilladsp is None:
+        if self._original_intent is None:
+            self._original_intent = copy.deepcopy(dict(self.backend.intent_snapshot()))
             self._original_camilladsp = copy.deepcopy(
                 dict(self.backend.camilladsp_active_configuration())
             )
             self._write_restore_journal()
         self._profile_fixture_name = fixture_name
-        candidate = self._profile_overlay(
-            active=self._original_camilladsp,
-            profile_path=profile_path,
-            registry=registry,
-        )
-        applied = self.backend.apply_camilladsp_configuration(candidate)
-        self._workload_camilladsp = candidate
+        applied = self.backend.activate_camilladsp_fixture(profile_id)
+        self._managed_profile_fixture = profile_id
+        self._write_restore_journal()
         return {
-            "driver": driver,
+            "driver": "managed-desired-graph-profile",
             "processorFixture": fixture_name,
             "profileFixture": profile_id,
             "profileSha256": registry["sha256"],
-            "appliedConfigurationSha256": canonical_digest(candidate),
-            "preservedCaptureNode": candidate["devices"]["capture"].get("node_name"),
-            "preservedPlaybackNode": candidate["devices"]["playback"].get("node_name"),
+            "profileAsset": profile_path.name,
             "backend": dict(applied),
         }
 
@@ -444,7 +394,11 @@ class BenchmarkWorkloadDriver:
         devices = active.get("devices")
         if not isinstance(devices, dict):
             raise WorkloadContractError("active CamillaDSP configuration lacks devices")
-        devices["chunksize"] = 0
+        # CamillaDSP 4 accepts zero here and resolves it as an automatic/default
+        # chunk size.  A negative value is schema-invalid across the supported
+        # CamillaDSP 4 releases and therefore exercises rejection without ever
+        # applying a candidate configuration.
+        devices["chunksize"] = -1
         try:
             self.backend.apply_camilladsp_configuration(active)
         except CamillaDSPConfigurationRejected as error:
@@ -464,11 +418,14 @@ class BenchmarkWorkloadDriver:
             raise ManualActionRequired(str(self.case.get("manual_reason") or self.case["id"]))
         self._started = True
         try:
-            input_result = self._start_input(str(self.case["input_fixture"]))
             processor_fixture = str(
                 self.unit.get("processorFixture", self.case["processor_fixture"])
             )
             processor_result = self._apply_profile(processor_fixture)
+            # A CamillaDSP configuration swap recreates its PipeWire nodes.
+            # Attach programme audio only after the selected profile is ready,
+            # otherwise pw-cat remains linked to the retired capture node.
+            input_result = self._start_input(str(self.case["input_fixture"]))
             action_result = None
             if self.case.get("workload_action_kind") == "reject-invalid-camilladsp-config":
                 action_result = self._reject_invalid_configuration()
@@ -484,12 +441,23 @@ class BenchmarkWorkloadDriver:
     def after_fault_injection(self, services: list[str]) -> dict[str, Any]:
         if not services or self._input_fixture_name is None:
             return {"action": "none"}
-        stopped = self._stop_input()
+        # Restarting PipeWire is expected to terminate the benchmark pw-cat
+        # client. Its non-zero exit remains evidence, but it must not prevent
+        # the workload from attaching a fresh stream to the restored runtime.
+        stopped = self._stop_input(allow_interrupted=True)
+        target_readiness = None
+        if hasattr(self.backend, "wait_for_audio_node"):
+            binding = self._input_binding(self._input_fixture_name)
+            target_readiness = self.backend.wait_for_audio_node(
+                str(binding["target_node"]),
+                timeout_seconds=30,
+            )
         started = self._start_input(self._input_fixture_name)
         return {
             "action": "restart-programme-after-service-fault",
             "services": list(services),
             "stopped": stopped,
+            "targetReadiness": target_readiness,
             "started": started,
         }
 
@@ -517,26 +485,46 @@ class BenchmarkWorkloadDriver:
                 "stopped": stopped,
                 "started": started,
             }
-        if self._original_camilladsp is None or self._workload_camilladsp is None:
+        if (
+            self._original_intent is None
+            or self._original_camilladsp is None
+            or self._managed_profile_fixture is None
+        ):
             raise WorkloadError("profile transition requires an applied workload profile")
-        configuration = self._workload_camilladsp if index % 2 == 0 else self._original_camilladsp
-        result = self.backend.apply_camilladsp_configuration(configuration)
+        if index % 2 == 0:
+            result = self.backend.activate_camilladsp_fixture(self._managed_profile_fixture)
+            action = "reapply-workload-profile"
+        else:
+            restored = self.backend.restore_activations(self._original_intent)
+            ready = self.backend.wait_camilladsp_configuration(
+                self._original_camilladsp,
+                timeout_seconds=60,
+            )
+            result = {"intent": dict(restored), "readiness": dict(ready)}
+            action = "restore-active-profile"
         return {
-            "action": "reapply-workload-profile" if index % 2 == 0 else "restore-active-profile",
-            "configurationSha256": canonical_digest(configuration),
+            "action": action,
             "backend": dict(result),
         }
 
     def stop(self) -> dict[str, Any]:
         results: dict[str, Any] = {"input": self._stop_input(), "processor": None}
-        if self._original_camilladsp is not None:
-            original = self._original_camilladsp
+        if self._original_intent is not None and self._original_camilladsp is not None:
+            original_intent = self._original_intent
+            original_configuration = self._original_camilladsp
+            restored = self.backend.restore_activations(original_intent)
+            ready = self.backend.wait_camilladsp_configuration(
+                original_configuration,
+                timeout_seconds=60,
+            )
             results["processor"] = {
-                "restoredConfigurationSha256": canonical_digest(original),
-                "backend": dict(self.backend.apply_camilladsp_configuration(original)),
+                "restoredConfigurationSha256": canonical_digest(original_configuration),
+                "intent": dict(restored),
+                "readiness": dict(ready),
             }
             self._original_camilladsp = None
-            self._workload_camilladsp = None
+            self._original_intent = None
+            self._managed_profile_fixture = None
             self._write_restore_journal()
         self._started = False
         return results

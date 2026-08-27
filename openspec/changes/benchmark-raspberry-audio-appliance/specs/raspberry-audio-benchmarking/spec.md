@@ -16,7 +16,7 @@ The benchmark suite SHALL identify the device under test as the available Raspbe
 - **THEN** the run is labelled exploratory and cannot replace the supported-fixture acceptance result
 
 ### Requirement: Runs are repeatable and evidence is auditable
-The benchmark suite SHALL define repeatable samples, input material, graph and processor configurations, warm-up, run duration, repetition count, measurement boundaries, clocks, collection commands, and pass criteria before an acceptance run. It SHALL retain timestamped raw samples, logs, configuration and sample digests, environment metadata, summaries, and the exact invocation needed to reproduce each result. Preparation SHALL freeze and digest every benchmark contract and SHALL record the runner, intent-adapter, and workload-driver implementation digests. Run, resume, and finalization SHALL reject input drift instead of combining evidence across implementations.
+The benchmark suite SHALL define repeatable samples, input material, graph and processor configurations, warm-up, run duration, repetition count, measurement boundaries, clocks, collection commands, and pass criteria before an acceptance run. It SHALL retain timestamped raw samples, logs, configuration and sample digests, environment metadata, summaries, and the exact invocation needed to reproduce each result. Preparation SHALL freeze and digest every benchmark contract, workload registry, physical-path declaration, and registry-referenced media, profile, and filter asset and SHALL record the runner, intent-adapter, and workload-driver implementation digests. Samples SHALL consume those frozen workload inputs. Run, resume, and finalization SHALL reject input drift instead of combining evidence across implementations.
 
 #### Scenario: An acceptance run completes
 - **WHEN** the harness finishes a benchmark case
@@ -27,7 +27,7 @@ The benchmark suite SHALL define repeatable samples, input material, graph and p
 - **THEN** the harness marks that sample invalid with a reason and does not silently include it in accepted statistics
 
 #### Scenario: Benchmark inputs change after preparation
-- **WHEN** a contract, schema, runner, intent adapter, or workload driver differs from the identity frozen at preparation
+- **WHEN** a contract, schema, workload registry or referenced asset, runner, intent adapter, or workload driver differs from the identity frozen at preparation
 - **THEN** the harness restores marker-owned temporary workload state, refuses to add or classify evidence under that run identifier, and requires a newly prepared run
 
 ### Requirement: Canonical adaptive routing remains accepted and becomes quantitative
@@ -58,6 +58,12 @@ The benchmark suite SHALL exercise PCM, AC-3, E-AC-3, and DTS inputs that are su
 
 ### Requirement: CamillaDSP is measured at the selected native PipeWire period
 The benchmark suite SHALL exercise the single CamillaDSP instance at a 128-frame processing period with representative passthrough, stereo, multichannel, channel-adaptation, and production-like filtering profiles whose filter sizes and configuration digests are recorded. It SHALL include profile replacement, bypass where supported, rejected invalid configuration, control interruption, processor restart, and rollback to the last working configuration.
+
+Supported profile workloads SHALL be published as benchmark-only Open Cinema
+profile and graph resources and selected through desired-intent activation.
+They SHALL NOT compete with the orchestrator by installing a raw live
+CamillaDSP configuration. The prepared user intent and engine configuration
+MUST be restored and observed converged after every managed profile sample.
 
 #### Scenario: Representative profiles run under programme audio
 - **WHEN** each declared CamillaDSP profile is active for its benchmark interval

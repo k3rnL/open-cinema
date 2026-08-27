@@ -1,16 +1,25 @@
 from __future__ import annotations
 
 import importlib.util
+import copy
 from pathlib import Path
 import sys
+import uuid
 
 import pytest
 from django.contrib.auth import get_user_model
 
-from api.models import GraphActivation, GraphDefinition, GraphRevision, GraphRevisionState
+from api.models import (
+    CamillaDSPProfile,
+    GraphActivation,
+    GraphDefinition,
+    GraphRevision,
+    GraphRevisionState,
+)
 from core.orchestration.activations import activate_graph
 
 ROOT = Path(__file__).parents[1]
+BENCHMARKS = ROOT / "deployment" / "benchmarks"
 MODULE_PATH = ROOT / "deployment" / "benchmarks" / "benchmark_intent_adapter.py"
 SPEC = importlib.util.spec_from_file_location("open_cinema_benchmark_intent_adapter", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
@@ -191,3 +200,119 @@ def test_django_startup_notices_cannot_contaminate_adapter_json(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == "plugin startup notice\n"
+
+
+def managed_graph_document() -> dict[str, object]:
+    return {
+        "schemaVersion": 1,
+        "id": "graph:prepared-managed-chain",
+        "kind": "graph",
+        "metadata": {"name": "Prepared managed chain", "labels": {}},
+        "parameters": [],
+        "publicPorts": [],
+        "conditions": [],
+        "nodes": [
+            {
+                "id": "source",
+                "type": "core.endpoint-reference",
+                "version": 1,
+                "configuration": {
+                    "logicalEndpointId": str(uuid.uuid4()),
+                    "direction": "input",
+                },
+            },
+            {
+                "id": "decoder",
+                "type": "processor.pcm-auto-decoder",
+                "version": 1,
+                "configuration": {
+                    "pcmBehavior": "bypass",
+                    "encodedBehavior": "decode",
+                    "unsupportedBehavior": "error",
+                    "workingSampleFormat": "FLOAT32LE",
+                    "workingRate": 48_000,
+                    "workingLayout": "7.1",
+                },
+            },
+            {
+                "id": "dsp",
+                "type": "processor.camilladsp-profile-selector",
+                "version": 1,
+                "configuration": {
+                    "profileId": str(uuid.uuid4()),
+                    "profileVersion": 1,
+                },
+            },
+            {
+                "id": "sink",
+                "type": "core.endpoint-reference",
+                "version": 1,
+                "configuration": {
+                    "logicalEndpointId": str(uuid.uuid4()),
+                    "direction": "output",
+                },
+            },
+        ],
+        "edges": [
+            {
+                "id": "source-to-decoder",
+                "from": {"node": "source", "port": "output"},
+                "to": {"node": "decoder", "port": "input"},
+            },
+            {
+                "id": "decoder-to-dsp",
+                "from": {"node": "decoder", "port": "output"},
+                "to": {"node": "dsp", "port": "input"},
+            },
+            {
+                "id": "dsp-to-sink",
+                "from": {"node": "dsp", "port": "output"},
+                "to": {"node": "sink", "port": "input"},
+            },
+        ],
+        "layout": {"viewport": {"x": 0, "y": 0, "zoom": 1}},
+    }
+
+
+@pytest.mark.django_db
+def test_managed_camilladsp_fixtures_are_idempotent_and_switch_supported_intent() -> None:
+    owner = get_user_model().objects.create_user(username="benchmark-fixture-owner")
+    graph = GraphDefinition.objects.create(name="Prepared managed chain", owner=owner)
+    revision = GraphRevision.objects.create(
+        definition=graph,
+        revision_number=1,
+        state=GraphRevisionState.PUBLISHED,
+        author=owner,
+        content=managed_graph_document(),
+    )
+    activate_graph(definition=graph, revision=revision, expected_version=0)
+    expected = adapter.snapshot_document(adapter.activation_rows())
+    profiles_root = BENCHMARKS / "media" / "camilladsp"
+
+    first = adapter.ensure_camilladsp_fixtures(profiles_root)
+    profile_count = CamillaDSPProfile.objects.count()
+    revision_count = GraphRevision.objects.count()
+    second = adapter.ensure_camilladsp_fixtures(profiles_root)
+
+    assert sorted(first["fixtures"]) == [
+        "camilladsp-multichannel-128",
+        "camilladsp-passthrough-128",
+        "camilladsp-production-fir-iir-128",
+        "camilladsp-stereo-128",
+    ]
+    assert second == first
+    assert CamillaDSPProfile.objects.count() == profile_count == 4
+    assert GraphRevision.objects.count() == revision_count == 5
+
+    selected = adapter.activate_camilladsp_fixture(
+        profiles_root,
+        "camilladsp-production-fir-iir-128",
+    )
+
+    assert selected["changed"] is True
+    assert GraphActivation.objects.get(definition=graph).enabled is False
+    benchmark = GraphDefinition.objects.get(pk=first["definitionId"])
+    assert GraphActivation.objects.get(definition=benchmark).enabled is True
+
+    restored = adapter.restore_desired_intent(copy.deepcopy(expected))
+    assert restored["snapshot"]["semanticDigest"] == expected["semanticDigest"]

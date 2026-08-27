@@ -117,12 +117,18 @@
     mode: "0644"
   loop:
     - media/manifest.json
+    - media/physical-path.yml
+    - media/generated/pcm-stereo-channel-id.wav
+    - media/generated/pcm-5_1-channel-id.wav
     - media/generated/pcm-stereo-channel-id.s16le
     - media/generated/pcm-7_1-channel-id.wav
+    - media/generated/silence-stereo.wav
+    - media/generated/no-carrier.s16le
     - media/generated/ac3-5.1.spdif
     - media/generated/eac3-5.1.spdif
     - media/generated/dts-5.1.spdif
     - media/generated/unsupported-aac-5.1.spdif
+    - media/generated/adaptive-switch-continuous-stereo.wav
     - media/camilladsp/profiles.json
     - media/camilladsp/passthrough-128.yml
     - media/camilladsp/stereo-128.yml

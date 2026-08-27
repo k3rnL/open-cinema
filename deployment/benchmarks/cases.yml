@@ -353,7 +353,7 @@ cases:
     expected_outcome: supported
     warm_up_repetitions: 1
     measured_repetitions: 5
-    duration_seconds: 30
+    duration_seconds: 60
     timeout_seconds: 120
     service_matrix:
       - [pcm-auto-decoder@decoder-0.service]
@@ -409,7 +409,7 @@ cases:
     workload_state: programme-audio
     carrier_state: present
     expected_outcome: supported
-    warm_up_repetitions: 1
+    warm_up_repetitions: 0
     measured_repetitions: 1
     duration_seconds: 600
     timeout_seconds: 720
@@ -425,7 +425,7 @@ cases:
     workload_state: programme-audio
     carrier_state: present
     expected_outcome: supported
-    warm_up_repetitions: 1
+    warm_up_repetitions: 0
     measured_repetitions: 1
     duration_seconds: 600
     timeout_seconds: 720
@@ -442,7 +442,7 @@ cases:
     workload_state: programme-audio
     carrier_state: present
     expected_outcome: supported
-    warm_up_repetitions: 1
+    warm_up_repetitions: 0
     measured_repetitions: 1
     duration_seconds: 600
     timeout_seconds: 720
@@ -459,7 +459,7 @@ cases:
     workload_state: programme-audio
     carrier_state: present
     expected_outcome: fixture-unavailable
-    warm_up_repetitions: 1
+    warm_up_repetitions: 0
     measured_repetitions: 1
     duration_seconds: 600
     timeout_seconds: 720

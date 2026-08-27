@@ -39,7 +39,7 @@ filters:
     parameters:
       type: Raw
       filename: production-fir-1024.f32le
-      format: FLOAT32LE
+      format: F32_LE
 pipeline:
   - type: Filter
     channels: [0, 1, 2, 3, 4, 5, 6, 7]

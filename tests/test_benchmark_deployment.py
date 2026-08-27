@@ -64,6 +64,9 @@ def test_benchmark_tools_are_explicit_and_separate_from_the_appliance_play() -> 
     assert "Require a clean power" not in tasks
     assert "pulse" + "audio" not in tasks.lower()
     assert "pipewire" + "-pulse" not in tasks.lower()
+    wrapper = read(DEPLOYMENT / "roles/benchmark-tools/templates/open-cinema-benchmark.j2")
+    assert "open_cinema.venv_path ~ '/bin/python'" in wrapper
+    assert "exec /usr/bin/python3" not in wrapper
 
     measurement = read(DEPLOYMENT / "roles/benchmark-tools/files/measure-live-graph")
     for evidence in (
@@ -94,6 +97,25 @@ def test_benchmark_tools_are_explicit_and_separate_from_the_appliance_play() -> 
     assert "record_status passed" not in measurement
     assert "benchmark_status=passed" not in measurement
     assert "benchmark_status=characterized" in measurement
+
+
+def test_benchmark_role_installs_every_input_that_prepare_freezes() -> None:
+    tasks = read(DEPLOYMENT / "roles/benchmark-tools/tasks/main.yml")
+    media = json.loads(read(BENCHMARKS / "media/manifest.json"))
+    profiles = json.loads(read(BENCHMARKS / "media/camilladsp/profiles.json"))
+    expected = {
+        "media/manifest.json",
+        "media/physical-path.yml",
+        "media/camilladsp/profiles.json",
+        *(f"media/generated/{record['path']}" for record in media["fixtures"]),
+        *(
+            f"media/camilladsp/{record['path']}"
+            for record in profiles["profiles"] + profiles["assets"]
+        ),
+    }
+
+    for path in expected:
+        assert f"- {path}" in tasks
 
 
 def test_single_supported_fixture_contract_is_schema_valid_and_natively_scoped() -> None:
@@ -132,7 +154,7 @@ def test_single_supported_fixture_contract_is_schema_valid_and_natively_scoped()
     }
     assert (
         fixture["processor_fixtures"]["camilladsp-production-fir-iir-128"]["automation"]["driver"]
-        == "camilladsp-processing-overlay"
+        == "managed-camilladsp-profile"
     )
     assert fixture["bluetooth_fixtures"]["headset"]["class"] == "a2dp-headset"
     assert (

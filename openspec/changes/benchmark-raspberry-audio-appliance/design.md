@@ -33,16 +33,28 @@ This is preferred to retaining a speculative multi-tier matrix because no measur
 
 ### 2. Extend the existing preparation playbook but keep execution data-driven
 
-The Ansible benchmark playbook will install only measurement tools and read-only/safely bounded helper commands. It will not redeploy the product, install compatibility audio servers, modify the saved graph, or require a clean image. A target-side runner will consume a checked-in case manifest and create a run directory under the existing benchmark-results root.
+The Ansible benchmark playbook will install only measurement tools and read-only/safely bounded helper commands. It will not redeploy the product, install compatibility audio servers, edit existing user graph revisions, or require a clean image. For CamillaDSP cases, preparation idempotently publishes benchmark-only profiles and revisions under a dedicated benchmark graph. A target-side runner will consume a checked-in case manifest and create a run directory under the existing benchmark-results root.
 
 The runner will expose `prepare`, `run-case`, `finalize`, and `restore` phases. Preparation records facts and a restore snapshot; each case validates preconditions and writes its own status; finalization computes checksums and a summary; restoration re-establishes the saved graph and service state even after an interrupted case. Destructive failure cases will be explicit and bounded to named services.
 
-Preparation also freezes every execution, criteria, and schema contract and
-records SHA-256 identities for the runner, intent adapter, and workload driver.
-Run, resume, and finalization reject any live/frozen contract or implementation
-drift. Resume performs marker-owned crash-journal recovery before refusing a
-drifted run, preventing temporary playback or CamillaDSP state from being
-stranded by a harness update.
+Preparation also freezes every execution, criteria, and schema contract, the
+physical-path declaration, the media/profile registries, and every referenced
+media, profile, and filter asset. It records SHA-256 identities for the runner,
+intent adapter, and workload driver, and workloads consume only the frozen run
+tree. Run, resume, and finalization reject any live/frozen input or
+implementation drift. Resume performs marker-owned crash-journal recovery
+before refusing a drifted run, preventing temporary playback or CamillaDSP
+state from being stranded by a harness update.
+
+Supported CamillaDSP workloads are selected through desired intent rather than
+raw websocket configuration. The adapter atomically deactivates the prepared
+user graph and activates the selected benchmark revision through the product's
+compare-and-swap services, waits for that exact resolved revision and engine
+configuration, and restores the prepared intent afterward. Profile selection
+and restoration have a 60-second bound because CamillaDSP recreates native
+PipeWire resources and the controller completes a staged topology transition.
+The invalid-configuration case may call validation directly, but a rejected
+candidate never becomes the supported workload state.
 
 This reuses the current deployment and collection structure rather than introducing a second orchestration stack. Driving every case directly from Ansible was rejected because long-running audio collection, transitions, and cleanup are easier to correlate and resume on the target.
 
@@ -97,7 +109,12 @@ The suite will provide independently resumable campaigns:
 7. `event-storage`: repeated endpoint/property events while sampling offered, coalesced, processed, retried, and dropped events; SQLite latency/busy errors; database, audit, diagnostic and filesystem growth; and storage writes.
 8. `soak`: at least ten minutes for each principal PCM, encoded multichannel, representative DSP, and adaptive-routing workload, with transitions scheduled inside the interval.
 
-Cases that disrupt audio require an explicit case name and restoration guard. The matrix remains single-chain; it will not infer multi-instance capacity from spare CPU or memory.
+Cases that disrupt audio require an explicit case name and restoration guard.
+Fault injection and workload recovery run in one bounded worker while transition
+and sustained collectors continue sampling the outage. Timestamped mutation
+markers are transferred back to the collector in order, and the fault worker is
+joined before workload stop or restoration. The matrix remains single-chain;
+it will not infer multi-instance capacity from spare CPU or memory.
 
 ### 8. Collect high-rate transitions and low-rate sustained health
 
@@ -106,10 +123,13 @@ Transition campaigns will collect application/PipeWire topology and process read
 The runner records completed samples separately from missed schedule slots and
 never schedules a boundary at or after the declared measurement end. Sustained
 and transition collector intervals include probes through durable payload
-persistence and are summarized separately. Interval records themselves are
-persisted after the background worker joins. The worker must join before
-workload stop, restoration, or finalization even when the case deadline has
-expired, preventing post-restoration writes and mutable workload overlap.
+persistence and are summarized separately. Transition samples use one ordered
+durability worker so an isolated SD-card `fsync` spike does not skip the next
+sampling boundary; the measured interval still ends only after that sample is
+durable. Interval records themselves are persisted after the background
+workers join. The workers must join before workload stop, restoration, or
+finalization even when the case deadline has expired, preventing
+post-restoration writes and mutable workload overlap.
 
 The harness will measure its own idle overhead and record sample loss. If collection overhead materially changes the workload or misses required samples, the case is invalid and must be rerun with a justified collection profile.
 
@@ -138,7 +158,7 @@ Hand-maintained summary arithmetic was rejected because it is hard to reproduce 
 - **[Some encoded fixtures cannot be generated with installed tools]** → Register pre-generated, probed, checksummed material or report `fixture-unavailable`; never reinterpret absence as a decoder pass.
 - **[Fault injection leaves audio unavailable]** → Snapshot active intent, guard destructive operations by case ID, enforce timeouts, and run restoration plus exact-topology verification after every case and on interrupted-run recovery.
 - **[Measurement overhead distorts results]** → Benchmark the collector, use separate transition and sustained cadences, report lost samples, and invalidate overloaded runs.
-- **[Harness or contract changes split a run across implementations]** → Freeze and hash all contracts plus the runner, adapter, and workload driver at preparation; reject drift and require a newly prepared run after safe restoration.
+- **[Harness, contract, or workload-asset changes split a run across inputs]** → Freeze and hash all contracts, workload registries and referenced assets, plus the runner, adapter, and workload driver at preparation; consume only the frozen copies, reject drift, and require a newly prepared run after safe restoration.
 - **[A ten-minute soak misses rare long-term faults]** → Treat ten minutes as practical initial acceptance, publish the duration prominently, and retain a reusable harness for later longer campaigns.
 - **[Existing candidate budgets conflict with observed behavior]** → Treat them as characterization hypotheses, freeze reviewed thresholds before the independent acceptance campaign, and preserve both versions with rationale.
 - **[Sensitive device identifiers leak through evidence]** → Redact Bluetooth addresses, tokens, credentials, and irrelevant journal fields before export; validate redaction in the finalization step.

@@ -84,8 +84,8 @@
       "path": "production-fir-iir-128.yml",
       "periodFrames": 128,
       "sampleRateHz": 48000,
-      "sha256": "e1c0c1fc246188092dbcd40dc5cee7595e63ca1e6cf2007bd938219eb10fa767",
-      "sizeBytes": 1246,
+      "sha256": "f1711707cdcbde298c842f84f909c4bfe1c3575f8843597d2dbaaac87f6220c3",
+      "sizeBytes": 1243,
       "transport": "native-pipewire",
       "workload": {
         "firTapsPerChannel": 1024,

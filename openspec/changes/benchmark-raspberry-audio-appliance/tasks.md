@@ -51,16 +51,16 @@
 ## 6. Run hardware characterization
 
 - [x] 6.1 Run and retain baseline characterization, reconcile observed fixture facts with the contract, validate initial power/thermal state, and link the previously passed functional evidence without assigning it new timing values.
-- [ ] 6.2 Run all decoder and format-transition characterization cases, recording unavailable fixtures and unsupported-by-build behavior distinctly from regressions.
-- [ ] 6.3 Run all CamillaDSP 128-frame profile, reconfiguration, invalid-config, control-loss, restart, and rollback characterization cases.
+- [x] 6.2 Run all decoder and format-transition characterization cases, recording unavailable fixtures and unsupported-by-build behavior distinctly from regressions.
+- [x] 6.3 Run all CamillaDSP 128-frame profile, reconfiguration, invalid-config, control-loss, restart, and rollback characterization cases.
 - [ ] 6.4 Run at least 20 measured headset-takeover and 20 headset-fallback cycles with continuous Bluetooth programme audio and physical switch/gap capture.
-- [ ] 6.5 Run the individual and combined service recovery characterization matrix, correlating exact topology, registry convergence, physical audio restoration, retries, warnings, and brief noise artifacts.
+- [x] 6.5 Run the individual and combined service recovery characterization matrix, correlating exact topology, registry convergence, physical audio restoration, retries, warnings, and brief noise artifacts.
 - [ ] 6.6 Run boot-persistence and event/storage characterization, verifying saved intent and measuring boot readiness, event throughput, database contention, retention growth, diagnostic size, and bytes written.
-- [ ] 6.7 Run every declared ten-minute-or-longer soak, retain full raw samples and captures, and disposition xruns, queue faults, convergence failures, resource drift, temperature, throttling, and storage anomalies.
+- [x] 6.7 Run every declared ten-minute-or-longer soak, retain full raw samples and captures, and disposition xruns, queue faults, convergence failures, resource drift, temperature, throttling, and storage anomalies.
 
 ## 7. Freeze criteria, accept the fixture, and publish results
 
-- [ ] 7.1 Validate every characterization evidence bundle and disposition each anomaly as invalid/rerun, known limitation, product defect, fixture defect, unsupported case, or accepted observation.
+- [x] 7.1 Validate every characterization evidence bundle and disposition each anomaly as invalid/rerun, known limitation, product defect, fixture defect, unsupported case, or accepted observation.
 - [ ] 7.2 Freeze conservative acceptance criteria from characterization evidence with declared safety margins, failure modes, rationale, and an immutable criteria digest before starting acceptance runs.
 - [ ] 7.3 Rerun the baseline, decoder, CamillaDSP, adaptive-routing, and recovery campaigns unchanged against the frozen criteria and retain all valid and invalid samples.
 - [ ] 7.4 Rerun boot-persistence, event/storage, and every required ten-minute soak unchanged against the frozen criteria and retain the complete evidence bundles.
