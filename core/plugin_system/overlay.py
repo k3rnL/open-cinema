@@ -367,6 +367,7 @@ class PluginGenerationBuilder:
                     "uv",
                     "pip",
                     "install",
+                    "--no-cache",
                     "--python",
                     sys.executable,
                     "--target",
@@ -375,13 +376,23 @@ class PluginGenerationBuilder:
                     str(constraints_path),
                     *[str(path) for path in installed_wheels],
                 ]
-                completed = self.runner(
-                    command,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=300,
-                )
+                try:
+                    completed = self.runner(
+                        command,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=300,
+                    )
+                except subprocess.TimeoutExpired as error:
+                    raise PluginOverlayError(
+                        "plugin dependency installation timed out"
+                    ) from error
+                except subprocess.CalledProcessError as error:
+                    detail = (error.stderr or error.stdout or str(error))[-4096:]
+                    raise PluginOverlayError(
+                        f"plugin dependency installation failed: {detail}"
+                    ) from error
                 build_log = (completed.stdout or "") + (completed.stderr or "")
             else:
                 build_log = "No overlay plugins are installed in this generation."

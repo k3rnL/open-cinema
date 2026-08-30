@@ -255,7 +255,11 @@ def test_core_constraints_exclude_the_plugin_distribution_being_replaced(
 
 
 class FakeInstaller:
+    def __init__(self):
+        self.commands = []
+
     def __call__(self, argv, **kwargs):
+        self.commands.append(argv)
         target = Path(argv[argv.index("--target") + 1])
         with zipfile.ZipFile(argv[-1]) as archive:
             archive.extractall(target)
@@ -265,7 +269,8 @@ class FakeInstaller:
 def test_generation_builder_targets_fresh_overlay_and_records_artifacts(tmp_path) -> None:
     manager = PluginOverlayManager(tmp_path / "plugins")
     wheel = _wheel(tmp_path)
-    builder = PluginGenerationBuilder(manager, runner=FakeInstaller())
+    installer = FakeInstaller()
+    builder = PluginGenerationBuilder(manager, runner=installer)
 
     manifest = builder.build(
         generation_id="gen-build",
@@ -280,6 +285,7 @@ def test_generation_builder_targets_fresh_overlay_and_records_artifacts(tmp_path
     )
     assert manager.validate("gen-build", staged=True)["plugins"][0]["id"] == "test.plugin"
     assert not (Path(sys.prefix) / "open_cinema_test_plugin-1.0.0.dist-info").exists()
+    assert "--no-cache" in installer.commands[0]
 
 
 def test_build_failure_removes_partial_generation(tmp_path) -> None:
@@ -298,6 +304,31 @@ def test_build_failure_removes_partial_generation(tmp_path) -> None:
         )
 
     assert not manager.generation_path("gen-failed", staged=True).exists()
+
+
+def test_installer_failure_reports_bounded_stderr_and_cleans_staging(tmp_path) -> None:
+    manager = PluginOverlayManager(tmp_path / "plugins")
+    wheel = _wheel(tmp_path)
+
+    def fail(argv, **kwargs):
+        raise subprocess.CalledProcessError(
+            2,
+            argv,
+            stderr="Failed to initialize cache: permission denied",
+        )
+
+    with pytest.raises(
+        PluginOverlayError,
+        match="Failed to initialize cache: permission denied",
+    ):
+        PluginGenerationBuilder(manager, runner=fail).build(
+            generation_id="gen-installer-failed",
+            wheels=(wheel,),
+            created_at="2026-08-30T00:00:00Z",
+            previous_generation=None,
+        )
+
+    assert not manager.generation_path("gen-installer-failed", staged=True).exists()
 
 
 def test_generation_builder_enforces_storage_limit_and_cleans_staging(tmp_path) -> None:

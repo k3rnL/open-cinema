@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User authentication
 - Production deployment configuration
 
+## [0.3.5] - 2026-08-30
+
+### Fixed
+- Install plugin overlay dependencies without a user-home package cache so
+  lifecycle operations work inside the hardened systemd service sandbox.
+- Include bounded installer output in failed plugin-operation diagnostics.
+
 ## [0.3.4] - 2026-08-30
 
 ### Fixed
