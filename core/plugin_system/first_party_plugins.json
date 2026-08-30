@@ -12,9 +12,9 @@
       "icon": "spotify",
       "versions": [
         {
-          "version": "0.1.8",
-          "revision": "v0.1.8",
-          "resolvedCommit": "d50279e434adb6710a9562de76b1260f68edf938",
+          "version": "0.1.9",
+          "revision": "v0.1.9",
+          "resolvedCommit": "8791e6f65ddd5ed448cb959fbfee4741274b8bda",
           "mutable": false,
           "published": true,
           "pluginContract": {"minimum": 2, "maximum": 2},
@@ -34,14 +34,14 @@
             {
               "operatingSystem": "linux",
               "architecture": "aarch64",
-              "url": "https://github.com/k3rnL/open-cinema-librespot/releases/download/v0.1.8/open_cinema_librespot-0.1.8-py3-none-linux_aarch64.whl",
-              "digest": "sha256:f75bcde83c71aa227b8a894f7d27b84dede3cf3968d376d54ee3e987033632ed"
+              "url": "https://github.com/k3rnL/open-cinema-librespot/releases/download/v0.1.9/open_cinema_librespot-0.1.9-py3-none-linux_aarch64.whl",
+              "digest": "sha256:0ed14e618df3418cf30cade5de5b774788f01b557c308a4f07a6ffd9193918b1"
             },
             {
               "operatingSystem": "linux",
               "architecture": "x86_64",
-              "url": "https://github.com/k3rnL/open-cinema-librespot/releases/download/v0.1.8/open_cinema_librespot-0.1.8-py3-none-linux_x86_64.whl",
-              "digest": "sha256:800188da28447ee34fb575b41c880f30747867f7a669f0189d55b422ab47b8f7"
+              "url": "https://github.com/k3rnL/open-cinema-librespot/releases/download/v0.1.9/open_cinema_librespot-0.1.9-py3-none-linux_x86_64.whl",
+              "digest": "sha256:a9f86962e6ea64f66ac8865c71aa34f17f8a1fc1c0cf4c10cf7be08ea6e2af40"
             }
           ]
         }

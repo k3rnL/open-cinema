@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User authentication
 - Production deployment configuration
 
+## [0.3.8] - 2026-08-30
+
+### Changed
+- Select the immutable Librespot plugin 0.1.9 release whose event relay works
+  from isolated plugin overlay generations.
+
 ## [0.3.7] - 2026-08-30
 
 ### Fixed
