@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User authentication
 - Production deployment configuration
 
+## [0.3.9] - 2026-08-30
+
+### Fixed
+- Validate an update candidate in a clean plugin-discovery context so a module
+  from the active generation cannot shadow the new overlay.
+
 ## [0.3.8] - 2026-08-30
 
 ### Changed

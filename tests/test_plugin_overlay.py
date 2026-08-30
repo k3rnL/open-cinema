@@ -52,8 +52,8 @@ def _stage(manager: PluginOverlayManager, generation_id: str, previous=None) -> 
     return path
 
 
-def _plugin_toml() -> str:
-    return """
+def _plugin_toml(*, version: str = "1.0.0") -> str:
+    return f"""
 schema-version = 2
 permissions = []
 [plugin]
@@ -62,7 +62,7 @@ distribution = "open-cinema-test-plugin"
 display-name = "Test"
 description = "Overlay fixture."
 vendor = "Tests"
-version = "1.0.0"
+version = "{version}"
 license = "MIT"
 source-url = "https://example.test/source"
 documentation-url = "https://example.test/docs"
@@ -87,12 +87,21 @@ uninstall = "application-restart"
 """
 
 
-def _wheel(tmp_path: Path, *, requirement: str | None = None) -> Path:
-    path = tmp_path / "open_cinema_test_plugin-1.0.0-py3-none-any.whl"
-    metadata = "Metadata-Version: 2.3\nName: open-cinema-test-plugin\nVersion: 1.0.0\n"
+def _wheel(
+    tmp_path: Path,
+    *,
+    requirement: str | None = None,
+    version: str = "1.0.0",
+) -> Path:
+    path = tmp_path / f"open_cinema_test_plugin-{version}-py3-none-any.whl"
+    metadata = (
+        "Metadata-Version: 2.3\n"
+        "Name: open-cinema-test-plugin\n"
+        f"Version: {version}\n"
+    )
     if requirement is not None:
         metadata += f"Requires-Dist: {requirement}\n"
-    plugin_module = """
+    plugin_module = f"""
 from django.apps import apps
 from core.plugin_system import ApiCapability, OpenCinemaPlugin, RuntimePluginIdentity
 
@@ -102,28 +111,34 @@ if not apps.ready:
 class TestPlugin(OpenCinemaPlugin):
     @property
     def identity(self):
-        return RuntimePluginIdentity("test.plugin", "open-cinema-test-plugin", "1.0.0")
+        return RuntimePluginIdentity("test.plugin", "open-cinema-test-plugin", "{version}")
 
     def capabilities(self):
         return (ApiCapability("test.plugin.api"),)
 """
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("test_plugin/__init__.py", plugin_module)
-        archive.writestr("test_plugin/open-cinema-plugin.toml", _plugin_toml())
-        archive.writestr("open_cinema_test_plugin-1.0.0.dist-info/METADATA", metadata)
         archive.writestr(
-            "open_cinema_test_plugin-1.0.0.dist-info/entry_points.txt",
+            "test_plugin/open-cinema-plugin.toml",
+            _plugin_toml(version=version),
+        )
+        archive.writestr(
+            f"open_cinema_test_plugin-{version}.dist-info/METADATA",
+            metadata,
+        )
+        archive.writestr(
+            f"open_cinema_test_plugin-{version}.dist-info/entry_points.txt",
             "[open_cinema.plugins]\ntest.plugin = test_plugin:TestPlugin\n",
         )
         archive.writestr(
-            "open_cinema_test_plugin-1.0.0.dist-info/RECORD",
+            f"open_cinema_test_plugin-{version}.dist-info/RECORD",
             "\n".join(
                 (
                     "test_plugin/__init__.py,,",
                     "test_plugin/open-cinema-plugin.toml,,",
-                    "open_cinema_test_plugin-1.0.0.dist-info/METADATA,,",
-                    "open_cinema_test_plugin-1.0.0.dist-info/entry_points.txt,,",
-                    "open_cinema_test_plugin-1.0.0.dist-info/RECORD,,",
+                    f"open_cinema_test_plugin-{version}.dist-info/METADATA,,",
+                    f"open_cinema_test_plugin-{version}.dist-info/entry_points.txt,,",
+                    f"open_cinema_test_plugin-{version}.dist-info/RECORD,,",
                 )
             ),
         )
@@ -316,6 +331,32 @@ def test_generation_builder_targets_fresh_overlay_and_records_artifacts(tmp_path
     assert manager.validate("gen-build", staged=True)["plugins"][0]["id"] == "test.plugin"
     assert not (Path(sys.prefix) / "open_cinema_test_plugin-1.0.0.dist-info").exists()
     assert "--no-cache" in installer.commands[0]
+
+
+def test_candidate_validation_does_not_import_the_active_generation(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    manager = PluginOverlayManager(tmp_path / "plugins")
+    monkeypatch.setenv("OPEN_CINEMA_PLUGIN_ROOT", str(manager.root))
+    builder = PluginGenerationBuilder(manager, runner=FakeInstaller())
+    builder.build(
+        generation_id="gen-old",
+        wheels=(_wheel(tmp_path, version="1.0.0"),),
+        created_at="2026-08-30T00:00:00Z",
+        previous_generation=None,
+    )
+    manager.activate("gen-old")
+
+    candidate = builder.build(
+        generation_id="gen-candidate",
+        wheels=(_wheel(tmp_path, version="1.1.0"),),
+        created_at="2026-08-30T00:01:00Z",
+        previous_generation="gen-old",
+    )
+
+    assert candidate.plugins[0]["version"] == "1.1.0"
+    assert manager.pointer("current") == "gen-old"
 
 
 def test_build_failure_removes_partial_generation(tmp_path) -> None:

@@ -18,8 +18,15 @@ RESULT_PREFIX = "OPEN_CINEMA_PLUGIN_VALIDATION="
 
 def validate_overlay(site_packages: Path, expected: dict[str, str]) -> dict[str, object]:
     overlay = str(site_packages.resolve())
-    sys.path.append(overlay)
+    # This interpreter may inherit the active generation path from the worker
+    # that launched it. Put the candidate first inside this disposable process
+    # so a same-named module from the previous generation cannot be reused.
+    sys.path.insert(0, overlay)
     importlib.invalidate_caches()
+    # Django's normal app startup discovers the currently active generation.
+    # Candidate validation owns discovery below and must not import that older
+    # generation into this otherwise isolated interpreter first.
+    os.environ["OPEN_CINEMA_PLUGIN_VALIDATION_MODE"] = "1"
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "opencinema.settings")
     import django
     from django.apps import apps

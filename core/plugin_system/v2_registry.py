@@ -49,6 +49,8 @@ def _editable_distribution_path(distribution) -> Path | None:
 def runtime_plugin_entry_points() -> tuple[object, ...]:
     """Return only built-in, active-generation, and explicitly allowed editable plugins."""
 
+    if os.environ.get("OPEN_CINEMA_PLUGIN_VALIDATION_MODE") == "1":
+        return ()
     distributions = list(metadata.distributions())
     plugin_root = Path(
         os.environ.get(
