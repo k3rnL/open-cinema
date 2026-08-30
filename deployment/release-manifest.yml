@@ -1,17 +1,17 @@
 ---
 schema_version: 1
-release_id: open-cinema-0.3.10-candidate
+release_id: open-cinema-0.3.11-candidate
 input_mode: appliance
 status: experimental
 promotable: false
 
 # This checked-in document is the tag-build template. It deliberately cannot be
-# deployed until the v0.3.10 workflow replaces the Open Cinema placeholder,
+# deployed until the v0.3.11 workflow replaces the Open Cinema placeholder,
 # mirrors the independently verified UI/decoder/CamillaDSP bytes, and publishes
 # open-cinema-coordinated-manifest.yml with status=supported/promotable=true.
 candidate_notice: >-
   This tag-build template is not deployable; use the finalized manifest
-  published by v0.3.10.
+  published by v0.3.11.
 platform:
   compatibility_matrix: open-cinema-raspberry-audio-v1
   distribution_family: Debian
@@ -40,7 +40,7 @@ runtime_profile: full
 
 components:
   open_cinema:
-    version: 0.3.10
+    version: 0.3.11
     repository: k3rnL/open-cinema
     source_mode: tag-build-finalization-placeholder
     immutable: false
@@ -75,26 +75,26 @@ components:
       sha256: ade1107162e1624afa12e101dd4a542d402af372acffdb69999ad8d7a552e858
 
   management_ui:
-    version: 2.1.1
+    version: 2.1.3
     repository: k3rnL/open-cinema-ui
     source_mode: coordinated-release-mirror
-    tag: v2.1.1
-    commit: 9778547b5eee1ededa23fa1a14e3006ea754e728
+    tag: v2.1.3
+    commit: 5164dcdfa14cd3ca4baae85a4b9261bc781d0405
     immutable: true
     artifacts:
-      - name: open-cinema-admin-v2.1.1.tar.gz
+      - name: open-cinema-admin-v2.1.3.tar.gz
         kind: admin-ui-archive
-        url: https://github.com/k3rnL/open-cinema-ui/releases/download/v2.1.1/open-cinema-admin-v2.1.1.tar.gz
-        sha256: c481a060b2cc1e9c616217aaae9fcdc1980253acd50212dca3ed85a16edb5c60
-        size_bytes: 1119893
+        url: https://github.com/k3rnL/open-cinema-ui/releases/download/v2.1.3/open-cinema-admin-v2.1.3.tar.gz
+        sha256: 754ba8d355ad629633e790b7b2d4f38bbb66379db992c79be0903a406ebe3aea
+        size_bytes: 1119709
         platform:
           distribution_family: any
           architecture: any
         provenance_ref: components.management_ui.provenance.admin
-      - name: open-cinema-ui-v2.1.1.tar.gz
+      - name: open-cinema-ui-v2.1.3.tar.gz
         kind: on-box-ui-archive
-        url: https://github.com/k3rnL/open-cinema-ui/releases/download/v2.1.1/open-cinema-ui-v2.1.1.tar.gz
-        sha256: 0aebcac3ec8a2763729dbcf65abaa330314563aed59d7227994110887dd7bcab
+        url: https://github.com/k3rnL/open-cinema-ui/releases/download/v2.1.3/open-cinema-ui-v2.1.3.tar.gz
+        sha256: 40800c7ae6c6f85752dd01d233326ad9ec8bc469c4d51a11d1f85ffb423f649f
         size_bytes: 67442
         platform:
           distribution_family: any
@@ -103,18 +103,18 @@ components:
     provenance:
       admin:
         repository: k3rnL/open-cinema-ui
-        commit: 9778547b5eee1ededa23fa1a14e3006ea754e728
-        tag: v2.1.1
-        workflow_run: https://github.com/k3rnL/open-cinema-ui/actions/runs/33313518284
-        url: https://github.com/k3rnL/open-cinema-ui/releases/download/v2.1.1/open-cinema-admin-v2.1.1.tar.gz.provenance.json
-        sha256: 9c07328152b1b5050a8635535c1183ce3136a8c68e4db9379d3833f8efca052b
+        commit: 5164dcdfa14cd3ca4baae85a4b9261bc781d0405
+        tag: v2.1.3
+        workflow_run: https://github.com/k3rnL/open-cinema-ui/actions/runs/33327347312
+        url: https://github.com/k3rnL/open-cinema-ui/releases/download/v2.1.3/open-cinema-admin-v2.1.3.tar.gz.provenance.json
+        sha256: 8a23cb3fef475aadfbdd946cf0c3a1cd5dcbed24fdf4b57fad9c046557e820bb
       on_box:
         repository: k3rnL/open-cinema-ui
-        commit: 9778547b5eee1ededa23fa1a14e3006ea754e728
-        tag: v2.1.1
-        workflow_run: https://github.com/k3rnL/open-cinema-ui/actions/runs/33313518284
-        url: https://github.com/k3rnL/open-cinema-ui/releases/download/v2.1.1/open-cinema-ui-v2.1.1.tar.gz.provenance.json
-        sha256: 67279167768e8190df8a57e44294987c74ed04aa4e56317d8e31af084b7bc695
+        commit: 5164dcdfa14cd3ca4baae85a4b9261bc781d0405
+        tag: v2.1.3
+        workflow_run: https://github.com/k3rnL/open-cinema-ui/actions/runs/33327347312
+        url: https://github.com/k3rnL/open-cinema-ui/releases/download/v2.1.3/open-cinema-ui-v2.1.3.tar.gz.provenance.json
+        sha256: 75ce7b52c2963b07bea2c8f579ed012581f42c5f2986cb606b1eb5436f0bba97
 
   pcm_auto_decoder:
     version: 0.2.2

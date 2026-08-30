@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User authentication
 - Production deployment configuration
 
+## [0.3.11] - 2026-08-30
+
+### Fixed
+- Select the librespot plugin release that preserves its immutable overlay
+  import path for playback events.
+- Ship the administration UI that presents plugin-managed audio sources and
+  suppresses obsolete plugin-operation failures after a successful update.
+
 ## [0.3.10] - 2026-08-30
 
 ### Fixed
