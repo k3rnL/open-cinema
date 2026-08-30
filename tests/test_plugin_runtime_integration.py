@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import platform
+from pathlib import Path
 from time import sleep
+from types import SimpleNamespace
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -11,6 +13,7 @@ from django.urls import clear_url_caches, path
 from django.utils import timezone
 
 from api import urls as api_urls
+from api.models import PluginInstallation
 from core.plugin_system import (
     ActionConfirmation,
     ApiCapability,
@@ -25,12 +28,19 @@ from core.plugin_system import (
     PluginDesiredState,
     PluginDistributionRegistry,
     PluginHealth,
+    PluginProvenance,
     PluginRuntimeResult,
     RuntimePluginIdentity,
     RuntimeStatus,
     parse_plugin_manifest,
 )
-from core.plugin_system.integration import PluginAutomationRegistry, plugin_api_urlpatterns
+from core.plugin_system.integration import (
+    PluginAutomationRegistry,
+    plugin_api_urlpatterns,
+)
+from core.plugin_system.persistence_sync import synchronize_plugin_inventory
+from core.plugin_system.storage import PluginInstallationRepository
+from core.plugin_system.v2_registry import runtime_plugin_entry_points
 
 pytestmark = pytest.mark.django_db
 
@@ -73,7 +83,9 @@ def _manifest(capabilities):
 class RuntimeTestPlugin(OpenCinemaPlugin):
     @property
     def identity(self):
-        return RuntimePluginIdentity("test.runtime", "open-cinema-test-runtime", "1.0.0")
+        return RuntimePluginIdentity(
+            "test.runtime", "open-cinema-test-runtime", "1.0.0"
+        )
 
     @staticmethod
     def ok(request):
@@ -169,6 +181,51 @@ def test_plugin_routes_enforce_auth_state_health_timeout_and_failure_isolation(
     assert registry.catalogue_document()["plugins"][0]["capabilities"][0]["diagnostics"]
 
 
+def test_startup_preserves_stronger_acquisition_provenance() -> None:
+    manifest = _manifest(
+        [
+            {"id": "test.runtime.api", "kind": "api", "version": 1},
+            {
+                "id": "test.runtime.automation",
+                "kind": "automation",
+                "version": 1,
+            },
+        ]
+    )
+    exact_provenance = {
+        "sourceType": "catalogue",
+        "sourceUrl": "https://example.test/releases/plugin.whl",
+        "artifactDigest": "sha256:" + "a" * 64,
+        "resolvedRevision": "b" * 40,
+        "version": "1.0.0",
+    }
+    PluginInstallationRepository.save_snapshot(
+        plugin_id=manifest.plugin_id,
+        distribution_id=manifest.distribution_id,
+        installed_version=manifest.version,
+        manifest=manifest.to_document(),
+        provenance=exact_provenance,
+        lifecycle_impact=manifest.lifecycle.to_document(),
+    )
+    registry = PluginDistributionRegistry()
+    registry.register(
+        manifest,
+        RuntimeTestPlugin(),
+        provenance=PluginProvenance(
+            "installed-distribution",
+            manifest.distribution_id,
+            manifest.version,
+            source_url=manifest.source_url,
+        ),
+    )
+
+    assert synchronize_plugin_inventory(registry)
+
+    installation = PluginInstallation.objects.get(plugin_id=manifest.plugin_id)
+    assert installation.provenance_snapshot == exact_provenance
+    assert registry.get(manifest.plugin_id).desired_state is PluginDesiredState.DISABLED
+
+
 def test_unsafe_plugin_route_uses_core_csrf_protection(runtime_routes) -> None:
     client_class = pytest.importorskip("django.test").Client
     csrf_client = client_class(enforce_csrf_checks=True)
@@ -240,7 +297,9 @@ class SourceProvider:
         return self._result("prepare")
 
     def observe(self, context):
-        return ManagedResourceObservation(self._result("observe"), timezone.now().isoformat(), 1000)
+        return ManagedResourceObservation(
+            self._result("observe"), timezone.now().isoformat(), 1000
+        )
 
     def activate(self, context):
         return self._result("activate")
@@ -284,13 +343,17 @@ class ManagedPlugin(OpenCinemaPlugin):
 
     @property
     def identity(self):
-        return RuntimePluginIdentity("test.runtime", "open-cinema-test-runtime", "1.0.0")
+        return RuntimePluginIdentity(
+            "test.runtime", "open-cinema-test-runtime", "1.0.0"
+        )
 
     def capabilities(self):
         return self.resource, self.source
 
 
-def test_managed_resource_and_audio_source_contracts_are_typed_and_core_bounded() -> None:
+def test_managed_resource_and_audio_source_contracts_are_typed_and_core_bounded() -> (
+    None
+):
     manifest = _manifest(
         [
             {
@@ -342,3 +405,55 @@ def test_plugin_ui_bootstrap_is_authenticated_cacheable_and_bounded(client) -> N
     assert response.json()["schemaVersion"] == 1
     assert response.headers["Cache-Control"].startswith("private")
     assert cached.status_code == 304
+
+
+def test_runtime_discovery_excludes_unmanaged_environment_plugins(
+    tmp_path, monkeypatch
+) -> None:
+    editable = tmp_path / "editable-plugin"
+    editable.mkdir()
+
+    class Distribution:
+        def __init__(self, name, entry_name, source: Path | None = None):
+            self.metadata = {"Name": name}
+            self.entry_points = (
+                SimpleNamespace(
+                    group="open_cinema.plugins",
+                    name=entry_name,
+                    value=f"{entry_name}:Plugin",
+                    dist=self,
+                ),
+            )
+            self.source = source
+
+        def read_text(self, filename):
+            if filename != "direct_url.json" or self.source is None:
+                return None
+            return json.dumps(
+                {
+                    "url": self.source.as_uri(),
+                    "dir_info": {"editable": True},
+                }
+            )
+
+        def locate_file(self, filename):
+            return tmp_path / "site-packages" / filename
+
+    core = Distribution("open-cinema", "counter")
+    unmanaged = Distribution("unmanaged-plugin", "unmanaged", editable)
+    monkeypatch.setattr(
+        "core.plugin_system.v2_registry.metadata.distributions",
+        lambda **kwargs: () if kwargs.get("path") else (core, unmanaged),
+    )
+    monkeypatch.setenv("OPEN_CINEMA_PLUGIN_ROOT", str(tmp_path / "plugins"))
+    monkeypatch.delenv("OPEN_CINEMA_PLUGIN_ALLOW_EDITABLE", raising=False)
+    monkeypatch.delenv("OPEN_CINEMA_PLUGIN_EDITABLE_DIRS", raising=False)
+
+    assert [item.name for item in runtime_plugin_entry_points()] == ["counter"]
+
+    monkeypatch.setenv("OPEN_CINEMA_PLUGIN_ALLOW_EDITABLE", "1")
+    monkeypatch.setenv("OPEN_CINEMA_PLUGIN_EDITABLE_DIRS", str(editable))
+    assert [item.name for item in runtime_plugin_entry_points()] == [
+        "counter",
+        "unmanaged",
+    ]

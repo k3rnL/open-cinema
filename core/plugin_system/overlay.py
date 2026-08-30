@@ -250,16 +250,21 @@ class PluginOverlayManager:
         return tuple(removed)
 
 
-def export_core_constraints(path: Path, *, excluded_root: Path | None = None) -> dict[str, str]:
+def export_core_constraints(
+    path: Path,
+    *,
+    excluded_root: Path | None = None,
+    excluded_distributions: frozenset[str] = frozenset(),
+) -> dict[str, str]:
     excluded = excluded_root.resolve() if excluded_root is not None else None
+    excluded_names = {name.lower().replace("_", "-") for name in excluded_distributions}
     distributions = {
         distribution.metadata["Name"].lower().replace("_", "-"): distribution.version
         for distribution in metadata.distributions()
         if distribution.metadata.get("Name")
+        and distribution.metadata["Name"].lower().replace("_", "-") not in excluded_names
         and (
-            excluded is None
-            or excluded
-            not in Path(distribution.locate_file("")).resolve().parents
+            excluded is None or excluded not in Path(distribution.locate_file("")).resolve().parents
         )
     }
     lines = [f"{name}=={version}" for name, version in sorted(distributions.items())]
@@ -340,7 +345,13 @@ class PluginGenerationBuilder:
                 inspect_plugin_wheel(Path(item)) for item in wheels
             )
             constraints_path = staging / "core-constraints.txt"
-            core = export_core_constraints(constraints_path, excluded_root=self.manager.root)
+            core = export_core_constraints(
+                constraints_path,
+                excluded_root=self.manager.root,
+                excluded_distributions=frozenset(
+                    item.manifest.distribution_id for item in inspected
+                ),
+            )
             reject_core_dependency_conflicts(tuple(item.path for item in inspected), core)
             artifact_documents = []
             installed_wheels = []

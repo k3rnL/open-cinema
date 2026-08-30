@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import json
+import hashlib
+import io
 import platform
 import subprocess
 import zipfile
@@ -10,7 +11,9 @@ from pathlib import Path
 import pytest
 from django.contrib.auth import get_user_model
 
+from api.models import PluginOperation, PluginOperationKind
 from core.plugin_system.acquisition import (
+    CatalogueWheelAcquirer,
     GitPluginAcquirer,
     PluginAcquisitionCancelled,
     PluginAcquisitionError,
@@ -19,7 +22,12 @@ from core.plugin_system.acquisition import (
     verify_catalogue_candidate,
     verify_catalogue_wheel,
 )
-from core.plugin_system.catalogue import FirstPartyPluginCatalogue
+from core.plugin_system.catalogue import (
+    CatalogueArtifact,
+    FirstPartyPluginCatalogue,
+    current_platform,
+)
+from core.plugin_system.operations import _install_catalogue_wheel
 from core.plugin_system.storage import PluginInstallationRepository
 
 pytestmark = pytest.mark.django_db
@@ -29,7 +37,7 @@ def _manifest_toml(
     *,
     plugin_id: str = "open-cinema.librespot",
     distribution: str = "open-cinema-librespot",
-    version: str = "0.1.0",
+    version: str = "0.1.8",
 ) -> str:
     return f"""
 schema-version = 2
@@ -70,15 +78,48 @@ uninstall = "application-restart"
 """
 
 
-def test_first_party_catalogue_is_strict_and_exposes_unpublished_librespot() -> None:
+def test_first_party_catalogue_publishes_verified_librespot_release() -> None:
     catalogue = FirstPartyPluginCatalogue.load()
     librespot = catalogue.get("open-cinema.librespot")
 
     assert librespot.verified_publisher
     assert librespot.repository.startswith("https://")
     assert librespot.latest().compatible
-    assert not librespot.latest().published
-    assert not librespot.latest().to_document()["installable"]
+    assert librespot.latest().published
+    assert librespot.latest().to_document()["installable"]
+    assert {
+        (artifact.operating_system, artifact.architecture, artifact.digest)
+        for artifact in librespot.latest().artifacts
+    } == {
+        (
+            "linux",
+            "aarch64",
+            "sha256:f75bcde83c71aa227b8a894f7d27b84dede3cf3968d376d54ee3e987033632ed",
+        ),
+        (
+            "linux",
+            "x86_64",
+            "sha256:800188da28447ee34fb575b41c880f30747867f7a669f0189d55b422ab47b8f7",
+        ),
+    }
+
+
+def test_catalogue_artifact_selection_normalizes_common_architecture_names() -> None:
+    catalogue = FirstPartyPluginCatalogue.load().get("open-cinema.librespot")
+    version = replace(
+        catalogue.latest(),
+        artifacts=(
+            CatalogueArtifact(
+                "linux",
+                "aarch64",
+                "https://example.test/open-cinema-librespot-aarch64.whl",
+                "sha256:" + "a" * 64,
+            ),
+        ),
+    )
+
+    assert version.artifact_for("linux", "arm64").architecture == "aarch64"
+    assert version.artifact_for("linux", "x86_64") is None
 
 
 def test_catalogue_and_installed_inventory_apis_are_staff_only(client) -> None:
@@ -92,7 +133,7 @@ def test_catalogue_and_installed_inventory_apis_are_staff_only(client) -> None:
     PluginInstallationRepository.save_snapshot(
         plugin_id="open-cinema.librespot",
         distribution_id="open-cinema-librespot",
-        installed_version="0.1.0",
+        installed_version="0.1.8",
         manifest={"id": "open-cinema.librespot"},
         provenance={"sourceType": "git", "resolvedRevision": "a" * 40},
         lifecycle_impact={"enable": "hot"},
@@ -154,7 +195,11 @@ def test_git_candidate_records_resolved_provenance_and_cleans_staging(tmp_path) 
     )
     checkout = candidate.checkout_path
     catalogue = FirstPartyPluginCatalogue.load().get("open-cinema.librespot")
-    verify_catalogue_candidate(candidate, catalogue, expected_version="0.1.0")
+    catalogue = replace(
+        catalogue,
+        versions=(replace(catalogue.latest(), resolved_commit=candidate.resolved_commit),),
+    )
+    verify_catalogue_candidate(candidate, catalogue, expected_version="0.1.8")
 
     assert candidate.mutable_revision
     assert candidate.resolved_commit == "a" * 40
@@ -192,7 +237,7 @@ def test_catalogue_version_mismatch_is_rejected(tmp_path) -> None:
     candidate.manifest = replace(candidate.manifest, version="0.2.0")
     try:
         with pytest.raises(PluginAcquisitionError, match="version"):
-            verify_catalogue_candidate(candidate, catalogue, expected_version="0.1.0")
+            verify_catalogue_candidate(candidate, catalogue, expected_version="0.1.8")
     finally:
         candidate.cleanup()
 
@@ -254,24 +299,170 @@ def test_git_acquisition_requires_trust_and_honours_cancellation(tmp_path) -> No
         )
 
 
-def test_built_wheel_manifest_and_digest_are_inspected_before_activation(tmp_path) -> None:
-    wheel = tmp_path / "open_cinema_librespot-0.1.0-py3-none-any.whl"
+def test_built_wheel_manifest_and_digest_are_inspected_before_activation(
+    tmp_path,
+) -> None:
+    wheel = tmp_path / "open_cinema_librespot-0.1.8-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr("open_cinema_librespot/open-cinema-plugin.toml", _manifest_toml())
         archive.writestr(
-            "open_cinema_librespot-0.1.0.dist-info/METADATA",
-            "Metadata-Version: 2.3\nName: open-cinema-librespot\nVersion: 0.1.0\n",
+            "open_cinema_librespot-0.1.8.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: open-cinema-librespot\nVersion: 0.1.8\n",
         )
 
     inspected = inspect_plugin_wheel(wheel)
 
     assert inspected.manifest.plugin_id == "open-cinema.librespot"
     assert inspected.digest.startswith("sha256:")
-    verify_catalogue_wheel(
-        inspected,
-        FirstPartyPluginCatalogue.load().get("open-cinema.librespot"),
-        expected_version="0.1.0",
+    catalogue = FirstPartyPluginCatalogue.load().get("open-cinema.librespot")
+    operating_system, architecture = current_platform()
+    artifact = CatalogueArtifact(
+        operating_system,
+        architecture,
+        "https://example.test/open-cinema-librespot.whl",
+        inspected.digest,
     )
+    catalogue = replace(
+        catalogue,
+        versions=(replace(catalogue.latest(), artifacts=(artifact,)),),
+    )
+
+    verify_catalogue_wheel(inspected, catalogue, expected_version="0.1.8")
+
+
+def test_catalogue_wheel_download_is_bounded_verified_and_cleaned(tmp_path) -> None:
+    wheel = tmp_path / "source.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr("open_cinema_librespot/open-cinema-plugin.toml", _manifest_toml())
+        archive.writestr(
+            "open_cinema_librespot-0.1.8.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: open-cinema-librespot\nVersion: 0.1.8\n",
+        )
+    wheel_bytes = wheel.read_bytes()
+    digest = "sha256:" + hashlib.sha256(wheel_bytes).hexdigest()
+
+    class Response(io.BytesIO):
+        headers = {"Content-Length": str(len(wheel_bytes))}
+
+    acquirer = CatalogueWheelAcquirer(
+        opener=lambda url, timeout: Response(wheel_bytes),
+        staging_root=tmp_path / "downloads",
+    )
+    artifact = CatalogueArtifact(
+        "linux",
+        current_platform()[1],
+        "https://example.test/open-cinema-librespot.whl",
+        digest,
+    )
+
+    with acquirer.acquire(artifact) as candidate:
+        downloaded = candidate.path
+        assert candidate.inspected.manifest.plugin_id == "open-cinema.librespot"
+        assert candidate.provenance_document()["artifactDigest"] == digest
+        assert downloaded.exists()
+
+    assert not downloaded.exists()
+
+
+def test_catalogue_wheel_rejects_bad_digest_without_retaining_bytes(tmp_path) -> None:
+    payload = b"not the pinned wheel"
+
+    class Response(io.BytesIO):
+        headers = {"Content-Length": str(len(payload))}
+
+    downloads = tmp_path / "downloads"
+    acquirer = CatalogueWheelAcquirer(
+        opener=lambda url, timeout: Response(payload),
+        staging_root=downloads,
+    )
+    artifact = CatalogueArtifact(
+        "linux",
+        current_platform()[1],
+        "https://example.test/open-cinema-librespot.whl",
+        "sha256:" + "0" * 64,
+    )
+
+    with pytest.raises(PluginAcquisitionError, match="digest"):
+        acquirer.acquire(artifact)
+
+    assert not tuple(downloads.iterdir())
+
+
+def test_catalogue_install_uses_published_wheel_without_source_build(tmp_path, monkeypatch) -> None:
+    wheel = tmp_path / "open_cinema_librespot-0.1.8-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr("open_cinema_librespot/open-cinema-plugin.toml", _manifest_toml())
+        archive.writestr(
+            "open_cinema_librespot-0.1.8.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: open-cinema-librespot\nVersion: 0.1.8\n",
+        )
+    wheel_bytes = wheel.read_bytes()
+    operating_system, architecture = current_platform()
+    artifact = CatalogueArtifact(
+        operating_system,
+        architecture,
+        "https://example.test/open-cinema-librespot.whl",
+        "sha256:" + hashlib.sha256(wheel_bytes).hexdigest(),
+    )
+    entry = FirstPartyPluginCatalogue.load().get("open-cinema.librespot")
+    entry = replace(
+        entry,
+        versions=(
+            replace(
+                entry.latest(),
+                resolved_commit="a" * 40,
+                published=True,
+                artifacts=(artifact,),
+            ),
+        ),
+    )
+
+    class Catalogue:
+        def get(self, plugin_id):
+            return entry if plugin_id == entry.plugin_id else None
+
+    class Response(io.BytesIO):
+        headers = {"Content-Length": str(len(wheel_bytes))}
+
+    acquirer = CatalogueWheelAcquirer(
+        opener=lambda url, timeout: Response(wheel_bytes),
+        staging_root=tmp_path / "downloads",
+    )
+    activated = []
+    monkeypatch.setattr(
+        "core.plugin_system.operations.FirstPartyPluginCatalogue.load",
+        lambda: Catalogue(),
+    )
+    monkeypatch.setattr(
+        "core.plugin_system.operations.CatalogueWheelAcquirer",
+        lambda **kwargs: acquirer,
+    )
+    monkeypatch.setattr(
+        "core.plugin_system.operations._build_source_wheel",
+        lambda *args, **kwargs: pytest.fail("catalogue install must not build source"),
+    )
+    monkeypatch.setattr(
+        "core.plugin_system.operations._activate_plugin_wheel",
+        lambda operation, inspected, provenance: activated.append((inspected, provenance)),
+    )
+    operation = PluginOperation.objects.create(
+        plugin_id=entry.plugin_id,
+        kind=PluginOperationKind.INSTALL,
+        idempotency_key="published-wheel-install",
+        requested_by=get_user_model().objects.create_user(
+            username="published-wheel-admin",
+            is_staff=True,
+        ),
+        stage_data={"sourceType": "catalogue", "version": "0.1.8"},
+    )
+
+    _install_catalogue_wheel(operation)
+
+    assert len(activated) == 1
+    inspected, provenance = activated[0]
+    assert inspected.digest == artifact.digest
+    assert provenance["sourceType"] == "catalogue"
+    assert provenance["resolvedRevision"] == "a" * 40
 
 
 def test_wheel_with_multiple_manifests_is_rejected(tmp_path) -> None:

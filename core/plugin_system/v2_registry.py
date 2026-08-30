@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from importlib import metadata
+from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from opencinema.version import __version__ as OPEN_CINEMA_VERSION
 
@@ -24,6 +28,87 @@ from .v2_contracts import (
     runtime_environment_document,
     validate_runtime_capability_namespace,
 )
+
+
+def _editable_distribution_path(distribution) -> Path | None:
+    try:
+        document = json.loads(distribution.read_text("direct_url.json") or "null")
+        if (
+            not isinstance(document, dict)
+            or document.get("dir_info", {}).get("editable") is not True
+        ):
+            return None
+        parsed = urlparse(str(document.get("url", "")))
+        if parsed.scheme != "file" or parsed.netloc not in {"", "localhost"}:
+            return None
+        return Path(unquote(parsed.path)).resolve()
+    except (AttributeError, OSError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def runtime_plugin_entry_points() -> tuple[object, ...]:
+    """Return only built-in, active-generation, and explicitly allowed editable plugins."""
+
+    distributions = list(metadata.distributions())
+    plugin_root = Path(
+        os.environ.get(
+            "OPEN_CINEMA_PLUGIN_ROOT",
+            str(Path(__file__).resolve().parents[2] / ".plugin-data" / "plugins"),
+        )
+    ).resolve()
+    pointer = plugin_root / "pointers" / "current.json"
+    active_overlay: Path | None = None
+    if pointer.is_file():
+        try:
+            generation_id = json.loads(pointer.read_text(encoding="utf-8"))["generationId"]
+            overlay = (plugin_root / "generations" / str(generation_id) / "site-packages").resolve()
+            if (
+                overlay.parent.parent == (plugin_root / "generations").resolve()
+                and overlay.is_dir()
+            ):
+                active_overlay = overlay
+                distributions.extend(metadata.distributions(path=[str(overlay)]))
+        except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+            pass
+
+    editable_roots: tuple[Path, ...] = ()
+    if os.environ.get("OPEN_CINEMA_PLUGIN_ALLOW_EDITABLE") == "1":
+        editable_roots = tuple(
+            Path(value).resolve()
+            for value in os.environ.get("OPEN_CINEMA_PLUGIN_EDITABLE_DIRS", "").split(os.pathsep)
+            if value
+        )
+
+    selected = []
+    seen: set[tuple[str, str, str]] = set()
+    for distribution in distributions:
+        name = str(distribution.metadata.get("Name", "")).lower().replace("_", "-")
+        editable = _editable_distribution_path(distribution)
+        try:
+            distribution_root = Path(distribution.locate_file("")).resolve()
+        except (AttributeError, OSError, TypeError, ValueError):
+            distribution_root = None
+        allowed = name == "open-cinema"
+        if distribution_root is not None and active_overlay is not None:
+            allowed = allowed or active_overlay in (
+                distribution_root,
+                *distribution_root.parents,
+            )
+        if editable is not None:
+            allowed = allowed or any(
+                root in (editable, *editable.parents) for root in editable_roots
+            )
+        if not allowed:
+            continue
+        for entry_point in distribution.entry_points:
+            if entry_point.group != PLUGIN_ENTRY_POINT:
+                continue
+            key = (entry_point.group, entry_point.name, entry_point.value)
+            if key in seen:
+                continue
+            seen.add(key)
+            selected.append(entry_point)
+    return tuple(selected)
 
 
 class PluginDistributionRegistrationError(ValueError):

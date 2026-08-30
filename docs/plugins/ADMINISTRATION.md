@@ -12,6 +12,13 @@ optional tag or full commit, inspect it, review the resolved commit and mutable
 reference warning, then acknowledge service-account code execution before
 installing.
 
+Marketplace availability is platform-specific. A published release is
+installable only when the catalogue contains an immutable wheel and matching
+digest for the appliance operating system and architecture. The Plugins page
+identifies an unsupported platform; it does not fall back to a source build.
+The downloaded wheel digest, release version, source commit, and platform are
+recorded in installation provenance before the new generation is activated.
+
 Lifecycle actions are serialized and idempotent. A hot action stays on the
 current page. Application restart progress survives the expected connection
 loss and is finalized after readiness. Host reboot always needs a separate

@@ -82,9 +82,9 @@
 - [x] 9.1 Add pull-request CI for supported Python, formatting/lint/type checks, unit tests, option audit, manifest/SDK contract tests, package metadata, source build, and wheel inspection.
 - [x] 9.2 Add x86-64 PipeWire integration CI with fake Spotify playback input and verify format, correlation, unlinked startup, routing, cleanup, and bounded resource use.
 - [x] 9.3 Add a tag-driven release workflow that validates version agreement and clean history, builds x86-64 and ARM64 wheels, verifies embedded binaries, produces digests/provenance, and publishes immutable GitHub release assets.
-- [ ] 9.4 Smoke-install downloaded release wheels into clean supported Open Cinema contract fixtures and prove runtime/plugin/librespot versions and option maps match the tag and artifact metadata.
-- [ ] 9.5 Add the verified release to Open Cinema's hard-coded first-party catalogue with immutable URLs, architecture selectors, digests, compatibility, permissions, capabilities, and documentation links.
-- [ ] 9.6 Exercise marketplace install/update/disable/uninstall/reinstall and failed-artifact rollback using the published bytes rather than a local worktree.
+- [x] 9.4 Smoke-install downloaded release wheels into clean supported Open Cinema contract fixtures and prove runtime/plugin/librespot versions and option maps match the tag and artifact metadata.
+- [x] 9.5 Add the verified release to Open Cinema's hard-coded first-party catalogue with immutable URLs, architecture selectors, digests, compatibility, permissions, capabilities, and documentation links.
+- [x] 9.6 Exercise marketplace install/update/disable/uninstall/reinstall and failed-artifact rollback using the published bytes rather than a local worktree.
 
 ## 10. Documentation and Local Acceptance
 

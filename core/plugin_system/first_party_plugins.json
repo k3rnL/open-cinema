@@ -12,15 +12,38 @@
       "icon": "spotify",
       "versions": [
         {
-          "version": "0.1.0",
-          "revision": "v0.1.0",
-          "resolvedCommit": null,
-          "artifactDigest": null,
+          "version": "0.1.8",
+          "revision": "v0.1.8",
+          "resolvedCommit": "d50279e434adb6710a9562de76b1260f68edf938",
           "mutable": false,
-          "published": false,
+          "published": true,
           "pluginContract": {"minimum": 2, "maximum": 2},
-          "openCinema": ">=0.3.2,<0.4",
-          "capabilities": ["api", "managed-resource", "managed-audio-source", "admin-ui"]
+          "openCinema": ">=0.3.3,<0.4",
+          "capabilities": ["api", "automation", "processing", "managed-resource", "managed-audio-source", "admin-ui"],
+          "permissions": [
+            {
+              "id": "audio.managed-source",
+              "reason": "Owns isolated librespot and PipeWire bridge processes for each configured Spotify Connect source."
+            },
+            {
+              "id": "network.spotify",
+              "reason": "Connects to Spotify services and advertises Spotify Connect identities on configured local interfaces."
+            }
+          ],
+          "artifacts": [
+            {
+              "operatingSystem": "linux",
+              "architecture": "aarch64",
+              "url": "https://github.com/k3rnL/open-cinema-librespot/releases/download/v0.1.8/open_cinema_librespot-0.1.8-py3-none-linux_aarch64.whl",
+              "digest": "sha256:f75bcde83c71aa227b8a894f7d27b84dede3cf3968d376d54ee3e987033632ed"
+            },
+            {
+              "operatingSystem": "linux",
+              "architecture": "x86_64",
+              "url": "https://github.com/k3rnL/open-cinema-librespot/releases/download/v0.1.8/open_cinema_librespot-0.1.8-py3-none-linux_x86_64.whl",
+              "digest": "sha256:800188da28447ee34fb575b41c880f30747867f7a669f0189d55b422ab47b8f7"
+            }
+          ]
         }
       ]
     }

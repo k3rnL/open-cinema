@@ -4,6 +4,7 @@ from django.apps import AppConfig
 
 from core.plugin_system import PluginDistributionRegistry
 from core.plugin_system.integration import PluginAutomationRegistry, plugin_api_urlpatterns
+from core.plugin_system.v2_registry import runtime_plugin_entry_points
 
 # Prevent duplicate URL registration if Django calls ready() more than once.
 _ALREADY_REGISTERED = False
@@ -43,7 +44,7 @@ class ApiConfig(AppConfig):
         if _ALREADY_REGISTERED:
             return
 
-        PLUGIN_REGISTRY.discover()
+        PLUGIN_REGISTRY.discover(entry_points_provider=runtime_plugin_entry_points)
         for diagnostic in PLUGIN_REGISTRY.diagnostics:
             logger.warning(
                 "Plugin %s %s: %s",

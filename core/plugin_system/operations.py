@@ -20,10 +20,11 @@ from api.models import (
 )
 
 from .acquisition import (
+    CatalogueWheelAcquirer,
     GitPluginAcquirer,
+    InspectedPluginWheel,
     PluginAcquisitionError,
     inspect_plugin_wheel,
-    verify_catalogue_candidate,
     verify_catalogue_wheel,
 )
 from .catalogue import FirstPartyPluginCatalogue
@@ -36,7 +37,6 @@ from .overlay import (
 from .storage import (
     PluginInstallationRepository,
     PluginOperationRepository,
-    PluginStorageError,
     PluginUninstallRepository,
     StalePluginStateError,
     redact_plugin_data,
@@ -45,7 +45,6 @@ from .v2_contracts import (
     CapabilityKind,
     DistributionLifecycleContext,
     LifecycleImpact,
-    LifecycleOperation,
     OpenCinemaPlugin,
     PluginDesiredState as RuntimeDesiredState,
     PluginRuntimeResult,
@@ -105,7 +104,9 @@ def operation_document(operation: PluginOperation) -> dict[str, object]:
         "requestedAt": operation.requested_at.isoformat(),
         "startedAt": operation.started_at.isoformat() if operation.started_at else None,
         "updatedAt": operation.updated_at.isoformat(),
-        "completedAt": operation.completed_at.isoformat() if operation.completed_at else None,
+        "completedAt": operation.completed_at.isoformat()
+        if operation.completed_at
+        else None,
         "links": {
             "self": f"/api/plugin-platform/v2/operations/{operation.pk}",
             "cancel": f"/api/plugin-platform/v2/operations/{operation.pk}/cancel",
@@ -142,10 +143,12 @@ def installation_action_documents(
             {
                 "id": state_action,
                 "label": "Disable" if state_action == "disable" else "Enable",
-                "available": installation.observed_state != PluginObservedState.RESTART_PENDING,
+                "available": installation.observed_state
+                != PluginObservedState.RESTART_PENDING,
                 "reason": (
                     "An application restart is pending."
-                    if installation.observed_state == PluginObservedState.RESTART_PENDING
+                    if installation.observed_state
+                    == PluginObservedState.RESTART_PENDING
                     else None
                 ),
                 "method": "POST",
@@ -162,7 +165,8 @@ def installation_action_documents(
             {
                 "id": PluginOperationKind.UNINSTALL,
                 "label": "Uninstall",
-                "available": installation.observed_state != PluginObservedState.RESTART_PENDING,
+                "available": installation.observed_state
+                != PluginObservedState.RESTART_PENDING,
                 "reason": None,
                 "method": "POST",
                 "href": f"{base}/uninstall",
@@ -177,7 +181,8 @@ def installation_action_documents(
                 {
                     "id": PluginOperationKind.UPDATE,
                     "label": "Update",
-                    "available": installation.observed_state != PluginObservedState.RESTART_PENDING,
+                    "available": installation.observed_state
+                    != PluginObservedState.RESTART_PENDING,
                     "reason": None,
                     "method": "POST",
                     "href": f"{base}/update",
@@ -191,7 +196,8 @@ def installation_action_documents(
             {
                 "id": PluginOperationKind.ROLLBACK,
                 "label": "Roll back",
-                "available": installation.observed_state != PluginObservedState.RESTART_PENDING,
+                "available": installation.observed_state
+                != PluginObservedState.RESTART_PENDING,
                 "reason": None,
                 "method": "POST",
                 "href": f"{base}/rollback",
@@ -250,7 +256,9 @@ def request_plugin_operation(
                 f"plugin environment operation {active.pk} is already active"
             )
         installation = (
-            PluginInstallation.objects.select_for_update().filter(plugin_id=plugin_id).first()
+            PluginInstallation.objects.select_for_update()
+            .filter(plugin_id=plugin_id)
+            .first()
         )
         if kind not in {
             PluginOperationKind.INSTALL,
@@ -262,7 +270,9 @@ def request_plugin_operation(
             if expected_version is None:
                 raise PluginOperationError("expectedVersion is required")
             if installation.update_version != expected_version:
-                raise StalePluginStateError("plugin installation changed; refresh and retry")
+                raise StalePluginStateError(
+                    "plugin installation changed; refresh and retry"
+                )
         impact = _operation_impact(installation, kind)
         operation, created = PluginOperationRepository.request(
             plugin_id=plugin_id,
@@ -287,7 +297,9 @@ def request_operation_cancellation(
         if operation.status in TERMINAL_OPERATION_STATUSES:
             return operation
         if not operation.cancellation_allowed:
-            raise PluginOperationError("this operation can no longer be cancelled safely")
+            raise PluginOperationError(
+                "this operation can no longer be cancelled safely"
+            )
         operation.cancellation_requested = True
         operation.save(update_fields=("cancellation_requested", "updated_at"))
         return operation
@@ -409,7 +421,117 @@ def _generation_id() -> str:
     return f"gen-{timezone.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:12]}"
 
 
-def _install_or_update(operation: PluginOperation) -> None:
+def _activate_plugin_wheel(
+    operation: PluginOperation,
+    inspected: InspectedPluginWheel,
+    *,
+    provenance: Mapping[str, object],
+) -> None:
+    _cancel_if_requested(operation)
+    _set_stage(operation, "resolving", 50)
+    manager = plugin_overlay_manager()
+    previous = manager.pointer("current")
+    wheels = (
+        *_current_wheels(manager, excluding_plugin_id=operation.plugin_id),
+        inspected.path,
+    )
+    generation_id = _generation_id()
+    plugin_generation_builder(manager).build(
+        generation_id=generation_id,
+        wheels=tuple(wheels),
+        created_at=timezone.now().isoformat(),
+        previous_generation=previous,
+    )
+    _cancel_if_requested(operation)
+    _set_stage(
+        operation,
+        "activating",
+        75,
+        cancellation_allowed=False,
+        input_generation=previous or "",
+        output_generation=generation_id,
+    )
+    PluginControlHelper(manager).execute("activate", generation_id)
+    existing = PluginInstallation.objects.filter(plugin_id=operation.plugin_id).first()
+    desired_state = (
+        existing.desired_state if existing is not None else PluginDesiredState.DISABLED
+    )
+    installation = PluginInstallationRepository.save_snapshot(
+        plugin_id=inspected.manifest.plugin_id,
+        distribution_id=inspected.manifest.distribution_id,
+        installed_version=inspected.manifest.version,
+        manifest=inspected.manifest.to_document(),
+        provenance={**provenance, "artifactDigest": inspected.digest},
+        lifecycle_impact=inspected.manifest.lifecycle.to_document(),
+        desired_state=desired_state,
+    )
+    installation.active_generation = generation_id
+    installation.last_known_good_generation = previous or ""
+    installation.observed_state = PluginObservedState.RESTART_PENDING
+    installation.save(
+        update_fields=(
+            "active_generation",
+            "last_known_good_generation",
+            "observed_state",
+            "updated_at",
+        )
+    )
+    _set_stage(
+        operation,
+        "restart-pending",
+        85,
+        status=PluginOperationStatus.RESTART_PENDING,
+        cancellation_allowed=False,
+    )
+
+
+def _install_catalogue_wheel(operation: PluginOperation) -> None:
+    data = operation.stage_data
+    version_name = str(data.get("version", ""))
+    entry = FirstPartyPluginCatalogue.load().get(operation.plugin_id)
+    if entry is None:
+        raise PluginOperationError("plugin is absent from the first-party catalogue")
+    version = next(
+        (item for item in entry.versions if item.version == version_name), None
+    )
+    if version is None or not version.published or not version.compatible:
+        raise PluginOperationError("catalogue version is not currently installable")
+    artifact = version.artifact_for()
+    if artifact is None:
+        raise PluginOperationError("catalogue has no plugin artifact for this platform")
+    _set_stage(operation, "downloading", 10)
+    manager = plugin_overlay_manager()
+    with CatalogueWheelAcquirer(staging_root=manager.root / "acquisition").acquire(
+        artifact,
+        cancelled=lambda: PluginOperation.objects.filter(
+            pk=operation.pk,
+            cancellation_requested=True,
+        ).exists(),
+    ) as candidate:
+        if candidate.inspected.manifest.plugin_id != operation.plugin_id:
+            raise PluginOperationError(
+                "downloaded manifest identity differs from the requested plugin"
+            )
+        _set_stage(operation, "verifying-artifact", 30)
+        verify_catalogue_wheel(
+            candidate.inspected,
+            entry,
+            expected_version=version_name,
+            expected_artifact=artifact,
+        )
+        _activate_plugin_wheel(
+            operation,
+            candidate.inspected,
+            provenance={
+                **candidate.provenance_document(),
+                "requestedRevision": version.revision,
+                "resolvedRevision": version.resolved_commit,
+                "version": version.version,
+            },
+        )
+
+
+def _install_git_source(operation: PluginOperation) -> None:
     data = operation.stage_data
     repository = data.get("repository")
     revision = data.get("revision")
@@ -430,16 +552,6 @@ def _install_or_update(operation: PluginOperation) -> None:
             raise PluginOperationError(
                 "downloaded manifest identity differs from the requested plugin"
             )
-        catalogue_entry = None
-        if data.get("sourceType") == "catalogue":
-            catalogue_entry = FirstPartyPluginCatalogue.load().get(operation.plugin_id)
-            if catalogue_entry is None:
-                raise PluginOperationError("plugin is absent from the first-party catalogue")
-            verify_catalogue_candidate(
-                candidate,
-                catalogue_entry,
-                expected_version=str(data.get("version", "")),
-            )
         _cancel_if_requested(operation)
         _set_stage(operation, "building", 30)
         wheel = _build_source_wheel(
@@ -455,70 +567,18 @@ def _install_or_update(operation: PluginOperation) -> None:
             raise PluginAcquisitionError(
                 "built wheel manifest differs from the inspected source manifest"
             )
-        if catalogue_entry is not None:
-            verify_catalogue_wheel(
-                inspected,
-                catalogue_entry,
-                expected_version=str(data.get("version", "")),
-            )
-        _cancel_if_requested(operation)
-        _set_stage(operation, "resolving", 50)
-        previous = manager.pointer("current")
-        wheels = (
-            *_current_wheels(manager, excluding_plugin_id=operation.plugin_id),
-            wheel,
-        )
-        generation_id = _generation_id()
-        plugin_generation_builder(manager).build(
-            generation_id=generation_id,
-            wheels=tuple(wheels),
-            created_at=timezone.now().isoformat(),
-            previous_generation=previous,
-        )
-        _cancel_if_requested(operation)
-        _set_stage(
+        _activate_plugin_wheel(
             operation,
-            "activating",
-            75,
-            cancellation_allowed=False,
-            input_generation=previous or "",
-            output_generation=generation_id,
+            inspected,
+            provenance=candidate.provenance_document(),
         )
-        PluginControlHelper(manager).execute("activate", generation_id)
-        existing = PluginInstallation.objects.filter(plugin_id=operation.plugin_id).first()
-        desired_state = (
-            existing.desired_state if existing is not None else PluginDesiredState.DISABLED
-        )
-        installation = PluginInstallationRepository.save_snapshot(
-            plugin_id=inspected.manifest.plugin_id,
-            distribution_id=inspected.manifest.distribution_id,
-            installed_version=inspected.manifest.version,
-            manifest=inspected.manifest.to_document(),
-            provenance={
-                **candidate.provenance_document(),
-                "artifactDigest": inspected.digest,
-            },
-            lifecycle_impact=inspected.manifest.lifecycle.to_document(),
-            desired_state=desired_state,
-        )
-        installation.active_generation = generation_id
-        installation.last_known_good_generation = previous or ""
-        installation.observed_state = PluginObservedState.RESTART_PENDING
-        installation.save(
-            update_fields=(
-                "active_generation",
-                "last_known_good_generation",
-                "observed_state",
-                "updated_at",
-            )
-        )
-    _set_stage(
-        operation,
-        "restart-pending",
-        85,
-        status=PluginOperationStatus.RESTART_PENDING,
-        cancellation_allowed=False,
-    )
+
+
+def _install_or_update(operation: PluginOperation) -> None:
+    if operation.stage_data.get("sourceType") == "catalogue":
+        _install_catalogue_wheel(operation)
+    else:
+        _install_git_source(operation)
 
 
 def _runtime_record(plugin_id: str):
@@ -578,12 +638,21 @@ def _hot_lifecycle(operation: PluginOperation, *, enable: bool) -> None:
     _set_stage(operation, "activating" if enable else "deactivating", 60)
     context = DistributionLifecycleContext(operation.plugin_id)
     result = record.plugin.start(context) if enable else record.plugin.stop(context)
-    if not isinstance(result, PluginRuntimeResult) or result.status is RuntimeStatus.FAILED:
+    if (
+        not isinstance(result, PluginRuntimeResult)
+        or result.status is RuntimeStatus.FAILED
+    ):
         raise PluginOperationError(f"plugin {lifecycle_method} hook failed")
-    record.desired_state = RuntimeDesiredState.ENABLED if enable else RuntimeDesiredState.DISABLED
-    record.state = PluginLifecycleState.STARTED if enable else PluginLifecycleState.STOPPED
+    record.desired_state = (
+        RuntimeDesiredState.ENABLED if enable else RuntimeDesiredState.DISABLED
+    )
+    record.state = (
+        PluginLifecycleState.STARTED if enable else PluginLifecycleState.STOPPED
+    )
     record.health = (
-        PluginHealth.HEALTHY if result.status is RuntimeStatus.READY else PluginHealth.DEGRADED
+        PluginHealth.HEALTHY
+        if result.status is RuntimeStatus.READY
+        else PluginHealth.DEGRADED
     )
     installation.observed_state = (
         PluginObservedState.STARTED if enable else PluginObservedState.STOPPED
@@ -671,7 +740,9 @@ def execute_plugin_operation(operation_id: str) -> None:
                 PluginOperationStatus.FAILED,
                 PluginOperationStatus.CANCELLED,
             }:
-                raise PluginOperationError("only failed or cancelled operations can be retried")
+                raise PluginOperationError(
+                    "only failed or cancelled operations can be retried"
+                )
             effective_kind = previous.kind
             operation.stage_data = previous.stage_data
             operation.save(update_fields=("stage_data", "updated_at"))
@@ -689,7 +760,9 @@ def execute_plugin_operation(operation_id: str) -> None:
             _succeed(operation)
         elif effective_kind == PluginOperationKind.ROLLBACK:
             _set_stage(operation, "rolling-back", 50, cancellation_allowed=False)
-            current, previous = PluginControlHelper(plugin_overlay_manager()).execute("rollback")
+            current, previous = PluginControlHelper(plugin_overlay_manager()).execute(
+                "rollback"
+            )
             _set_stage(
                 operation,
                 "restart-pending",
@@ -712,7 +785,10 @@ def finalize_startup_operations(registry) -> None:
     except Exception:
         current = None
     operations = PluginOperation.objects.filter(
-        status__in=(PluginOperationStatus.RESTART_PENDING, PluginOperationStatus.VERIFYING)
+        status__in=(
+            PluginOperationStatus.RESTART_PENDING,
+            PluginOperationStatus.VERIFYING,
+        )
     ).order_by("requested_at")
     for operation in operations:
         operation.status = PluginOperationStatus.VERIFYING
@@ -730,7 +806,9 @@ def finalize_startup_operations(registry) -> None:
             )
         )
         if healthy:
-            installation = PluginInstallation.objects.filter(plugin_id=operation.plugin_id).first()
+            installation = PluginInstallation.objects.filter(
+                plugin_id=operation.plugin_id
+            ).first()
             if installation is not None and not expects_absent:
                 installation.observed_state = (
                     PluginObservedState.STARTED
@@ -757,7 +835,9 @@ def finalize_startup_operations(registry) -> None:
         except Exception as rollback_error:
             _fail(
                 operation,
-                PluginOperationError(f"health verification and rollback failed: {rollback_error}"),
+                PluginOperationError(
+                    f"health verification and rollback failed: {rollback_error}"
+                ),
             )
         else:
             _fail(

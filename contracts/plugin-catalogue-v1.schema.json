@@ -61,13 +61,14 @@
         "published",
         "pluginContract",
         "openCinema",
-        "capabilities"
+        "capabilities",
+        "permissions",
+        "artifacts"
       ],
       "properties": {
         "version": {"type": "string", "minLength": 1, "maxLength": 64},
         "revision": {"type": "string", "minLength": 1, "maxLength": 256},
         "resolvedCommit": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
-        "artifactDigest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
         "mutable": {"type": "boolean"},
         "published": {"type": "boolean"},
         "pluginContract": {
@@ -86,7 +87,43 @@
           "maxItems": 32,
           "uniqueItems": true,
           "items": {"enum": ["api", "automation", "processing", "managed-resource", "managed-audio-source", "admin-ui"]}
+        },
+        "permissions": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {"$ref": "#/$defs/permission"}
+        },
+        "artifacts": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {"$ref": "#/$defs/artifact"}
         }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"published": {"const": true}}},
+          "then": {"properties": {"artifacts": {"minItems": 1}}}
+        }
+      ]
+    },
+    "permission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "reason"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 1024}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operatingSystem", "architecture", "url", "digest"],
+      "properties": {
+        "operatingSystem": {"enum": ["linux"]},
+        "architecture": {"enum": ["x86_64", "aarch64"]},
+        "url": {"type": "string", "format": "uri", "pattern": "^https://", "maxLength": 2048},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }
     }
   }

@@ -69,16 +69,16 @@ jobs:
 
       - name: Fetch accepted UI and decoder bytes for the coordinated immutable mirror
         env:
-          UI_RELEASE_URL: https://github.com/k3rnL/open-cinema-ui/releases/download/v2.0.0
+          UI_RELEASE_URL: https://github.com/k3rnL/open-cinema-ui/releases/download/v2.1.1
           DECODER_RELEASE_URL: https://github.com/k3rnL/pcm-auto-decoder/releases/download/v0.2.2
         run: |
           mirror=/tmp/coordinated-dependency-dist
           mkdir -p "$mirror"
           for name in \
-            open-cinema-admin-v2.0.0.tar.gz \
-            open-cinema-admin-v2.0.0.tar.gz.provenance.json \
-            open-cinema-ui-v2.0.0.tar.gz \
-            open-cinema-ui-v2.0.0.tar.gz.provenance.json; do
+            open-cinema-admin-v2.1.1.tar.gz \
+            open-cinema-admin-v2.1.1.tar.gz.provenance.json \
+            open-cinema-ui-v2.1.1.tar.gz \
+            open-cinema-ui-v2.1.1.tar.gz.provenance.json; do
             curl --fail --location --silent --show-error \
               "$UI_RELEASE_URL/$name" --output "$mirror/$name"
           done
@@ -91,10 +91,10 @@ jobs:
           (
             cd "$mirror"
             printf '%s  %s\n' \
-              47d215f08a4740e47b7009abb6f0814f94d5330af222c4d98b90caf7ec057ea7 open-cinema-admin-v2.0.0.tar.gz \
-              19ce3f8ae3ccd83eab6e1457e26e582b523af83a5a07408082e84ef58f710b1c open-cinema-admin-v2.0.0.tar.gz.provenance.json \
-              91980a2c0ac72fe54ae04ba84340fddf89a5edeb3fc40b99cb296748e63d8560 open-cinema-ui-v2.0.0.tar.gz \
-              c7f39366661c9ba8c251a43bc79a76981153e095a898510a777ea38161c6a200 open-cinema-ui-v2.0.0.tar.gz.provenance.json \
+              c481a060b2cc1e9c616217aaae9fcdc1980253acd50212dca3ed85a16edb5c60 open-cinema-admin-v2.1.1.tar.gz \
+              9c07328152b1b5050a8635535c1183ce3136a8c68e4db9379d3833f8efca052b open-cinema-admin-v2.1.1.tar.gz.provenance.json \
+              0aebcac3ec8a2763729dbcf65abaa330314563aed59d7227994110887dd7bcab open-cinema-ui-v2.1.1.tar.gz \
+              67279167768e8190df8a57e44294987c74ed04aa4e56317d8e31af084b7bc695 open-cinema-ui-v2.1.1.tar.gz.provenance.json \
               7831af706c22198dbb531682264b7eedf88fc693c459d5f4c8c05e154d5e616e pcm-auto-decoder-v0.2.2-debian-trixie-aarch64-unknown-linux-gnu.tar.gz \
               1ebe283c5ce274ed6bbdc1481a5b8fc9a82098f5b133f4dc02ae40a031a84f49 pcm-auto-decoder-v0.2.2-debian-trixie-aarch64-unknown-linux-gnu.tar.gz.provenance.json \
               | sha256sum --check --strict

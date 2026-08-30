@@ -39,7 +39,9 @@ class PluginCatalogueView(PluginV2APIView):
     def get(self, request):
         from api.apps import PLUGIN_REGISTRY
 
-        return Response(FirstPartyPluginCatalogue.load().joined_document(PLUGIN_REGISTRY))
+        return Response(
+            FirstPartyPluginCatalogue.load().joined_document(PLUGIN_REGISTRY)
+        )
 
 
 class PluginUIBootstrapView(APIView):
@@ -57,7 +59,8 @@ class PluginUIBootstrapView(APIView):
                 or record.desired_state is not RuntimePluginDesiredState.ENABLED
                 or record.state
                 not in {PluginLifecycleState.AVAILABLE, PluginLifecycleState.STARTED}
-                or capability.health not in {PluginHealth.HEALTHY, PluginHealth.DEGRADED}
+                or capability.health
+                not in {PluginHealth.HEALTHY, PluginHealth.DEGRADED}
             ):
                 continue
             plugins.append(
@@ -111,7 +114,9 @@ class InstalledPluginListView(PluginV2APIView):
                     "observedState": installation.observed_state,
                     "health": installation.aggregate_health,
                     "activeGeneration": installation.active_generation or None,
-                    "lastKnownGoodGeneration": (installation.last_known_good_generation or None),
+                    "lastKnownGoodGeneration": (
+                        installation.last_known_good_generation or None
+                    ),
                     "manifest": installation.manifest_snapshot,
                     "provenance": installation.provenance_snapshot,
                     "lifecycleImpact": installation.lifecycle_impact,
@@ -151,6 +156,7 @@ class PluginInstallView(PluginV2APIView):
         repository = body.get("repository")
         revision = body.get("revision")
         version = body.get("version")
+        artifact = None
         if source_type == "catalogue":
             entry = FirstPartyPluginCatalogue.load().get(plugin_id)
             if entry is None:
@@ -161,6 +167,14 @@ class PluginInstallView(PluginV2APIView):
             )
             if selected is None or not selected.published or not selected.compatible:
                 raise ValueError("catalogue version is not currently installable")
+            artifact = selected.artifact_for()
+            if artifact is None:
+                platform_document = selected.to_document()["currentPlatform"]
+                raise ValueError(
+                    "catalogue has no artifact for "
+                    f"{platform_document['operatingSystem']}/"
+                    f"{platform_document['architecture']}"
+                )
             repository = entry.repository
             revision = selected.revision
         operation, created = request_plugin_operation(
@@ -174,6 +188,9 @@ class PluginInstallView(PluginV2APIView):
                 "repository": repository,
                 "revision": revision,
                 "version": version,
+                "artifact": artifact.to_document()
+                if source_type == "catalogue"
+                else None,
                 "trustedCodeAcknowledged": body.get("trustedCodeAcknowledged") is True,
             },
         )
@@ -255,7 +272,8 @@ class PluginOperationListView(PluginV2APIView):
             {
                 "schemaVersion": 1,
                 "items": [
-                    operation_document(item) for item in PluginOperation.objects.all()[:limit]
+                    operation_document(item)
+                    for item in PluginOperation.objects.all()[:limit]
                 ],
             }
         )
@@ -348,7 +366,9 @@ def _pagination(request) -> tuple[int, int]:
 class PluginDocumentListView(PluginV2APIView):
     def get(self, request, plugin_id: str, collection: str):
         limit, offset = _pagination(request)
-        items = PluginDocumentRepository.list(plugin_id, collection, limit=limit, offset=offset)
+        items = PluginDocumentRepository.list(
+            plugin_id, collection, limit=limit, offset=offset
+        )
         return Response(
             {
                 "schemaVersion": 1,
@@ -416,7 +436,9 @@ class PluginDocumentDetailView(PluginV2APIView):
 class PluginInstanceListView(PluginV2APIView):
     def get(self, request, plugin_id: str, capability_id: str):
         limit, offset = _pagination(request)
-        items = PluginInstanceRepository.list(plugin_id, capability_id, limit=limit, offset=offset)
+        items = PluginInstanceRepository.list(
+            plugin_id, capability_id, limit=limit, offset=offset
+        )
         return Response(
             {
                 "schemaVersion": 1,
@@ -481,13 +503,17 @@ class PluginInstanceDetailView(PluginV2APIView):
 
 class PluginSecretView(PluginV2APIView):
     def get(self, request, plugin_id: str, secret_id: str):
-        return Response(PluginSecretRepository.presence(plugin_id, secret_id).to_document())
+        return Response(
+            PluginSecretRepository.presence(plugin_id, secret_id).to_document()
+        )
 
     def put(self, request, plugin_id: str, secret_id: str):
         body = require_object(request.data)
         value = body.get("value")
         current = PluginSecretRepository.presence(plugin_id, secret_id)
-        expected_version = parse_version_precondition(request) if current.configured else None
+        expected_version = (
+            parse_version_precondition(request) if current.configured else None
+        )
         presence = PluginSecretRepository.set(
             plugin_id=plugin_id,
             secret_id=secret_id,

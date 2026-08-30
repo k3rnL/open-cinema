@@ -8,10 +8,12 @@ import tempfile
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
+from io import BufferedIOBase
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
-from .catalogue import FirstPartyPlugin
+from .catalogue import CatalogueArtifact, FirstPartyPlugin
 from .manifest import parse_plugin_manifest
 from .v2_contracts import PLUGIN_MANIFEST_FILENAME, PluginDistributionManifest
 
@@ -20,6 +22,7 @@ PLUGIN_SOURCE_MAX_FILES = 10_000
 PLUGIN_SOURCE_MAX_BYTES = 256 * 1024 * 1024
 _COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 _REVISION_PATTERN = re.compile(r"^[A-Za-z0-9._/-]{1,256}$")
+_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 class PluginAcquisitionError(ValueError):
@@ -30,9 +33,32 @@ class PluginAcquisitionCancelled(PluginAcquisitionError):
     pass
 
 
-def validate_git_source(repository_url: str, revision: str | None = None) -> tuple[str, str]:
+def validate_catalogue_artifact_url(url: str) -> str:
+    if not isinstance(url, str) or len(url) > 2048:
+        raise PluginAcquisitionError("catalogue artifact URL is required")
+    parsed = urlparse(url)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or not parsed.path.endswith(".whl")
+    ):
+        raise PluginAcquisitionError(
+            "catalogue artifacts must use a credential-free HTTPS wheel URL"
+        )
+    return url
+
+
+def validate_git_source(
+    repository_url: str, revision: str | None = None
+) -> tuple[str, str]:
     if not isinstance(repository_url, str) or len(repository_url) > 2048:
-        raise PluginAcquisitionError("repository URL is required and cannot exceed 2048 characters")
+        raise PluginAcquisitionError(
+            "repository URL is required and cannot exceed 2048 characters"
+        )
     parsed = urlparse(repository_url)
     if (
         parsed.scheme != "https"
@@ -52,11 +78,15 @@ def validate_git_source(repository_url: str, revision: str | None = None) -> tup
         or ".." in revision
         or "@{" in revision
     ):
-        raise PluginAcquisitionError("revision contains unsupported characters or syntax")
+        raise PluginAcquisitionError(
+            "revision contains unsupported characters or syntax"
+        )
     return repository_url, revision
 
 
-def _run(argv: list[str], *, cwd: Path | None = None, timeout: int) -> subprocess.CompletedProcess:
+def _run(
+    argv: list[str], *, cwd: Path | None = None, timeout: int
+) -> subprocess.CompletedProcess:
     try:
         return subprocess.run(
             argv,
@@ -67,7 +97,9 @@ def _run(argv: list[str], *, cwd: Path | None = None, timeout: int) -> subproces
             timeout=timeout,
         )
     except subprocess.TimeoutExpired as error:
-        raise PluginAcquisitionError(f"command timed out after {timeout} seconds") from error
+        raise PluginAcquisitionError(
+            f"command timed out after {timeout} seconds"
+        ) from error
     except subprocess.CalledProcessError as error:
         detail = (error.stderr or error.stdout or str(error))[-4096:]
         raise PluginAcquisitionError(detail) from error
@@ -90,7 +122,9 @@ def _bounded_tree(root: Path) -> None:
         if path.is_symlink():
             target = path.resolve()
             if root.resolve() not in (target, *target.parents):
-                raise PluginAcquisitionError("plugin source contains an escaping symbolic link")
+                raise PluginAcquisitionError(
+                    "plugin source contains an escaping symbolic link"
+                )
         if path.is_file():
             size += path.stat().st_size
             if size > PLUGIN_SOURCE_MAX_BYTES:
@@ -98,7 +132,11 @@ def _bounded_tree(root: Path) -> None:
 
 
 def _source_manifest(root: Path) -> PluginDistributionManifest:
-    candidates = [path for path in root.rglob(PLUGIN_MANIFEST_FILENAME) if ".git" not in path.parts]
+    candidates = [
+        path
+        for path in root.rglob(PLUGIN_MANIFEST_FILENAME)
+        if ".git" not in path.parts
+    ]
     if len(candidates) != 1:
         raise PluginAcquisitionError(
             f"plugin source must contain exactly one {PLUGIN_MANIFEST_FILENAME}"
@@ -164,7 +202,9 @@ class GitPluginAcquirer:
         _check_cancelled(cancelled)
         if self.staging_root is not None:
             self.staging_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        temporary_root = Path(tempfile.mkdtemp(prefix="open-cinema-plugin-", dir=self.staging_root))
+        temporary_root = Path(
+            tempfile.mkdtemp(prefix="open-cinema-plugin-", dir=self.staging_root)
+        )
         checkout = temporary_root / "checkout"
         try:
             self.runner(
@@ -215,23 +255,136 @@ class GitPluginAcquirer:
             raise
 
 
+@dataclass(slots=True)
+class AcquiredCatalogueWheel:
+    artifact: CatalogueArtifact
+    inspected: InspectedPluginWheel
+    _temporary_root: Path
+
+    @property
+    def path(self) -> Path:
+        return self.inspected.path
+
+    def provenance_document(self) -> dict[str, object]:
+        return {
+            "sourceType": "catalogue",
+            "sourceUrl": self.artifact.url,
+            "artifactDigest": self.inspected.digest,
+            "operatingSystem": self.artifact.operating_system,
+            "architecture": self.artifact.architecture,
+            "mutableRevision": False,
+        }
+
+    def cleanup(self) -> None:
+        shutil.rmtree(self._temporary_root, ignore_errors=True)
+
+    def __enter__(self) -> AcquiredCatalogueWheel:
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.cleanup()
+
+
+def _open_catalogue_artifact(url: str, timeout: int):
+    request = Request(url, headers={"User-Agent": "Open-Cinema-plugin-catalogue/1"})
+    return urlopen(request, timeout=timeout)
+
+
+class CatalogueWheelAcquirer:
+    def __init__(
+        self,
+        *,
+        opener: Callable[[str, int], BufferedIOBase] = _open_catalogue_artifact,
+        staging_root: Path | None = None,
+        timeout_seconds: int = 120,
+    ) -> None:
+        self.opener = opener
+        self.staging_root = staging_root
+        self.timeout_seconds = timeout_seconds
+
+    def acquire(
+        self,
+        artifact: CatalogueArtifact,
+        *,
+        cancelled: Callable[[], bool] | None = None,
+    ) -> AcquiredCatalogueWheel:
+        validate_catalogue_artifact_url(artifact.url)
+        if not _DIGEST_PATTERN.fullmatch(artifact.digest):
+            raise PluginAcquisitionError("catalogue artifact digest is invalid")
+        _check_cancelled(cancelled)
+        if self.staging_root is not None:
+            self.staging_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        temporary_root = Path(
+            tempfile.mkdtemp(prefix="open-cinema-plugin-wheel-", dir=self.staging_root)
+        )
+        wheel = temporary_root / PurePosixPath(urlparse(artifact.url).path).name
+        try:
+            digest = hashlib.sha256()
+            size = 0
+            with self.opener(artifact.url, self.timeout_seconds) as response:
+                content_length = getattr(response, "headers", {}).get("Content-Length")
+                if (
+                    content_length is not None
+                    and int(content_length) > PLUGIN_SOURCE_MAX_BYTES
+                ):
+                    raise PluginAcquisitionError(
+                        "catalogue artifact exceeds the size limit"
+                    )
+                with wheel.open("wb") as stream:
+                    while chunk := response.read(1024 * 1024):
+                        _check_cancelled(cancelled)
+                        size += len(chunk)
+                        if size > PLUGIN_SOURCE_MAX_BYTES:
+                            raise PluginAcquisitionError(
+                                "catalogue artifact exceeds the size limit"
+                            )
+                        digest.update(chunk)
+                        stream.write(chunk)
+            actual_digest = "sha256:" + digest.hexdigest()
+            if actual_digest != artifact.digest:
+                raise PluginAcquisitionError(
+                    "downloaded artifact digest differs from the pinned catalogue digest"
+                )
+            inspected = inspect_plugin_wheel(wheel)
+            return AcquiredCatalogueWheel(artifact, inspected, temporary_root)
+        except PluginAcquisitionError:
+            shutil.rmtree(temporary_root, ignore_errors=True)
+            raise
+        except Exception as error:
+            shutil.rmtree(temporary_root, ignore_errors=True)
+            raise PluginAcquisitionError(
+                f"catalogue artifact download failed: {error}"
+            ) from error
+
+
 def verify_catalogue_candidate(
     candidate: AcquiredPluginSource,
     catalogue: FirstPartyPlugin,
     *,
     expected_version: str,
 ) -> None:
-    version = next((item for item in catalogue.versions if item.version == expected_version), None)
+    version = next(
+        (item for item in catalogue.versions if item.version == expected_version), None
+    )
     if version is None:
         raise PluginAcquisitionError("candidate version is absent from the catalogue")
     if candidate.manifest.plugin_id != catalogue.plugin_id:
-        raise PluginAcquisitionError("downloaded manifest plugin ID differs from the catalogue")
+        raise PluginAcquisitionError(
+            "downloaded manifest plugin ID differs from the catalogue"
+        )
     if candidate.manifest.version != expected_version:
-        raise PluginAcquisitionError("downloaded manifest version differs from the catalogue")
+        raise PluginAcquisitionError(
+            "downloaded manifest version differs from the catalogue"
+        )
     if candidate.repository_url.rstrip("/") != catalogue.repository.rstrip("/"):
         raise PluginAcquisitionError("downloaded repository differs from the catalogue")
-    if version.resolved_commit is not None and candidate.resolved_commit != version.resolved_commit:
-        raise PluginAcquisitionError("resolved commit differs from the pinned catalogue commit")
+    if (
+        version.resolved_commit is not None
+        and candidate.resolved_commit != version.resolved_commit
+    ):
+        raise PluginAcquisitionError(
+            "resolved commit differs from the pinned catalogue commit"
+        )
 
 
 def verify_catalogue_wheel(
@@ -239,6 +392,7 @@ def verify_catalogue_wheel(
     catalogue: FirstPartyPlugin,
     *,
     expected_version: str,
+    expected_artifact: CatalogueArtifact | None = None,
 ) -> None:
     version = next(
         (item for item in catalogue.versions if item.version == expected_version),
@@ -247,10 +401,17 @@ def verify_catalogue_wheel(
     if version is None:
         raise PluginAcquisitionError("candidate version is absent from the catalogue")
     if candidate.manifest.plugin_id != catalogue.plugin_id:
-        raise PluginAcquisitionError("built artifact plugin ID differs from the catalogue")
+        raise PluginAcquisitionError(
+            "built artifact plugin ID differs from the catalogue"
+        )
     if candidate.manifest.version != expected_version:
-        raise PluginAcquisitionError("built artifact version differs from the catalogue")
-    if version.artifact_digest is not None and candidate.digest != version.artifact_digest:
+        raise PluginAcquisitionError(
+            "built artifact version differs from the catalogue"
+        )
+    artifact = expected_artifact or version.artifact_for()
+    if artifact is None:
+        raise PluginAcquisitionError("catalogue has no artifact for this platform")
+    if candidate.digest != artifact.digest:
         raise PluginAcquisitionError(
             "built artifact digest differs from the pinned catalogue digest"
         )
@@ -276,11 +437,15 @@ def inspect_plugin_wheel(path: Path) -> InspectedPluginWheel:
             if len(members) > PLUGIN_SOURCE_MAX_FILES:
                 raise PluginAcquisitionError("candidate wheel contains too many files")
             if sum(item.file_size for item in members) > PLUGIN_SOURCE_MAX_BYTES:
-                raise PluginAcquisitionError("expanded candidate wheel exceeds the size limit")
+                raise PluginAcquisitionError(
+                    "expanded candidate wheel exceeds the size limit"
+                )
             for member in members:
                 member_path = PurePosixPath(member.filename)
                 if member_path.is_absolute() or ".." in member_path.parts:
-                    raise PluginAcquisitionError("candidate wheel contains an unsafe path")
+                    raise PluginAcquisitionError(
+                        "candidate wheel contains an unsafe path"
+                    )
             manifests = [
                 item
                 for item in members

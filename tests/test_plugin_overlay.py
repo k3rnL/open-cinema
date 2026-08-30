@@ -16,6 +16,7 @@ from core.plugin_system.overlay import (
     PluginGenerationManifest,
     PluginOverlayError,
     PluginOverlayManager,
+    export_core_constraints,
     reject_core_dependency_conflicts,
     validate_generation_id,
 )
@@ -81,7 +82,11 @@ def _wheel(tmp_path: Path, *, requirement: str | None = None) -> Path:
     if requirement is not None:
         metadata += f"Requires-Dist: {requirement}\n"
     plugin_module = """
+from django.apps import apps
 from core.plugin_system import ApiCapability, OpenCinemaPlugin, RuntimePluginIdentity
+
+if not apps.ready:
+    raise RuntimeError("Django apps must be ready before plugin import")
 
 class TestPlugin(OpenCinemaPlugin):
     @property
@@ -211,6 +216,31 @@ def test_core_dependency_conflict_is_rejected_before_install(tmp_path) -> None:
 
     with pytest.raises(PluginOverlayError, match="conflicts with core"):
         reject_core_dependency_conflicts((wheel,), {"django": "6.0.3"})
+
+
+def test_core_constraints_exclude_the_plugin_distribution_being_replaced(
+    tmp_path, monkeypatch
+) -> None:
+    class Distribution:
+        metadata = {"Name": "open-cinema-test-plugin"}
+        version = "0.1.0"
+
+        @staticmethod
+        def locate_file(path):
+            return tmp_path / path
+
+    monkeypatch.setattr(
+        "core.plugin_system.overlay.metadata.distributions",
+        lambda: (Distribution(),),
+    )
+
+    resolved = export_core_constraints(
+        tmp_path / "constraints.txt",
+        excluded_distributions=frozenset({"open-cinema-test-plugin"}),
+    )
+
+    assert resolved == {}
+    assert (tmp_path / "constraints.txt").read_text(encoding="utf-8") == "\n"
 
 
 class FakeInstaller:

@@ -20,12 +20,24 @@ def synchronize_plugin_inventory(registry: PluginDistributionRegistry) -> bool:
 
     try:
         for record in registry.records:
+            existing = PluginInstallation.objects.filter(
+                plugin_id=record.manifest.plugin_id,
+                distribution_id=record.manifest.distribution_id,
+                installed_version=record.manifest.version,
+            ).first()
+            provenance = record.provenance.to_document()
+            # Runtime entry-point discovery can confirm the installed distribution,
+            # but it cannot reconstruct the immutable acquisition URL, digest, or
+            # resolved revision. Preserve that stronger evidence when startup sees
+            # the exact distribution/version already recorded by an operation.
+            if existing is not None and existing.provenance_snapshot:
+                provenance = existing.provenance_snapshot
             installation = PluginInstallationRepository.save_snapshot(
                 plugin_id=record.manifest.plugin_id,
                 distribution_id=record.manifest.distribution_id,
                 installed_version=record.manifest.version,
                 manifest=record.manifest.to_document(),
-                provenance=record.provenance.to_document(),
+                provenance=provenance,
                 lifecycle_impact=record.manifest.lifecycle.to_document(),
                 desired_state=StoredDesiredState.ENABLED,
             )
@@ -41,7 +53,9 @@ def synchronize_plugin_inventory(registry: PluginDistributionRegistry) -> bool:
 
 def refresh_plugin_desired_state(registry: PluginDistributionRegistry) -> bool:
     try:
-        desired = dict(PluginInstallation.objects.values_list("plugin_id", "desired_state"))
+        desired = dict(
+            PluginInstallation.objects.values_list("plugin_id", "desired_state")
+        )
     except (OperationalError, ProgrammingError):
         return False
     for record in registry.records:

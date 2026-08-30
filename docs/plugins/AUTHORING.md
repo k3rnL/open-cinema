@@ -112,6 +112,10 @@ def test_distribution_contract(built_wheel):
 
 Run tests on Python 3.12 and 3.13, build a wheel and source archive, inspect
 their contents, and publish immutable checksums/provenance. Tags and manifest
-versions must match. A first-party catalogue release also pins repository,
-revision, resolved commit, and artifact digest. Compatibility changes require a
-new plugin or capability contract version; unknown versions fail closed.
+versions must match. A first-party catalogue release also pins the repository,
+revision, resolved commit, declared permissions/capabilities, and one immutable
+HTTPS wheel plus SHA-256 digest for every supported operating-system and
+architecture pair. The appliance selects only its exact platform artifact and
+never compiles a first-party marketplace plugin from source. Compatibility
+changes require a new plugin or capability contract version; unknown versions
+fail closed.

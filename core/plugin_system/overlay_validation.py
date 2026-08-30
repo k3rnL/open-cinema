@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import sys
 from importlib import metadata
 from pathlib import Path
@@ -19,6 +20,12 @@ def validate_overlay(site_packages: Path, expected: dict[str, str]) -> dict[str,
     overlay = str(site_packages.resolve())
     sys.path.append(overlay)
     importlib.invalidate_caches()
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "opencinema.settings")
+    import django
+    from django.apps import apps
+
+    if not apps.ready:
+        django.setup()
     distributions = tuple(metadata.distributions(path=[overlay]))
     entry_points = tuple(
         entry_point
