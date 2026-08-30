@@ -192,6 +192,36 @@ def test_early_bootstrap_appends_valid_overlay_after_core_paths(tmp_path, monkey
             sys.path.remove(result.overlay_path)
 
 
+@pytest.mark.parametrize("entrypoint", ("opencinema.celery", "opencinema.orchestrator"))
+def test_service_entrypoints_activate_current_overlay(tmp_path, entrypoint) -> None:
+    manager = PluginOverlayManager(tmp_path / "plugins")
+    staging = _stage(manager, "gen-service-entrypoint")
+    (staging / "site-packages" / "service_overlay_marker.py").write_text(
+        "ACTIVE = True\n",
+        encoding="utf-8",
+    )
+    manager.activate("gen-service-entrypoint")
+    environment = {
+        **os.environ,
+        "OPEN_CINEMA_PLUGIN_ROOT": str(manager.root),
+    }
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            f"import {entrypoint}; import service_overlay_marker; "
+            "assert service_overlay_marker.ACTIVE",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_invalid_pointer_enters_diagnosable_recovery_mode(tmp_path, monkeypatch) -> None:
     root = tmp_path / "plugins"
     pointers = root / "pointers"

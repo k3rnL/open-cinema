@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User authentication
 - Production deployment configuration
 
+## [0.3.6] - 2026-08-30
+
+### Fixed
+- Activate the installed plugin overlay before Django starts in both the Celery
+  worker and dedicated audio-orchestrator entry points.
+
 ## [0.3.5] - 2026-08-30
 
 ### Fixed

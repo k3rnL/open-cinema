@@ -1,6 +1,10 @@
 # Set the default Django settings module for the 'celery' program.
 import os
 
+from opencinema_plugin_bootstrap import activate_plugin_overlay
+
+activate_plugin_overlay()
+
 from celery import Celery
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'opencinema.settings')

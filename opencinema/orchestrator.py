@@ -8,6 +8,10 @@ from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from threading import Event
 
+from opencinema_plugin_bootstrap import activate_plugin_overlay
+
+activate_plugin_overlay()
+
 logger = logging.getLogger(__name__)
 
 
