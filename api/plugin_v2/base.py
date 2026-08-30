@@ -58,6 +58,9 @@ class PluginV2APIView(APIView):
 
     def initial(self, request, *args, **kwargs) -> None:
         super().initial(request, *args, **kwargs)
+        from api.apps import refresh_plugin_runtime
+
+        refresh_plugin_runtime()
         requested = request.headers.get("Open-Cinema-API-Version")
         if requested is not None and requested != str(API_VERSION):
             raise PluginAPIProblem(

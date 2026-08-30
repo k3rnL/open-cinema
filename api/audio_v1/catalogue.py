@@ -5,6 +5,9 @@ from core.orchestration.audio_node_catalogue import audio_node_type_registry
 
 
 def api_node_type_registry():
+    from api.apps import refresh_plugin_runtime
+
+    refresh_plugin_runtime()
     return audio_node_type_registry(plugin_registry=PLUGIN_REGISTRY)
 
 

@@ -28,6 +28,7 @@ from core.plugin_system import (
     PluginDesiredState,
     PluginDistributionRegistry,
     PluginHealth,
+    PluginLifecycleState,
     PluginProvenance,
     PluginRuntimeResult,
     RuntimePluginIdentity,
@@ -179,6 +180,35 @@ def test_plugin_routes_enforce_auth_state_health_timeout_and_failure_isolation(
     assert disabled.json()["code"] == "plugin-disabled"
     assert unhealthy.status_code == 503
     assert registry.catalogue_document()["plugins"][0]["capabilities"][0]["diagnostics"]
+
+
+def test_plugin_routes_reconcile_persisted_hot_lifecycle_state(
+    client, runtime_routes
+) -> None:
+    registry, record = runtime_routes
+    synchronize_plugin_inventory(registry)
+    user = get_user_model().objects.create_user(username="plugin-hot-state-user")
+    client.force_login(user)
+    record.desired_state = PluginDesiredState.DISABLED
+    record.state = PluginLifecycleState.STOPPED
+    PluginInstallation.objects.filter(plugin_id="test.runtime").update(
+        desired_state="enabled"
+    )
+
+    enabled = client.get("/api/plugins/test.runtime/ok")
+
+    assert enabled.status_code == 200
+    assert record.desired_state is PluginDesiredState.ENABLED
+    assert record.state is PluginLifecycleState.STARTED
+
+    PluginInstallation.objects.filter(plugin_id="test.runtime").update(
+        desired_state="disabled"
+    )
+    disabled = client.get("/api/plugins/test.runtime/ok")
+
+    assert disabled.status_code == 503
+    assert record.desired_state is PluginDesiredState.DISABLED
+    assert record.state is PluginLifecycleState.STOPPED
 
 
 def test_startup_preserves_stronger_acquisition_provenance() -> None:

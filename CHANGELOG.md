@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User authentication
 - Production deployment configuration
 
+## [0.3.7] - 2026-08-30
+
+### Fixed
+- Reconcile persisted hot plugin enable/disable state independently in web,
+  worker, and orchestrator processes before using plugin capabilities.
+
 ## [0.3.6] - 2026-08-30
 
 ### Fixed

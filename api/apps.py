@@ -32,6 +32,19 @@ def initialize_plugin_runtime() -> bool:
     return persisted
 
 
+def refresh_plugin_runtime() -> bool:
+    """Reconcile durable hot lifecycle state in the current service process."""
+
+    from core.plugin_system.persistence_sync import refresh_plugin_desired_state
+
+    if not refresh_plugin_desired_state(PLUGIN_REGISTRY):
+        return False
+    PLUGIN_REGISTRY.stop_disabled()
+    PLUGIN_REGISTRY.start_enabled()
+    PLUGIN_AUTOMATIONS.refresh()
+    return True
+
+
 class ApiConfig(AppConfig):
     name = "api"
 

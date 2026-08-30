@@ -264,6 +264,12 @@ class ManagedPluginSourceReconciler:
             return ManagedSourceReconcileResult()
         self._last_reconciled_at = now
         refresh_plugin_desired_state(self.registry)
+        stop_disabled = getattr(self.registry, "stop_disabled", None)
+        start_enabled = getattr(self.registry, "start_enabled", None)
+        if callable(stop_disabled):
+            stop_disabled()
+        if callable(start_enabled):
+            start_enabled()
         started: list[str] = []
         stopped: list[str] = []
         restarted: list[str] = []

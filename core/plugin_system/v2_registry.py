@@ -662,7 +662,11 @@ class PluginDistributionRegistry:
             if (
                 record.plugin is None
                 or record.desired_state is not PluginDesiredState.ENABLED
-                or record.state is not PluginLifecycleState.AVAILABLE
+                or record.state
+                not in {
+                    PluginLifecycleState.AVAILABLE,
+                    PluginLifecycleState.STOPPED,
+                }
             ):
                 continue
             try:
@@ -688,6 +692,34 @@ class PluginDistributionRegistry:
                 RuntimeStatus.FAILED: PluginHealth.FAILED,
                 RuntimeStatus.UNAVAILABLE: PluginHealth.FAILED,
             }[result.status]
+
+    def stop_disabled(self, settings: Mapping[str, object] | None = None) -> None:
+        for record in reversed(self.records):
+            if (
+                record.plugin is None
+                or record.desired_state is not PluginDesiredState.DISABLED
+                or record.state is not PluginLifecycleState.STARTED
+            ):
+                continue
+            try:
+                result = record.plugin.stop(
+                    DistributionLifecycleContext(record.manifest.plugin_id, settings or {})
+                )
+                if not isinstance(result, PluginRuntimeResult):
+                    raise TypeError("stop must return PluginRuntimeResult")
+            except Exception as error:
+                record.state = PluginLifecycleState.FAILED
+                record.health = PluginHealth.FAILED
+                record.diagnostic(
+                    "stop", "plugin-stop-failed", str(error), exception=type(error).__name__
+                )
+            else:
+                record.state = PluginLifecycleState.STOPPED
+                record.health = (
+                    PluginHealth.HEALTHY
+                    if result.status is RuntimeStatus.READY
+                    else PluginHealth.DEGRADED
+                )
 
     def stop_enabled(self, settings: Mapping[str, object] | None = None) -> None:
         for record in reversed(self.records):

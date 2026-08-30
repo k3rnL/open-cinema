@@ -38,6 +38,7 @@ def _problem(
 
 
 def _guard_view(
+    registry: PluginDistributionRegistry,
     record: PluginDistributionRecord,
     capability: PluginCapabilityRecord,
     view,
@@ -52,6 +53,11 @@ def _guard_view(
                 code="authentication-required",
                 detail="Plugin APIs require an authenticated Open Cinema session.",
             )
+        from .persistence_sync import refresh_plugin_desired_state
+
+        refresh_plugin_desired_state(registry)
+        registry.stop_disabled()
+        registry.start_enabled()
         if record.desired_state is not PluginDesiredState.ENABLED:
             return _problem(
                 status=503,
@@ -147,6 +153,7 @@ def _guard_view(
 
 
 def _guard_patterns(
+    registry: PluginDistributionRegistry,
     record: PluginDistributionRecord,
     capability: PluginCapabilityRecord,
     patterns,
@@ -157,7 +164,7 @@ def _guard_patterns(
             guarded_patterns.append(
                 URLPattern(
                     pattern.pattern,
-                    _guard_view(record, capability, pattern.callback),
+                    _guard_view(registry, record, capability, pattern.callback),
                     pattern.default_args,
                     pattern.name,
                 )
@@ -166,7 +173,7 @@ def _guard_patterns(
             guarded_patterns.append(
                 URLResolver(
                     pattern.pattern,
-                    _guard_patterns(record, capability, pattern.url_patterns),
+                    _guard_patterns(registry, record, capability, pattern.url_patterns),
                     pattern.default_kwargs,
                     pattern.app_name,
                     pattern.namespace,
@@ -183,7 +190,12 @@ def plugin_api_urlpatterns(registry: PluginDistributionRegistry):
         contribution = capability_record.contribution
         if not isinstance(contribution, ApiCapability):
             continue
-        plugin_patterns = _guard_patterns(record, capability_record, contribution.routes())
+        plugin_patterns = _guard_patterns(
+            registry,
+            record,
+            capability_record,
+            contribution.routes(),
+        )
         patterns.append(
             path(
                 f"plugins/{record.manifest.plugin_id}/",
