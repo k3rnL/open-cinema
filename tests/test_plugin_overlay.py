@@ -23,6 +23,17 @@ from core.plugin_system.overlay import (
 from opencinema_plugin_bootstrap import activate_plugin_overlay
 
 
+def test_standalone_control_cli_import_does_not_require_django_setup() -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", "import core.plugin_system.control_cli"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def _manifest(generation_id: str, previous: str | None = None) -> PluginGenerationManifest:
     return PluginGenerationManifest(
         generation_id,

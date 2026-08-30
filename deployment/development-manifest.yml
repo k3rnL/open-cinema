@@ -33,7 +33,7 @@ runtime_profile: full
 
 components:
   open_cinema:
-    version: 0.3.3
+    version: 0.3.4
     repository: k3rnL/open-cinema
     source_mode: local-source-tree
     immutable: false

@@ -1,6 +1,6 @@
 """Open Cinema package and runtime version information."""
 
-__version__ = "0.3.3"
+__version__ = "0.3.4"
 __version_info__ = tuple(int(part) for part in __version__.split("."))
 
 MAJOR, MINOR, PATCH = __version_info__

@@ -15,7 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User authentication
 - Production deployment configuration
 
-## [0.3.3] - Unreleased
+## [0.3.4] - 2026-08-30
+
+### Fixed
+- Keep the standalone plugin generation-control helper independent from Django
+  application initialization during appliance deployment and rollback checks.
+
+## [0.3.3] - 2026-08-30
 
 ### Added
 - Versioned installable-plugin contract, SDK, catalogue, lifecycle operations, and declarative administration UI support.

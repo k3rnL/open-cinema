@@ -10,12 +10,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from io import BufferedIOBase
 from pathlib import Path, PurePosixPath
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from .catalogue import CatalogueArtifact, FirstPartyPlugin
 from .manifest import parse_plugin_manifest
 from .v2_contracts import PLUGIN_MANIFEST_FILENAME, PluginDistributionManifest
+
+if TYPE_CHECKING:
+    from .catalogue import CatalogueArtifact, FirstPartyPlugin
 
 GIT_OPERATION_TIMEOUT_SECONDS = 120
 PLUGIN_SOURCE_MAX_FILES = 10_000
