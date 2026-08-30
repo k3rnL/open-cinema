@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User authentication
 - Production deployment configuration
 
-## [0.3.11] - 2026-08-30
+## [0.3.12] - 2026-08-30
 
 ### Fixed
 - Select the librespot plugin release that preserves its immutable overlay

@@ -22,7 +22,7 @@ ROOT = Path(__file__).parents[1]
 def test_checked_in_release_template_is_exact_and_not_directly_promotable() -> None:
     document = yaml.safe_load((ROOT / "deployment" / "release-manifest.yml").read_text())
 
-    assert document["release_id"] == "open-cinema-0.3.11-candidate"
+    assert document["release_id"] == "open-cinema-0.3.12-candidate"
     assert document["input_mode"] == "appliance"
     assert document["status"] == "experimental"
     assert document["promotable"] is False
@@ -31,7 +31,7 @@ def test_checked_in_release_template_is_exact_and_not_directly_promotable() -> N
 
     components = document["components"]
     assert components["open_cinema"] == {
-        "version": "0.3.11",
+        "version": "0.3.12",
         "repository": "k3rnL/open-cinema",
         "source_mode": "tag-build-finalization-placeholder",
         "immutable": False,
@@ -72,6 +72,20 @@ def test_release_workflow_installs_manifest_tooling_before_finalization() -> Non
     finalization = "Generate provenance and finalize the coordinated manifest"
     assert install in workflow
     assert workflow.index(install) < workflow.index(finalization)
+
+
+def test_release_workflow_mirrors_the_selected_management_ui_bytes() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    manifest = yaml.safe_load((ROOT / "deployment" / "release-manifest.yml").read_text())
+    component = manifest["components"]["management_ui"]
+
+    assert f"/releases/download/{component['tag']}" in workflow
+    for artifact in component["artifacts"]:
+        assert artifact["name"] in workflow
+        assert artifact["sha256"] in workflow
+    for provenance in component["provenance"].values():
+        assert provenance["url"].rsplit("/", 1)[-1] in workflow
+        assert provenance["sha256"] in workflow
 
 
 def test_release_workflow_verifies_public_immutability_with_its_scoped_token() -> None:
