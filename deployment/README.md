@@ -16,6 +16,8 @@ experimental platform policy.
 - the Django API, Redis, Gunicorn, and dedicated orchestration process;
 - orchestrator-owned CamillaDSP and PCM decoder instance templates;
 - nginx plus the simple and administration web interfaces.
+- immutable plugin overlay generations, private plugin secrets, a bounded
+  generation-control helper, and persistent lifecycle operations.
 
 CamillaDSP and decoder instances are not enabled by Ansible. The orchestrator
 starts an instance only after resolving a desired graph and writing its owned
@@ -97,6 +99,26 @@ decoder inputs. The combined candidate digest and each individual SHA-256 are
 reported as mutable, non-release identities; they are never presented as
 published component provenance.
 
+### Editable plugin development
+
+Production never imports an editable checkout. For a local development target,
+explicitly enable and enumerate plugin roots in the private inventory:
+
+```yaml
+open_cinema:
+  plugins:
+    allow_editable: true
+    editable_dirs:
+      - /opt/home-cinema/development/open-cinema-example
+```
+
+`allow_editable` is rejected unless `install_from_local` is true. Every path is
+resolved, must be a real directory, is appended after the base and active
+overlay paths, and remains visible as mutable development provenance. It does
+not relax Git URL, catalogue, wheel, manifest, namespace, permission, or
+production activation rules. Disable the override before collecting appliance
+acceptance or release evidence.
+
 ## Validate and deploy
 
 Run standalone platform/package preflight on an already prepared target:
@@ -159,6 +181,9 @@ migration, or live reconciliation. Its final readiness role requires:
   cursor-gap snapshot reported by the live event store. Cursor-gap generation
   itself remains covered by the application suite so deployment never creates
   or deletes user graph data merely to manufacture a readiness fixture.
+- plugin overlay pointer/integrity checks, current and last-known-good identity,
+  pending operations, incompatible plugins, generation-size bounds, and the
+  fixed helper's allowlisted argument contract.
 
 Before replacing candidate application files, the play compares the candidate
 content digest with the last passed contract-gate result. A changed candidate
@@ -325,6 +350,22 @@ reconciliation; close and prune the window only in the same reviewed run after
 the new bundle and every protected exception verify.
 
 ## Service and diagnostic commands
+
+### Optional dashboard system controls
+
+The dashboard's service restart and appliance reboot actions use a root-owned,
+fixed-command helper. They remain unadvertised by default. Enable them only in
+a reviewed host inventory with `open_cinema.system_control.enabled: true`; the
+Open Cinema role validates the helper, sudoers syntax, and all three authorized
+`--check` calls before the API exposes an action.
+
+To roll back only this privilege, set the option to `false` and rerun the Open
+Cinema role. The role removes both
+`/usr/local/libexec/open-cinema-system-control` and
+`/etc/sudoers.d/open-cinema-system-control`. This does not modify desired audio
+state, database migrations, release artifacts, or the retained coordinated
+rollback bundle. The complete threat model and reconnect behavior are described
+in [`docs/audio-orchestration/SYSTEM_CONTROL.md`](../docs/audio-orchestration/SYSTEM_CONTROL.md).
 
 ```bash
 sudo systemctl status open-cinema open-cinema-orchestrator redis-server nginx

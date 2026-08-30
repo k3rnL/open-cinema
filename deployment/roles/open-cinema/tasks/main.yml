@@ -1,4 +1,28 @@
 ---
+- name: Read the installed release-manifest digest for independently tagged runs
+  ansible.builtin.stat:
+    path: "{{ release_manifest.install_path }}"
+    checksum_algorithm: sha256
+  register: open_cinema_application_release_manifest_stat
+  when: open_cinema_release_manifest_digest is not defined
+
+- name: Require the coordinated release manifest before an independently tagged install
+  ansible.builtin.assert:
+    that:
+      - open_cinema_application_release_manifest_stat.stat.exists
+      - open_cinema_application_release_manifest_stat.stat.isreg
+      - open_cinema_application_release_manifest_stat.stat.checksum | length == 64
+    fail_msg: >-
+      The coordinated release manifest is missing or unreadable; include the
+      common role before running the application role independently.
+  when: open_cinema_release_manifest_digest is not defined
+
+- name: Publish the installed release-manifest digest for an independently tagged install
+  ansible.builtin.set_fact:
+    open_cinema_release_manifest_digest: >-
+      {{ open_cinema_application_release_manifest_stat.stat.checksum }}
+  when: open_cinema_release_manifest_digest is not defined
+
 - name: Resolve the audio service UID for independently tagged runs
   ansible.builtin.command:
     argv:
@@ -11,6 +35,62 @@
 - name: Publish the audio service UID
   ansible.builtin.set_fact:
     open_cinema_uid: "{{ open_cinema_application_uid_command.stdout | int }}"
+
+- name: Create the root helper directory when appliance controls are enabled
+  ansible.builtin.file:
+    path: "{{ open_cinema.system_control.helper_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: open_cinema.system_control.enabled | bool
+
+- name: Install the fixed Open Cinema system-control helper
+  ansible.builtin.copy:
+    src: open-cinema-system-control
+    dest: "{{ open_cinema.system_control.helper_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  when: open_cinema.system_control.enabled | bool
+
+- name: Install exact system-control sudo authorization
+  ansible.builtin.template:
+    src: open-cinema-system-control.sudoers.j2
+    dest: "{{ open_cinema.system_control.sudoers_path }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+  when: open_cinema.system_control.enabled | bool
+
+- name: Remove system-control sudo authorization when controls are disabled
+  ansible.builtin.file:
+    path: "{{ open_cinema.system_control.sudoers_path }}"
+    state: absent
+  when: not (open_cinema.system_control.enabled | bool)
+
+- name: Remove system-control helper when controls are disabled
+  ansible.builtin.file:
+    path: "{{ open_cinema.system_control.helper_path }}"
+    state: absent
+  when: not (open_cinema.system_control.enabled | bool)
+
+- name: Verify each authorized appliance action as the service identity
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/sudo
+      - -n
+      - "{{ open_cinema.system_control.helper_path }}"
+      - --check
+      - "{{ item }}"
+  become_user: "{{ open_cinema.user }}"
+  changed_when: false
+  loop:
+    - restart-open-cinema
+    - restart-orchestrator
+    - reboot-appliance
+  when: open_cinema.system_control.enabled | bool
 
 - name: Add deadsnakes PPA for Python {{ open_cinema.python_version }}
   ansible.builtin.apt_repository:
@@ -58,6 +138,33 @@
     owner: "{{ open_cinema.user }}"
     group: "{{ open_cinema.group }}"
     mode: "0700"
+
+- name: Create private plugin overlay and secret directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ open_cinema.user }}"
+    group: "{{ open_cinema.group }}"
+    mode: "0700"
+  loop:
+    - "{{ open_cinema.plugins.root }}"
+    - "{{ open_cinema.plugins.root }}/generations"
+    - "{{ open_cinema.plugins.root }}/staging"
+    - "{{ open_cinema.plugins.root }}/pointers"
+    - "{{ open_cinema.plugins.secret_dir }}"
+    - "{{ open_cinema.plugins.root }}/runtime"
+
+- name: Require bounded plugin overlay policy
+  ansible.builtin.assert:
+    that:
+      - open_cinema.plugins.generation_retention | int >= 1
+      - open_cinema.plugins.generation_retention | int <= 20
+      - open_cinema.plugins.generation_max_bytes | int >= 1048576
+      - open_cinema.plugins.generation_max_bytes | int <= 10737418240
+      - not (open_cinema.plugins.allow_editable | bool) or (install_from_local | default(false) | bool)
+    fail_msg: >-
+      Plugin storage bounds are invalid, or editable plugin paths were enabled
+      outside an explicit local development deployment.
 
 - name: Create log directory
   ansible.builtin.file:
@@ -272,6 +379,22 @@
     creates: "{{ open_cinema.venv_path }}/bin/python"
   become_user: "{{ open_cinema.user }}"
 
+- name: Install the fixed plugin generation-control helper
+  ansible.builtin.file:
+    path: "{{ open_cinema.plugins.helper_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render the fixed plugin generation-control helper
+  ansible.builtin.template:
+    src: open-cinema-plugin-control.j2
+    dest: "{{ open_cinema.plugins.helper_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Upgrade pip in virtual environment
   ansible.builtin.pip:
     name: pip
@@ -474,6 +597,29 @@
     - Restart celery
     - Restart celery beat
     - Restart open-cinema orchestrator
+
+- name: Verify each fixed plugin-control shape as the service identity
+  ansible.builtin.command:
+    argv: "{{ [open_cinema.plugins.helper_path, '--check'] + item }}"
+  loop:
+    - [validate, gen-readiness-probe]
+    - [activate, gen-readiness-probe]
+    - [rollback]
+    - [cleanup]
+  become_user: "{{ open_cinema.user }}"
+  changed_when: false
+
+- name: Prove plugin-control rejects caller-owned paths
+  ansible.builtin.command:
+    argv:
+      - "{{ open_cinema.plugins.helper_path }}"
+      - --check
+      - activate
+      - ../../tmp/escape
+  become_user: "{{ open_cinema.user }}"
+  register: open_cinema_plugin_control_escape_probe
+  changed_when: false
+  failed_when: open_cinema_plugin_control_escape_probe.rc == 0
 
 - name: Create the fail-closed Django environment file
   ansible.builtin.include_tasks: render-runtime-environment.yml

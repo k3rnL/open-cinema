@@ -140,6 +140,8 @@ def _candidate_document(candidate: RuntimeEndpointCandidate) -> dict[str, object
         "formats": [format_value.to_document() for format_value in candidate.formats],
         "volume": candidate.volume,
         "mute": candidate.mute,
+        "volumeWritable": candidate.volume_writable,
+        "muteWritable": candidate.mute_writable,
         "latency": candidate.latency.to_document(),
         "isDefault": candidate.is_default,
         "isLinked": candidate.is_linked,
@@ -386,6 +388,8 @@ def _candidate_from_document(value: object, path: str) -> RuntimeEndpointCandida
         is_default=item["isDefault"],
         is_linked=item["isLinked"],
         has_active_signal=item["hasActiveSignal"],
+        volume_writable=bool(item.get("volumeWritable", False)),
+        mute_writable=bool(item.get("muteWritable", False)),
     )
 
 

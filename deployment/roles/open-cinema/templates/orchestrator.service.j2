@@ -50,7 +50,7 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 RestrictNamespaces=true
 LockPersonality=true
 SystemCallArchitectures=native
-ReadWritePaths={{ open_cinema.app_path }} /run/open-cinema /var/log/open-cinema
+ReadWritePaths={{ open_cinema.app_path }} {{ open_cinema.plugins.root }} {{ open_cinema.plugins.secret_dir }} /run/open-cinema /var/log/open-cinema /var/lib/open-cinema
 
 [Install]
 WantedBy=multi-user.target

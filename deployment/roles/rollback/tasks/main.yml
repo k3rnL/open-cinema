@@ -85,12 +85,20 @@
         (open_cinema_rollback_manifest.schema_version == 2 and
          open_cinema_rollback_artifact_names in
          [open_cinema_rollback_required_artifacts | sort,
-          (open_cinema_rollback_required_artifacts + ['wyreplumber.tar.gz']) | sort])
+          (open_cinema_rollback_required_artifacts + ['wyreplumber.tar.gz']) | sort,
+          (open_cinema_rollback_required_artifacts + ['plugin-state.json']) | sort,
+          (open_cinema_rollback_required_artifacts + ['plugin-state.json', 'wyreplumber.tar.gz']) | sort])
       - >-
         open_cinema_rollback_manifest.schema_version == 1 or
         (open_cinema_rollback_manifest.restore.wyreplumber_archive | default(none)) ==
         ('wyreplumber.tar.gz'
          if 'wyreplumber.tar.gz' in open_cinema_rollback_manifest.artifacts
+         else none)
+      - >-
+        open_cinema_rollback_manifest.schema_version == 1 or
+        (open_cinema_rollback_manifest.restore.plugin_state | default(none)) ==
+        ('plugin-state.json'
+         if 'plugin-state.json' in open_cinema_rollback_manifest.artifacts
          else none)
       - >-
         open_cinema_rollback_manifest.schema_version == 1 or

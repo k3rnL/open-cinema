@@ -192,6 +192,21 @@ candidate. Successful calls are accepted only after WyrePlumber reports a
 confirmed observed value; action verification then checks the same value in a
 fresh orchestration observation.
 
+The desired factors live outside graph revisions and temporary overrides. The
+master record defaults to `1.0` and unmuted; each logical endpoint independently
+defaults to `1.0` and unmuted. For an active output the requested runtime level
+is `master × endpoint`, and either mute silences it. Inputs never inherit the
+output master factor. This keeps a user's device trim stable while the active
+route changes.
+
+Level intent is part of convergence ordering and is applied before a route is
+reported converged. The reconciler compares the desired effective value with a
+fresh observation and skips an already-confirmed write. It reapplies after an
+active-output change, Bluetooth or other endpoint recreation, runtime-generation
+change, orchestrator restart, or later observed drift. A disconnected endpoint
+keeps its preference without generating writes; ambiguity, stale identity, and
+read-only capabilities become explicit pending or degraded evidence.
+
 ## Ordinary WirePlumber routing
 
 Ordinary routes use configured default-node metadata and per-stream

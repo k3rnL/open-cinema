@@ -149,6 +149,32 @@ def test_snapshot_maps_only_endpoint_nodes_and_joins_runtime_context() -> None:
     assert sink.ports[0].channel == "FL"
 
 
+def test_managed_plugin_playback_stream_is_an_input_endpoint() -> None:
+    snapshot = _snapshot()
+    stream = replace(
+        snapshot.nodes[-1],
+        properties=FrozenDict(
+            {
+                "node.name": "open-cinema-librespot-test",
+                "open-cinema.plugin.id": "open-cinema.librespot",
+                "open-cinema.instance.id": "test-instance",
+                "open-cinema.generation": "generation-1",
+            }
+        ),
+    )
+
+    inventory = map_runtime_endpoints(replace(snapshot, nodes=(*snapshot.nodes[:-1], stream)))
+
+    managed = next(item for item in inventory.candidates if item.name == "application-stream")
+    assert managed.direction is EndpointDirection.INPUT
+    assert managed.selector_facts()["nodeProperties"] == {
+        "node.name": "open-cinema-librespot-test",
+        "open-cinema.plugin.id": "open-cinema.librespot",
+        "open-cinema.instance.id": "test-instance",
+        "open-cinema.generation": "generation-1",
+    }
+
+
 def test_runtime_ids_are_ephemeral_and_absent_from_selector_facts() -> None:
     before = map_runtime_endpoints(_snapshot(source_id=20, sink_id=10))
     after = map_runtime_endpoints(_snapshot(generation=4, source_id=220, sink_id=110))

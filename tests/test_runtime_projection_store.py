@@ -2,7 +2,14 @@ from dataclasses import replace
 
 import pytest
 
-from api.models import ManagedAudioAdapter, ManagedAudioAdapterRuntimeState, RuntimeProjection
+from api.models import (
+    EndpointAudioLevel,
+    LogicalEndpoint,
+    ManagedAudioAdapter,
+    ManagedAudioAdapterRuntimeState,
+    MasterAudioLevel,
+    RuntimeProjection,
+)
 from core.orchestration.camilladsp_resources import CamillaDSPDeploymentPolicy
 from core.orchestration.runtime_projection_store import (
     DatabaseRuntimeProjectionStore,
@@ -12,6 +19,7 @@ from core.orchestration.runtime_world import InMemoryWorldStore
 from tests.test_endpoint_inventory_mapping import _snapshot
 from tests.factories.orchestration import UserFactory
 from wyreplumber.runtime import FrozenDict, NodeState, NodeValue
+from wyreplumber.runtime import AudioPropertiesValue, ParameterValue
 
 pytestmark = pytest.mark.django_db
 
@@ -38,6 +46,59 @@ def test_publish_exposes_current_endpoint_candidates_and_runtime_health() -> Non
     health = RuntimeProjection.objects.get(projection_type="orchestration-health", is_current=True)
     assert health.payload["ready"] is True
     assert health.payload["counts"]["endpoints"] == 2
+
+
+def test_publish_exposes_effective_observed_and_applying_audio_level_state() -> None:
+    owner = UserFactory()
+    endpoint = LogicalEndpoint.objects.create(
+        owner=owner,
+        name="Main speakers",
+        direction="output",
+        selector={
+            "version": 1,
+            "match": "all",
+            "predicates": [
+                {
+                    "path": "node.name",
+                    "operator": "exact",
+                    "value": "alsa_output.usb-room",
+                }
+            ],
+        },
+    )
+    MasterAudioLevel.objects.create(level=0.8)
+    EndpointAudioLevel.objects.create(endpoint=endpoint, level=0.5)
+    runtime = replace(
+        _snapshot(),
+        parameters=(
+            ParameterValue(
+                "node",
+                10,
+                "Props",
+                "rw",
+                (AudioPropertiesValue(volume=0.6, mute=False),),
+            ),
+        ),
+    )
+    world = InMemoryWorldStore().install_runtime_snapshot(runtime)
+
+    result = DatabaseRuntimeProjectionStore().publish(world)
+
+    assert result.created == 5
+    projected = RuntimeProjection.objects.get(
+        projection_type="audio-level", subject_key=f"endpoint:{endpoint.pk}"
+    ).payload
+    assert projected["desired"] == {"level": 0.5, "muted": False}
+    assert projected["effective"] == {"level": 0.4, "muted": False}
+    assert projected["observed"] == {"level": 0.6, "muted": False, "known": True}
+    assert projected["capabilities"]["volume"]["writable"] is True
+    assert projected["active"] is True
+    assert projected["applying"] is True
+    master = RuntimeProjection.objects.get(
+        projection_type="audio-level", subject_key="master"
+    ).payload
+    assert master["observed"]["outputs"][0]["endpointId"] == str(endpoint.pk)
+    assert master["applying"] is True
 
 
 def test_publish_retires_previous_world_and_is_idempotent() -> None:
@@ -229,8 +290,6 @@ def test_unlinked_suspended_processor_nodes_remain_available() -> None:
         projection_type="managed-resource", is_current=True
     )
     assert all(item.payload["ready"] is True for item in resources)
-    health = RuntimeProjection.objects.get(
-        projection_type="processor-health", is_current=True
-    )
+    health = RuntimeProjection.objects.get(projection_type="processor-health", is_current=True)
     assert health.payload["ready"] is True
     assert health.payload["health"] == "healthy"

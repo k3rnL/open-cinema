@@ -10,6 +10,7 @@ release_manifest_sha256: "{{ open_cinema_transition_installed_manifest.stat.chec
 input_identity:
 {{ open_cinema_deployment_input_identity | default({}) | to_nice_yaml(indent=2) | indent(2, true) }}
 dynamic_state: {{ open_cinema_transition_state_command.stdout_lines | last | from_json | to_json }}
+plugin_state: {{ open_cinema_transition_plugin_state.stdout_lines | last | from_json | to_json }}
 artifacts:
 {{ open_cinema_transition_artifact_checksums | to_nice_yaml(indent=2) | indent(2, true) }}
 managed_static_paths:
@@ -24,3 +25,4 @@ restore:
   managed_static_archive: managed-static.tar.gz
   database: db.sqlite3
   release_manifest: release-manifest.yml
+  plugin_state: plugin-state.json

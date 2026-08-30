@@ -19,7 +19,9 @@ contracts:
   orchestration_schema: 1
   desired_graph_schema: 1
   ui_dto_schema: 1
-  processing_plugin: 1
+  processing_plugin: 2
+  plugin_platform: 2
+  plugin_admin_ui: 1
   processing_driver: 1
   wyreplumber_orchestration: 1
   wyreplumber_runtime_value_schema: 1

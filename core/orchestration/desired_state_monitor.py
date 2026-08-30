@@ -35,7 +35,36 @@ class DesiredStateWakeupResult:
 
 
 def _database_activation_documents() -> tuple[dict[str, object], ...]:
-    from api.models import GraphActivation
+    from api.models import EndpointAudioLevel, GraphActivation, MasterAudioLevel
+
+    master = (
+        MasterAudioLevel.objects.filter(pk=1).values("level", "muted", "update_version").first()
+    )
+    endpoints = list(
+        EndpointAudioLevel.objects.order_by("endpoint_id").values(
+            "endpoint_id", "level", "muted", "update_version"
+        )
+    )
+    audio_levels = {
+        "master": (
+            {
+                "level": master["level"],
+                "muted": master["muted"],
+                "updateVersion": master["update_version"],
+            }
+            if master is not None
+            else None
+        ),
+        "endpoints": [
+            {
+                "endpointId": str(item["endpoint_id"]),
+                "level": item["level"],
+                "muted": item["muted"],
+                "updateVersion": item["update_version"],
+            }
+            for item in endpoints
+        ],
+    }
 
     values = GraphActivation.objects.order_by("id").values(
         "id",
@@ -53,6 +82,7 @@ def _database_activation_documents() -> tuple[dict[str, object], ...]:
             "enabled": value["enabled"],
             "desiredStateVersion": value["desired_state_version"],
             "updatedAt": value["updated_at"].isoformat(),
+            "audioLevels": audio_levels,
         }
         for value in values
     )
@@ -116,6 +146,8 @@ class DesiredStateMonitor:
                 reasons.append("activation_removed")
             elif after["desiredStateVersion"] < before["desiredStateVersion"]:
                 reasons.append("desired_state_version_regressed")
+            elif after.get("audioLevels") != before.get("audioLevels"):
+                reasons.append("audio_level_intent_changed")
             else:
                 reasons.append("desired_state_version_advanced")
         snapshot = DesiredStateSnapshot(
@@ -280,5 +312,34 @@ def publish_adapter_state_wakeup(
         subscribers = int(Redis.from_url(projection["url"]).publish(channel, payload))
     except Exception as error:
         logger.warning("Adapter desired-state Redis wake-up was lost: %s", error)
+        return DesiredStateWakeupResult(False, 0, "redis_publish_failed")
+    return DesiredStateWakeupResult(True, subscribers, "redis_wakeup_published")
+
+
+def publish_audio_level_wakeup(*, scope_id: str, update_version: int) -> DesiredStateWakeupResult:
+    """Best-effort hint; the desired-state digest remains authoritative."""
+
+    from django.conf import settings
+
+    if not settings.AUDIO_ORCHESTRATION_FEATURES["runtime_observation"]:
+        return DesiredStateWakeupResult(False, 0, "runtime_observation_disabled")
+    from redis import Redis
+
+    projection = settings.AUDIO_RUNTIME_REDIS_PROJECTION
+    channel = settings.AUDIO_DESIRED_STATE_MONITOR["channel"]
+    payload = json.dumps(
+        {
+            "schemaVersion": 1,
+            "resource": "audio-level",
+            "scopeId": scope_id,
+            "updateVersion": update_version,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    try:
+        subscribers = int(Redis.from_url(projection["url"]).publish(channel, payload))
+    except Exception as error:
+        logger.warning("Audio-level desired-state wake-up was lost: %s", error)
         return DesiredStateWakeupResult(False, 0, "redis_publish_failed")
     return DesiredStateWakeupResult(True, subscribers, "redis_wakeup_published")

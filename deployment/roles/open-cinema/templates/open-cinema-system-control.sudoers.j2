@@ -1,0 +1,7 @@
+# Managed by Open Cinema. Keep every permitted command exact and argument-complete.
+{{ open_cinema.user }} ALL=(root) NOPASSWD: {{ open_cinema.system_control.helper_path }} --check restart-open-cinema
+{{ open_cinema.user }} ALL=(root) NOPASSWD: {{ open_cinema.system_control.helper_path }} --check restart-orchestrator
+{{ open_cinema.user }} ALL=(root) NOPASSWD: {{ open_cinema.system_control.helper_path }} --check reboot-appliance
+{{ open_cinema.user }} ALL=(root) NOPASSWD: {{ open_cinema.system_control.helper_path }} restart-open-cinema
+{{ open_cinema.user }} ALL=(root) NOPASSWD: {{ open_cinema.system_control.helper_path }} restart-orchestrator
+{{ open_cinema.user }} ALL=(root) NOPASSWD: {{ open_cinema.system_control.helper_path }} reboot-appliance

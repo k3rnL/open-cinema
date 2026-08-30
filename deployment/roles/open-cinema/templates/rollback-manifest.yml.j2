@@ -13,6 +13,11 @@ components:
 input_identity:
 {{ open_cinema_deployment_input_identity | default({}) | to_nice_yaml(indent=2) | indent(2, true) }}
 migration_policy: destructive-removal-of-legacy-audio-models
+plugin_overlay:
+  root: "{{ open_cinema.plugins.root }}"
+  secrets: "{{ open_cinema.plugins.secret_dir }}"
+  retention: {{ open_cinema.plugins.generation_retention }}
+  generation_max_bytes: {{ open_cinema.plugins.generation_max_bytes }}
 migration_timeouts:
   preflight_seconds: {{ open_cinema.migrations.preflight_timeout_seconds }}
   apply_seconds: {{ open_cinema.migrations.apply_timeout_seconds }}

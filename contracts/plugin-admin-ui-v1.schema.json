@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-cinema.local/schemas/plugin-admin-ui-v1.schema.json",
+  "title": "Open Cinema declarative plugin administration UI",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "navigation", "pages"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "navigation": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {"$ref": "#/$defs/navigation"}
+    },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {"$ref": "#/$defs/page"}
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+    },
+    "text": {"type": "string", "minLength": 1, "maxLength": 512},
+    "navigation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "pageId", "order"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "label": {"type": "string", "minLength": 1, "maxLength": 80},
+        "pageId": {"$ref": "#/$defs/id"},
+        "icon": {"type": "string", "minLength": 1, "maxLength": 64},
+        "order": {"type": "integer", "minimum": -1000, "maximum": 1000},
+        "permission": {"$ref": "#/$defs/id"}
+      }
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "template", "binding", "sections"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 120},
+        "description": {"type": "string", "maxLength": 1024},
+        "template": {"enum": ["settings", "resource-list", "resource-detail", "overview", "guided-flow"]},
+        "binding": {"$ref": "#/$defs/binding"},
+        "permission": {"$ref": "#/$defs/id"},
+        "sections": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {"$ref": "#/$defs/section"}
+        },
+        "actions": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {"$ref": "#/$defs/action"},
+          "default": []
+        }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["read"],
+      "properties": {
+        "read": {"type": "string", "pattern": "^/", "maxLength": 512},
+        "write": {"type": "string", "pattern": "^/", "maxLength": 512},
+        "operationStatus": {"type": "string", "pattern": "^/", "maxLength": 512},
+        "successPageId": {"$ref": "#/$defs/id"},
+        "freshnessMs": {"type": "integer", "minimum": 250, "maximum": 3600000}
+      }
+    },
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "presentation", "fields"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 120},
+        "description": {"type": "string", "maxLength": 1024},
+        "presentation": {"enum": ["section", "card", "tab", "status", "diagnostics"]},
+        "emphasis": {"enum": ["normal", "primary", "advanced", "danger"]},
+        "width": {"enum": ["narrow", "normal", "wide", "full"]},
+        "fields": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {"$ref": "#/$defs/field"}
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "label", "widget"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "path": {"type": "string", "pattern": "^/", "maxLength": 512},
+        "label": {"type": "string", "minLength": 1, "maxLength": 120},
+        "widget": {"enum": ["text", "number", "boolean", "enum", "multiselect", "duration", "path", "url", "secret", "repeatable", "group"]},
+        "help": {"type": "string", "maxLength": 1024},
+        "placeholder": {"type": "string", "maxLength": 256},
+        "required": {"type": "boolean"},
+        "readOnly": {"type": "boolean"},
+        "choices": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value", "label"],
+            "properties": {
+              "value": {"type": ["string", "number", "boolean"]},
+              "label": {"type": "string", "minLength": 1, "maxLength": 120},
+              "help": {"type": "string", "maxLength": 512}
+            }
+          }
+        },
+        "constraints": {"type": "object", "maxProperties": 32},
+        "visibleWhen": {"type": "object", "maxProperties": 8},
+        "item": {"$ref": "#/$defs/field"},
+        "fields": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {"$ref": "#/$defs/field"}
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "method", "endpoint", "confirmation", "lifecycleImpact"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "label": {"type": "string", "minLength": 1, "maxLength": 80},
+        "method": {"enum": ["POST", "PUT", "PATCH", "DELETE"]},
+        "endpoint": {"type": "string", "pattern": "^/", "maxLength": 512},
+        "confirmation": {"enum": ["none", "confirm", "destructive", "disconnecting"]},
+        "lifecycleImpact": {"enum": ["hot", "application-restart", "host-reboot"]},
+        "available": {"type": "boolean"},
+        "reason": {"type": ["string", "null"], "maxLength": 512},
+        "concurrencyToken": {"type": ["string", "null"], "maxLength": 256},
+        "permission": {"$ref": "#/$defs/id"},
+        "operationStatus": {"type": "string", "pattern": "^/", "maxLength": 512}
+      }
+    }
+  }
+}

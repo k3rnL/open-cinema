@@ -31,25 +31,26 @@ def catalogue_items() -> list[dict[str, object]]:
             }
         )
         items.append(document)
-    for record in PLUGIN_REGISTRY.records:
-        for manifest in record.node_types:
-            if (manifest.type_id, manifest.version) in registered:
-                continue
-            document = manifest.to_document()
-            document.update(
-                {
-                    "available": False,
-                    "source": "plugin",
-                    "pluginId": record.manifest.plugin_id,
-                    "pluginState": record.state.value,
-                    "availabilityDiagnostics": [item.to_document() for item in record.diagnostics],
-                    "ui": {
-                        "advanced": True,
-                        "paletteGroup": manifest.category,
-                        "icon": manifest.category,
-                    },
-                }
-            )
-            items.append(document)
+    for record, capability, manifest in PLUGIN_REGISTRY.processing_node_manifests():
+        if (manifest.type_id, manifest.version) in registered:
+            continue
+        document = manifest.to_document()
+        document.update(
+            {
+                "available": False,
+                "source": "plugin",
+                "pluginId": record.manifest.plugin_id,
+                "pluginState": record.state.value,
+                "availabilityDiagnostics": [
+                    item.to_document() for item in (*record.diagnostics, *capability.diagnostics)
+                ],
+                "ui": {
+                    "advanced": True,
+                    "paletteGroup": manifest.category,
+                    "icon": manifest.category,
+                },
+            }
+        )
+        items.append(document)
     items.sort(key=lambda item: (item["id"], item["version"]))
     return items

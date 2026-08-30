@@ -2,13 +2,33 @@ import logging
 
 from django.apps import AppConfig
 
-from core.plugin_system import ApplicationLifecycleContext, PluginRegistry
+from core.plugin_system import PluginDistributionRegistry
+from core.plugin_system.integration import PluginAutomationRegistry, plugin_api_urlpatterns
 
 # Prevent duplicate URL registration if Django calls ready() more than once.
 _ALREADY_REGISTERED = False
-PLUGIN_REGISTRY = PluginRegistry()
+_RUNTIME_INITIALIZED = False
+PLUGIN_REGISTRY = PluginDistributionRegistry()
+PLUGIN_AUTOMATIONS = PluginAutomationRegistry(PLUGIN_REGISTRY)
 
 logger = logging.getLogger(__name__)
+
+
+def initialize_plugin_runtime() -> bool:
+    """Join durable desired state and start plugins after Django app loading is complete."""
+
+    from core.plugin_system.persistence_sync import synchronize_plugin_inventory
+
+    global _RUNTIME_INITIALIZED
+    if _RUNTIME_INITIALIZED:
+        return True
+    persisted = synchronize_plugin_inventory(PLUGIN_REGISTRY)
+    if not persisted:
+        logger.info("Plugin inventory persistence is unavailable until migrations complete")
+    PLUGIN_REGISTRY.start_enabled()
+    PLUGIN_AUTOMATIONS.refresh()
+    _RUNTIME_INITIALIZED = True
+    return persisted
 
 
 class ApiConfig(AppConfig):
@@ -24,18 +44,6 @@ class ApiConfig(AppConfig):
             return
 
         PLUGIN_REGISTRY.discover()
-
-        # The built-in example is also registered directly so source-tree
-        # development works before editable package metadata is refreshed.
-        from plugin.counter.api.plugin import CounterApplicationPlugin
-
-        if PLUGIN_REGISTRY.get("counter") is None:
-            try:
-                PLUGIN_REGISTRY.register_application(CounterApplicationPlugin())
-            except Exception:
-                logger.exception("Failed to register bundled counter application plugin")
-
-        PLUGIN_REGISTRY.start_applications(ApplicationLifecycleContext())
         for diagnostic in PLUGIN_REGISTRY.diagnostics:
             logger.warning(
                 "Plugin %s %s: %s",
@@ -44,12 +52,7 @@ class ApiConfig(AppConfig):
                 diagnostic.message,
             )
 
-        plugins = PLUGIN_REGISTRY.application_plugins()
-        if plugins:
-            self._register_plugin_urls(plugins)
-        _ALREADY_REGISTERED = True
-
-    def _register_plugin_urls(self, plugins):
         from api.urls import register_plugin_urls
 
-        register_plugin_urls(plugins)
+        register_plugin_urls(plugin_api_urlpatterns(PLUGIN_REGISTRY))
+        _ALREADY_REGISTERED = True

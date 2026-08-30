@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-cinema.local/schemas/plugin-runtime-result-v1.schema.json",
+  "title": "Open Cinema plugin runtime result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "status", "facts", "details"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "status": {"enum": ["ready", "degraded", "failed", "unavailable"]},
+    "facts": {"type": "object", "maxProperties": 256},
+    "details": {"type": "object", "maxProperties": 256},
+    "retryAfterMs": {"type": "integer", "minimum": 0, "maximum": 3600000},
+    "concurrencyToken": {"type": "string", "minLength": 1, "maxLength": 256}
+  }
+}

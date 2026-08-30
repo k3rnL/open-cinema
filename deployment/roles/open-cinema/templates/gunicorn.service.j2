@@ -38,13 +38,15 @@ KillSignal=SIGTERM
 KillMode=mixed
 
 # Security hardening
-NoNewPrivileges=true
+# The reviewed root-helper path requires one exact sudo transition. Keep the
+# stronger setting whenever appliance controls are not installed.
+NoNewPrivileges={{ (not (open_cinema.system_control.enabled | bool)) | lower }}
 PrivateTmp=true
 ProtectSystem=strict
 # ProtectHome also hides /run/user, which contains the owned PipeWire socket.
 ProtectHome=false
 InaccessiblePaths=/home /root
-ReadWritePaths={{ open_cinema.app_path }} /run/open-cinema /var/log/open-cinema
+ReadWritePaths={{ open_cinema.app_path }} {{ open_cinema.plugins.root }} {{ open_cinema.plugins.secret_dir }} /run/open-cinema /var/log/open-cinema /var/lib/open-cinema
 
 [Install]
 WantedBy=multi-user.target

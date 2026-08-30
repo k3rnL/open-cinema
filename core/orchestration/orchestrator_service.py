@@ -35,6 +35,7 @@ class OrchestratorService:
         shadow_resolver_factory=None,
         live_reconciler_factory=None,
         adapter_supervisor_factory=None,
+        managed_source_reconciler_factory=None,
         startup_recovery_factory=None,
         lifecycle=None,
         reconnect_backoff=None,
@@ -85,6 +86,8 @@ class OrchestratorService:
         self.live_reconciler = None
         self.adapter_supervisor_factory = adapter_supervisor_factory
         self.adapter_supervisor = None
+        self.managed_source_reconciler_factory = managed_source_reconciler_factory
+        self.managed_source_reconciler = None
         self.startup_recovery_factory = startup_recovery_factory
         self.startup_recovery = None
         self.lifecycle = lifecycle or OrchestratorLifecycle()
@@ -159,6 +162,11 @@ class OrchestratorService:
                 if self.adapter_supervisor_factory is not None
                 else self._default_adapter_supervisor()
             )
+            self.managed_source_reconciler = (
+                self.managed_source_reconciler_factory()
+                if self.managed_source_reconciler_factory is not None
+                else self._default_managed_source_reconciler()
+            )
         try:
             while not stop_event.is_set():
                 self.runtime_owner = None
@@ -199,6 +207,11 @@ class OrchestratorService:
                     self.adapter_supervisor.shutdown()
                 except Exception as error:
                     logger.warning("Failed to stop managed audio adapters: %s", error)
+            if self.managed_source_reconciler is not None:
+                try:
+                    self.managed_source_reconciler.shutdown()
+                except Exception as error:
+                    logger.warning("Failed to stop managed plugin sources: %s", error)
             self._publish_health(self.lifecycle.stopping(), cause="shutdown-requested")
             try:
                 desired_coordinator.close()
@@ -229,6 +242,7 @@ class OrchestratorService:
                 self.world_snapshot.runtime.generation,
             )
         self._reconcile_adapters()
+        self._reconcile_managed_sources(force=True)
 
         desired_result = self._poll_desired_state(desired_coordinator, force=True)
         self._update_redis_health(desired_coordinator)
@@ -282,9 +296,12 @@ class OrchestratorService:
             if desired_result is not None:
                 self.desired_snapshot = desired_result.snapshot
             self._reconcile_adapters()
+            managed_sources = self._reconcile_managed_sources()
             self._publish_runtime_projection()
-            if batch.world_version is not None or (
-                desired_result is not None and desired_result.changed
+            if (
+                batch.world_version is not None
+                or (desired_result is not None and desired_result.changed)
+                or managed_sources.changed
             ):
                 self._schedule_current_generations("runtime_or_desired_state_changed")
             if batch.world_version is not None:
@@ -337,6 +354,37 @@ class OrchestratorService:
                     "failed": list(result.failed),
                 },
             )
+
+    def _reconcile_managed_sources(self, *, force: bool = False):
+        from core.plugin_system.managed_sources import ManagedSourceReconcileResult
+
+        if self.managed_source_reconciler is None or self.world_snapshot is None:
+            return ManagedSourceReconcileResult()
+        try:
+            result = self.managed_source_reconciler.reconcile(
+                self.world_snapshot,
+                force=force,
+            )
+        except DatabaseError as error:
+            logger.warning("Managed plugin source database failure: %s", error)
+            return ManagedSourceReconcileResult()
+        except Exception as error:
+            logger.exception("Managed plugin source reconciliation failed: %s", error)
+            return ManagedSourceReconcileResult()
+        if result.started or result.stopped or result.restarted or result.failed:
+            self._publish_event(
+                "progress",
+                {
+                    "phase": "managed-plugin-sources-reconciled",
+                    "started": list(result.started),
+                    "stopped": list(result.stopped),
+                    "restarted": list(result.restarted),
+                    "ready": list(result.ready),
+                    "failed": list(result.failed),
+                    "changed": list(result.changed),
+                },
+            )
+        return result
 
     def _poll_desired_state(self, desired_coordinator, *, force=False):
         try:
@@ -647,6 +695,13 @@ class OrchestratorService:
         from .audio_adapter_supervisor import AudioAdapterSupervisor
 
         return AudioAdapterSupervisor()
+
+    @staticmethod
+    def _default_managed_source_reconciler():
+        from api.apps import PLUGIN_REGISTRY
+        from core.plugin_system.managed_sources import ManagedPluginSourceReconciler
+
+        return ManagedPluginSourceReconciler(PLUGIN_REGISTRY)
 
     @staticmethod
     def _default_startup_recovery():

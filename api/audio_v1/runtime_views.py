@@ -7,6 +7,7 @@ from api.models import DiagnosticRecord, OrchestrationEvent, RuntimeProjection
 from core.orchestration.feature_flags import get_audio_orchestration_feature_flags
 
 from .base import AudioV1APIView
+from .managed_resources import managed_resource_documents
 from .representations import event_document, projection_document, timestamp
 
 
@@ -50,17 +51,7 @@ class RuntimeSnapshotView(AudioV1APIView):
 
 class ManagedResourceView(AudioV1APIView):
     def get(self, request):
-        queryset = _projection_queryset(
-            request,
-            types=("managed-resource", "resource"),
-        )
-        return Response(
-            {
-                "items": [
-                    projection_document(item, admin=_is_admin(request.user)) for item in queryset
-                ]
-            }
-        )
+        return Response({"schemaVersion": 1, "items": managed_resource_documents(request.user)})
 
 
 class ProcessorHealthView(AudioV1APIView):

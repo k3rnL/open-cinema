@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping, Sequence
+import json
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
@@ -11,9 +11,7 @@ from wyreplumber.runtime import FrozenDict, freeze_json, thaw_json
 
 from core.orchestration.node_catalogue import NodePortDefinition, NodeTypeDefinition
 
-PLUGIN_CONTRACT_VERSION = 1
-APPLICATION_PLUGIN_ENTRY_POINT = "open_cinema.application_plugins"
-PROCESSING_PLUGIN_ENTRY_POINT = "open_cinema.processing_plugins"
+PLUGIN_CONTEXT_MAX_BYTES = 64 * 1024
 
 
 def _required_text(value: object, field_name: str, *, maximum: int = 255) -> str:
@@ -28,9 +26,23 @@ def _positive_int(value: object, field_name: str) -> int:
     return value
 
 
-class PluginKind(StrEnum):
-    APPLICATION = "application"
-    PROCESSING = "processing"
+def _bounded_frozen_mapping(value: object, field_name: str) -> FrozenDict:
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{field_name} must be a mapping")
+    frozen = FrozenDict(value)
+    try:
+        size = len(
+            json.dumps(
+                thaw_json(frozen),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{field_name} must contain JSON-compatible values") from error
+    if size > PLUGIN_CONTEXT_MAX_BYTES:
+        raise ValueError(f"{field_name} exceeds the {PLUGIN_CONTEXT_MAX_BYTES}-byte limit")
+    return frozen
 
 
 class PluginLifecycleState(StrEnum):
@@ -63,7 +75,7 @@ class PluginDiagnostic:
     def __post_init__(self) -> None:
         for name in ("plugin_id", "stage", "code", "message"):
             _required_text(getattr(self, name), name, maximum=2048)
-        object.__setattr__(self, "details", FrozenDict(self.details))
+        object.__setattr__(self, "details", _bounded_frozen_mapping(self.details, "details"))
 
     def to_document(self) -> dict[str, object]:
         return {
@@ -72,113 +84,6 @@ class PluginDiagnostic:
             "code": self.code,
             "message": self.message,
             "details": self.details.to_dict(),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PluginCompatibility:
-    minimum_contract: int = PLUGIN_CONTRACT_VERSION
-    maximum_contract: int = PLUGIN_CONTRACT_VERSION
-
-    def __post_init__(self) -> None:
-        _positive_int(self.minimum_contract, "minimum_contract")
-        _positive_int(self.maximum_contract, "maximum_contract")
-        if self.minimum_contract > self.maximum_contract:
-            raise ValueError("minimum_contract cannot exceed maximum_contract")
-
-    def supports(self, version: int = PLUGIN_CONTRACT_VERSION) -> bool:
-        return self.minimum_contract <= version <= self.maximum_contract
-
-    def to_document(self) -> dict[str, int]:
-        return {
-            "minimum": self.minimum_contract,
-            "maximum": self.maximum_contract,
-            "runtime": PLUGIN_CONTRACT_VERSION,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PluginManifest:
-    plugin_id: str
-    display_name: str
-    version: str
-    description: str
-    compatibility: PluginCompatibility = field(default_factory=PluginCompatibility)
-
-    def __post_init__(self) -> None:
-        plugin_id = _required_text(self.plugin_id, "plugin_id")
-        if any(
-            character not in "abcdefghijklmnopqrstuvwxyz0123456789-." for character in plugin_id
-        ):
-            raise ValueError("plugin_id must use lowercase letters, digits, dots, and hyphens")
-        for name in ("display_name", "version", "description"):
-            _required_text(getattr(self, name), name, maximum=2048)
-        if not isinstance(self.compatibility, PluginCompatibility):
-            raise TypeError("compatibility must be PluginCompatibility")
-
-    @property
-    @abstractmethod
-    def kind(self) -> PluginKind:
-        raise NotImplementedError
-
-    def to_document(self) -> dict[str, object]:
-        return {
-            "id": self.plugin_id,
-            "kind": self.kind.value,
-            "displayName": self.display_name,
-            "version": self.version,
-            "description": self.description,
-            "compatibility": self.compatibility.to_document(),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class ApplicationPluginManifest(PluginManifest):
-    route_namespace: str | None = None
-    model_packages: tuple[str, ...] = ()
-    automation_ids: tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        super(ApplicationPluginManifest, self).__post_init__()
-        if self.route_namespace is not None:
-            _required_text(self.route_namespace, "route_namespace")
-        for collection_name in ("model_packages", "automation_ids"):
-            values = tuple(getattr(self, collection_name))
-            if any(not isinstance(value, str) or not value for value in values):
-                raise ValueError(f"{collection_name} must contain non-empty strings")
-            if len(values) != len(set(values)):
-                raise ValueError(f"{collection_name} must not contain duplicates")
-            object.__setattr__(self, collection_name, values)
-
-    @property
-    def kind(self) -> PluginKind:
-        return PluginKind.APPLICATION
-
-    def to_document(self) -> dict[str, object]:
-        return {
-            **super(ApplicationPluginManifest, self).to_document(),
-            "routeNamespace": self.route_namespace,
-            "modelPackages": list(self.model_packages),
-            "automationIds": list(self.automation_ids),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class ProcessingPluginManifest(PluginManifest):
-    driver_contract_version: int = 1
-
-    def __post_init__(self) -> None:
-        super(ProcessingPluginManifest, self).__post_init__()
-        _positive_int(self.driver_contract_version, "driver_contract_version")
-
-    @property
-    def kind(self) -> PluginKind:
-        return PluginKind.PROCESSING
-
-    def to_document(self) -> dict[str, object]:
-        return {
-            **super(ProcessingPluginManifest, self).to_document(),
-            "driverContractVersion": self.driver_contract_version,
         }
 
 
@@ -284,37 +189,6 @@ class ProcessingNodeTypeManifest:
 
 
 @dataclass(frozen=True, slots=True)
-class ApplicationLifecycleContext:
-    settings: FrozenDict = field(default_factory=FrozenDict)
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "settings", FrozenDict(self.settings))
-
-
-class ApplicationPlugin(ABC):
-    @property
-    @abstractmethod
-    def manifest(self) -> ApplicationPluginManifest:
-        raise NotImplementedError
-
-    def get_urls(self) -> Sequence[object]:
-        return ()
-
-    def automation_hooks(self) -> Mapping[str, Callable[..., object]]:
-        return {}
-
-    def start(self, context: ApplicationLifecycleContext) -> None:
-        return None
-
-    def stop(self, context: ApplicationLifecycleContext) -> None:
-        return None
-
-    @property
-    def plugin_name(self) -> str:
-        return self.manifest.route_namespace or self.manifest.plugin_id
-
-
-@dataclass(frozen=True, slots=True)
 class ProcessingHookContext:
     node_instance_id: str
     configuration: FrozenDict
@@ -326,7 +200,11 @@ class ProcessingHookContext:
         _required_text(self.node_instance_id, "node_instance_id")
         _positive_int(self.configuration_version, "configuration_version")
         for name in ("configuration", "resolved_inputs", "observed_facts"):
-            object.__setattr__(self, name, FrozenDict(getattr(self, name)))
+            object.__setattr__(
+                self,
+                name,
+                _bounded_frozen_mapping(getattr(self, name), name),
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -352,13 +230,25 @@ class ProcessingPlan:
 
     def __post_init__(self) -> None:
         _required_text(self.node_instance_id, "node_instance_id")
+        if len(self.resource_requests) > 128:
+            raise ValueError("resource_requests cannot exceed 128 entries")
         object.__setattr__(
             self,
             "resource_requests",
-            tuple(FrozenDict(item) for item in self.resource_requests),
+            tuple(
+                _bounded_frozen_mapping(item, "resource_request") for item in self.resource_requests
+            ),
         )
-        object.__setattr__(self, "driver_intent", FrozenDict(self.driver_intent))
-        object.__setattr__(self, "explanation", FrozenDict(self.explanation))
+        object.__setattr__(
+            self,
+            "driver_intent",
+            _bounded_frozen_mapping(self.driver_intent, "driver_intent"),
+        )
+        object.__setattr__(
+            self,
+            "explanation",
+            _bounded_frozen_mapping(self.explanation, "explanation"),
+        )
 
     def to_document(self) -> dict[str, object]:
         return {
@@ -379,8 +269,12 @@ class ProcessingDriverRequest:
     def __post_init__(self) -> None:
         _required_text(self.node_instance_id, "node_instance_id")
         _required_text(self.idempotency_key, "idempotency_key")
-        object.__setattr__(self, "configuration", FrozenDict(self.configuration))
-        object.__setattr__(self, "plan", FrozenDict(self.plan))
+        object.__setattr__(
+            self,
+            "configuration",
+            _bounded_frozen_mapping(self.configuration, "configuration"),
+        )
+        object.__setattr__(self, "plan", _bounded_frozen_mapping(self.plan, "plan"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -391,8 +285,8 @@ class ProcessingDriverResult:
 
     def __post_init__(self) -> None:
         _required_text(self.status, "status")
-        object.__setattr__(self, "facts", FrozenDict(self.facts))
-        object.__setattr__(self, "details", FrozenDict(self.details))
+        object.__setattr__(self, "facts", _bounded_frozen_mapping(self.facts, "facts"))
+        object.__setattr__(self, "details", _bounded_frozen_mapping(self.details, "details"))
 
 
 @runtime_checkable
@@ -408,25 +302,3 @@ class ProcessingDriver(Protocol):
     def deactivate(self, request: ProcessingDriverRequest) -> ProcessingDriverResult: ...
 
     def cleanup(self, request: ProcessingDriverRequest) -> ProcessingDriverResult: ...
-
-
-class ProcessingPlugin(ABC):
-    @property
-    @abstractmethod
-    def manifest(self) -> ProcessingPluginManifest:
-        raise NotImplementedError
-
-    @abstractmethod
-    def node_types(self) -> Sequence[ProcessingNodeTypeManifest]:
-        raise NotImplementedError
-
-    def validate(self, context: ProcessingHookContext) -> Sequence[ProcessingValidationIssue]:
-        return ()
-
-    @abstractmethod
-    def plan(self, context: ProcessingHookContext) -> ProcessingPlan:
-        raise NotImplementedError
-
-    @abstractmethod
-    def driver(self) -> ProcessingDriver:
-        raise NotImplementedError

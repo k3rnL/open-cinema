@@ -102,9 +102,7 @@ AUDIO_ORCHESTRATION_FEATURES = {
     "processor_management": env.bool("OPEN_CINEMA_AUDIO_PROCESSOR_MANAGEMENT"),
     "live_reconciliation": env.bool("OPEN_CINEMA_AUDIO_LIVE_RECONCILIATION"),
 }
-AUDIO_LIVE_GRAPH_ALLOWLIST = tuple(
-    env.list("OPEN_CINEMA_AUDIO_LIVE_GRAPH_ALLOWLIST")
-)
+AUDIO_LIVE_GRAPH_ALLOWLIST = tuple(env.list("OPEN_CINEMA_AUDIO_LIVE_GRAPH_ALLOWLIST"))
 AUDIO_PROCESSOR_CAPACITY = {
     "camilladsp": env.int("OPEN_CINEMA_CAMILLADSP_INSTANCE_COUNT"),
     "decoder": env.int("OPEN_CINEMA_DECODER_INSTANCE_COUNT"),
@@ -128,35 +126,23 @@ AUDIO_CONDITION_VALIDATION_LIMITS = {
     "max_depth": env.int("OPEN_CINEMA_AUDIO_CONDITION_MAX_DEPTH"),
     "max_nodes": env.int("OPEN_CINEMA_AUDIO_CONDITION_MAX_NODES"),
     "max_group_arguments": env.int("OPEN_CINEMA_AUDIO_CONDITION_MAX_GROUP_ARGUMENTS"),
-    "max_membership_values": env.int(
-        "OPEN_CINEMA_AUDIO_CONDITION_MAX_MEMBERSHIP_VALUES"
-    ),
+    "max_membership_values": env.int("OPEN_CINEMA_AUDIO_CONDITION_MAX_MEMBERSHIP_VALUES"),
     "max_document_bytes": env.int("OPEN_CINEMA_AUDIO_CONDITION_MAX_DOCUMENT_BYTES"),
 }
 AUDIO_RECONCILIATION_QUEUE_LIMITS = {
-    "max_pending_graphs": env.int(
-        "OPEN_CINEMA_AUDIO_RECONCILIATION_MAX_PENDING_GRAPHS"
-    ),
+    "max_pending_graphs": env.int("OPEN_CINEMA_AUDIO_RECONCILIATION_MAX_PENDING_GRAPHS"),
     "max_causes": env.int("OPEN_CINEMA_AUDIO_RECONCILIATION_MAX_CAUSES"),
 }
 AUDIO_RECONCILIATION_CATCHUP = {
     "max_passes": env.int("OPEN_CINEMA_AUDIO_RECONCILIATION_CATCHUP_MAX_PASSES"),
-    "retry_initial_seconds": env.float(
-        "OPEN_CINEMA_AUDIO_RECONCILIATION_RETRY_INITIAL_SECONDS"
-    ),
-    "retry_max_seconds": env.float(
-        "OPEN_CINEMA_AUDIO_RECONCILIATION_RETRY_MAX_SECONDS"
-    ),
-    "retry_multiplier": env.float(
-        "OPEN_CINEMA_AUDIO_RECONCILIATION_RETRY_MULTIPLIER"
-    ),
+    "retry_initial_seconds": env.float("OPEN_CINEMA_AUDIO_RECONCILIATION_RETRY_INITIAL_SECONDS"),
+    "retry_max_seconds": env.float("OPEN_CINEMA_AUDIO_RECONCILIATION_RETRY_MAX_SECONDS"),
+    "retry_multiplier": env.float("OPEN_CINEMA_AUDIO_RECONCILIATION_RETRY_MULTIPLIER"),
 }
 AUDIO_ACTION_EXECUTION_LIMITS = {
     "max_timeout_seconds": env.float("OPEN_CINEMA_AUDIO_ACTION_MAX_TIMEOUT_SECONDS"),
     "max_attempts": env.int("OPEN_CINEMA_AUDIO_ACTION_MAX_ATTEMPTS"),
-    "max_retry_delay_seconds": env.float(
-        "OPEN_CINEMA_AUDIO_ACTION_MAX_RETRY_DELAY_SECONDS"
-    ),
+    "max_retry_delay_seconds": env.float("OPEN_CINEMA_AUDIO_ACTION_MAX_RETRY_DELAY_SECONDS"),
 }
 AUDIO_ORCHESTRATOR_LOCK_PATH = env(
     "OPEN_CINEMA_ORCHESTRATOR_LOCK_PATH",
@@ -208,9 +194,7 @@ AUDIO_ADAPTER_MEDIA_ROOT = Path(
     )
 ).resolve()
 AUDIO_ADAPTER_LIFECYCLE = {
-    "retry_initial_seconds": env.float(
-        "OPEN_CINEMA_AUDIO_ADAPTER_RETRY_INITIAL_SECONDS"
-    ),
+    "retry_initial_seconds": env.float("OPEN_CINEMA_AUDIO_ADAPTER_RETRY_INITIAL_SECONDS"),
     "retry_max_seconds": env.float("OPEN_CINEMA_AUDIO_ADAPTER_RETRY_MAX_SECONDS"),
     "retry_multiplier": env.float("OPEN_CINEMA_AUDIO_ADAPTER_RETRY_MULTIPLIER"),
     "stop_timeout_seconds": env.float("OPEN_CINEMA_AUDIO_ADAPTER_STOP_TIMEOUT_SECONDS"),
@@ -223,7 +207,6 @@ INSTALLED_APPS = [
     "corsheaders",
     "rest_framework",
     "api.apps.ApiConfig",
-    "plugin.counter",  # Example plugin with models
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -287,9 +270,7 @@ WSGI_APPLICATION = "opencinema.wsgi.application"
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 SQLITE_BUSY_TIMEOUT_MS = env.int("OPEN_CINEMA_SQLITE_BUSY_TIMEOUT_MS")
-SQLITE_WAL_AUTOCHECKPOINT_PAGES = env.int(
-    "OPEN_CINEMA_SQLITE_WAL_AUTOCHECKPOINT_PAGES"
-)
+SQLITE_WAL_AUTOCHECKPOINT_PAGES = env.int("OPEN_CINEMA_SQLITE_WAL_AUTOCHECKPOINT_PAGES")
 
 DATABASES = {
     "default": {
@@ -337,6 +318,36 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = "static/"
+
+# Plugin secrets are deliberately outside the database and are exposed to the
+# owning enabled plugin only through the write-only plugin storage contract.
+OPEN_CINEMA_PLUGIN_SECRET_DIR = Path(
+    env(
+        "OPEN_CINEMA_PLUGIN_SECRET_DIR",
+        default=str(BASE_DIR / ".plugin-data" / "secrets"),
+    )
+)
+OPEN_CINEMA_PLUGIN_ROUTE_TIMEOUT_SECONDS = env.float(
+    "OPEN_CINEMA_PLUGIN_ROUTE_TIMEOUT_SECONDS", default=5.0
+)
+OPEN_CINEMA_PLUGIN_ROOT = Path(
+    env(
+        "OPEN_CINEMA_PLUGIN_ROOT",
+        default=str(BASE_DIR / ".plugin-data" / "plugins"),
+    )
+).resolve()
+OPEN_CINEMA_PLUGIN_RUNTIME_DIR = Path(
+    env(
+        "OPEN_CINEMA_PLUGIN_RUNTIME_DIR",
+        default=str(BASE_DIR / ".plugin-data" / "runtime"),
+    )
+).resolve()
+OPEN_CINEMA_PLUGIN_GENERATION_RETENTION = env.int(
+    "OPEN_CINEMA_PLUGIN_GENERATION_RETENTION", default=3
+)
+OPEN_CINEMA_PLUGIN_GENERATION_MAX_BYTES = env.int(
+    "OPEN_CINEMA_PLUGIN_GENERATION_MAX_BYTES", default=1024 * 1024 * 1024
+)
 
 # Celery Configuration
 # In devcontainer, app service uses network_mode: service:redis, so localhost works

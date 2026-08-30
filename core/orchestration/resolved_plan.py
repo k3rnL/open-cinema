@@ -6,6 +6,7 @@ from enum import StrEnum
 
 from wyreplumber.runtime import FrozenDict
 
+from .explanation_presentation import build_explanation_presentation
 from .graph_documents import graph_content_digest
 from .resolver_inputs import ResolverInputs
 from .resolver_pipeline import (
@@ -379,6 +380,13 @@ def build_resolved_plan(
         "selectionDecisions": pipeline.selector_decisions.to_dict(),
         "conditionResults": pipeline.condition_results.to_dict(),
         "overrideDecisions": pipeline.override_resolution.to_dict(),
+        "presentation": build_explanation_presentation(
+            inputs,
+            pipeline,
+            status=status.value,
+            warnings=warnings,
+            errors=errors,
+        ),
     }
     digest_input = {
         "schemaVersion": RESOLVED_PLAN_SCHEMA_VERSION,

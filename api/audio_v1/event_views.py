@@ -6,19 +6,48 @@ import time
 from django.db.models import Q
 from django.http import StreamingHttpResponse
 from rest_framework import status
+from rest_framework.renderers import BaseRenderer, JSONRenderer
 
 from api.models import GraphDefinition, OrchestrationEvent, RuntimeProjection
 
 from .base import AudioAPIProblem, AudioV1APIView, parse_boolean
 from .representations import event_document, projection_document
 
-_EVENT_KINDS = {"runtime", "plan", "transition", "endpoint", "processor", "health"}
+_EVENT_KINDS = {
+    "runtime",
+    "plan",
+    "transition",
+    "endpoint",
+    "processor",
+    "health",
+    "volume",
+    "managed-resource",
+    "operation",
+    "explanation",
+}
+
+
+class EventStreamRenderer(BaseRenderer):
+    media_type = "text/event-stream"
+    format = "event-stream"
+    charset = "utf-8"
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        return data
 
 
 def _kind(event_type: str) -> str:
     lowered = event_type.lower()
     if "reconciliation" in lowered:
         return "transition"
+    if "audio-level" in lowered or "volume" in lowered or "mute" in lowered:
+        return "volume"
+    if "managed-resource" in lowered or "adapter" in lowered:
+        return "managed-resource"
+    if "system-control" in lowered or "operation" in lowered:
+        return "operation"
+    if "explanation" in lowered:
+        return "explanation"
     for kind in ("transition", "endpoint", "processor", "health", "plan"):
         if kind in lowered:
             return kind
@@ -53,7 +82,7 @@ def _events_for(request):
     return queryset
 
 
-def _snapshot(request) -> dict[str, object]:
+def _snapshot(request, *, reason: str = "event-gap") -> dict[str, object]:
     admin = bool(request.user.is_staff or request.user.is_superuser)
     projections = RuntimeProjection.objects.filter(is_current=True).order_by(
         "projection_type", "subject_key"
@@ -61,7 +90,7 @@ def _snapshot(request) -> dict[str, object]:
     latest = projections.order_by("-world_generation", "-world_sequence").first()
     return {
         "schemaVersion": 1,
-        "reason": "event-gap",
+        "reason": reason,
         "replaceLocalState": True,
         "worldGeneration": latest.world_generation if latest else None,
         "worldSequence": latest.world_sequence if latest else None,
@@ -71,6 +100,8 @@ def _snapshot(request) -> dict[str, object]:
 
 
 class OrchestrationEventStreamView(AudioV1APIView):
+    renderer_classes = (EventStreamRenderer, JSONRenderer)
+
     def get(self, request):
         raw_cursor = request.headers.get("Last-Event-ID")
         cursor_was_supplied = raw_cursor is not None
@@ -114,17 +145,27 @@ class OrchestrationEventStreamView(AudioV1APIView):
         oldest = queryset.order_by("sequence").values_list("sequence", flat=True).first()
         newest = queryset.order_by("-sequence").values_list("sequence", flat=True).first()
         gap = bool(cursor_was_supplied and oldest is not None and cursor < oldest - 1)
+        initial_sync = not cursor_was_supplied
+        if initial_sync:
+            # A new browser has already requested the current desired and runtime
+            # documents. Replaying the complete retained audit/event history here
+            # can block its main thread for seconds. Start at the current tail,
+            # send one authoritative snapshot, and then follow only new events.
+            cursor = newest or cursor
         admin = bool(request.user.is_staff or request.user.is_superuser)
 
         def stream():
             nonlocal cursor
             yield "retry: 2000\n\n"
-            if gap:
+            if initial_sync or gap:
                 cursor = newest or cursor
                 yield _sse(
                     event="snapshot",
                     event_id=cursor,
-                    data=_snapshot(request),
+                    data=_snapshot(
+                        request,
+                        reason="initial-sync" if initial_sync else "event-gap",
+                    ),
                 )
             while True:
                 delivered = False

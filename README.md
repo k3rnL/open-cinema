@@ -32,9 +32,18 @@ session model.
   is the on-box display application and is currently a placeholder.
 
 CamillaDSP and the decoder are processors, not endpoints. They can be inserted
-between logical inputs and outputs in a desired graph. Application and
-processing plugins may extend Open Cinema, but plugins cannot introduce a
-second audio backend or take ownership of the PipeWire session.
+between logical inputs and outputs in a desired graph. Version-2 plugins may
+combine namespaced API, automation, processing, managed-resource,
+managed-audio-source, and declarative administration-UI capabilities. Plugins
+cannot introduce a second audio backend or take ownership of the PipeWire
+session.
+
+The Plugins product menu separates a maintained first-party Marketplace from
+the Installed inventory. Candidates are inspected and resolved into immutable,
+rollback-capable overlay generations; the base virtual environment is never
+mutated by an install. Advanced Git installation requires explicit trusted-code
+acknowledgement. See the [plugin platform](docs/audio-orchestration/PLUGINS.md)
+and [authoring guide](docs/plugins/AUTHORING.md).
 
 Managed endpoint adapters provide user-configured ROC inputs/outputs and
 looping or recording debug-file devices. Their media root is explicit runtime
@@ -64,9 +73,13 @@ The versioned API starts at `/api/audio/v1`. Useful discovery endpoints include:
 ```bash
 curl -u admin:admin http://localhost:8000/api/audio/v1/schema
 curl -u admin:admin http://localhost:8000/api/audio/v1/endpoints
+curl -u admin:admin http://localhost:8000/api/audio/v1/levels/master
+curl -u admin:admin http://localhost:8000/api/audio/v1/runtime/resources
 curl -u admin:admin http://localhost:8000/api/audio/v1/runtime/readiness
 curl -u admin:admin http://localhost:8000/api/audio/v1/graphs
 curl -u admin:admin http://localhost:8000/api/audio/v1/plans/current
+curl -u admin:admin http://localhost:8000/api/system/v1/overview
+curl -u admin:admin http://localhost:8000/api/system/v1/components
 ```
 
 Browser clients should use the session/CSRF authentication flow implemented by
@@ -215,14 +228,19 @@ coordinated manifest.
 ## Repository guide
 
 - [Audio API v1](docs/audio-orchestration/API_V1.md)
-- [Application and processing plugins](docs/audio-orchestration/PLUGINS.md)
+- [System controls and threat model](docs/audio-orchestration/SYSTEM_CONTROL.md)
+- [Plugin platform and capability model](docs/audio-orchestration/PLUGINS.md)
+- [Plugin authoring SDK](docs/plugins/AUTHORING.md)
+- [Plugin administration](docs/plugins/ADMINISTRATION.md)
 - [Deployment and operations](deployment/README.md)
 - [Version history](CHANGELOG.md)
 - [`contracts/`](contracts/) — packaged cross-project schemas and protocol data
 - [`core/orchestration/`](core/orchestration/) — desired-state resolver and
   reconciler
 - [`api/audio_v1/`](api/audio_v1/) — public orchestration API
-- [`plugin/`](plugin/) — plugin contracts and bundled example
+- [`open_cinema_plugin_sdk/`](open_cinema_plugin_sdk/) — public contracts and
+  external-repository test helpers
+- [`plugin/`](plugin/) — bundled counter example
 
 ## License
 

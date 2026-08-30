@@ -1,0 +1,57 @@
+{
+  "fixtureVersion": "open-cinema.admin-ux/v1",
+  "system": {
+    "raspberry": {
+      "hostname": "open-cinema",
+      "model": "Raspberry Pi 5 Model B Rev 1.0",
+      "operatingSystem": "Debian GNU/Linux 13 (trixie)",
+      "kernel": "6.12.47+rpt-rpi-2712",
+      "bootId": "11111111-2222-3333-4444-555555555555",
+      "uptimeSeconds": 86400,
+      "storage": {"usedBytes": 17179869184, "totalBytes": 68719476736},
+      "temperatureCelsius": 46.8,
+      "throttling": {"supported": true, "active": false, "raw": "0x0"}
+    },
+    "partial": {
+      "hostname": "development-host",
+      "model": null,
+      "temperatureCelsius": null,
+      "throttling": {"supported": false, "active": null, "raw": null}
+    },
+    "metrics": {
+      "observedAt": "2026-08-28T12:00:00Z",
+      "cpuPercent": 7.5,
+      "memory": {"usedBytes": 2147483648, "totalBytes": 8589934592, "percent": 25.0}
+    }
+  },
+  "components": [
+    {"id": "open-cinema", "name": "Open Cinema", "version": "0.3.2", "health": "ready", "actions": [{"id": "restart", "available": true}]},
+    {"id": "open-cinema-orchestrator", "name": "Audio orchestrator", "version": "0.3.2", "health": "ready", "actions": [{"id": "restart", "available": true}]},
+    {"id": "wyreplumber", "name": "WyrePlumber binding", "version": "0.2.0", "health": "ready", "actions": []},
+    {"id": "camilladsp", "name": "CamillaDSP", "version": "4.0.0", "health": "ready", "actions": []},
+    {"id": "pcm-auto-decoder", "name": "Adaptive PCM decoder", "version": "0.2.0", "health": "ready", "actions": []}
+  ],
+  "endpoints": [
+    {"id": "endpoint-tv", "name": "TV / SPDIF", "direction": "input", "volume": {"observed": 1.0, "writable": true}, "mute": {"observed": false, "writable": true}},
+    {"id": "endpoint-speakers", "name": "Main speakers", "direction": "output", "volume": {"observed": 0.46, "writable": true}, "mute": {"observed": false, "writable": true}},
+    {"id": "endpoint-hdmi", "name": "TV speakers", "direction": "output", "volume": {"observed": 1.0, "writable": false}, "mute": {"observed": false, "writable": false}}
+  ],
+  "managedResources": [
+    {"id": "adapter-roc-input", "name": "Mac ROC input", "kind": "roc-receiver", "health": "ready", "actions": [{"id": "restart", "available": true}]},
+    {"id": "processor-camilladsp-room", "name": "Living room CamillaDSP", "kind": "camilladsp", "health": "ready", "actions": []},
+    {"id": "processor-decoder-tv", "name": "TV adaptive decoder", "kind": "pcm-auto-decoder", "health": "ready", "actions": []}
+  ],
+  "explanation": {
+    "schemaVersion": 1,
+    "headline": {"status": "active", "title": "TV audio is playing on Main speakers", "summary": "The headset is unavailable, so the main speakers were selected."},
+    "route": [
+      {"kind": "endpoint", "name": "TV / SPDIF", "role": "source"},
+      {"kind": "processor", "name": "Adaptive PCM decoder", "role": "decode", "detail": "Dolby Digital 5.1 → PCM 5.1"},
+      {"kind": "processor", "name": "Living room CamillaDSP", "role": "process", "detail": "Room correction · 5.1"},
+      {"kind": "endpoint", "name": "Main speakers", "role": "output"}
+    ],
+    "selection": {"trigger": "Headset disconnected", "winner": "Main speakers", "reason": "First available preferred output"},
+    "alternatives": [{"name": "Headset", "status": "unavailable", "reason": "Device is disconnected"}],
+    "transition": {"status": "converged", "durationMs": 4200}
+  }
+}

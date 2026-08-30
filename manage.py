@@ -3,6 +3,10 @@
 import os
 import sys
 
+from opencinema_plugin_bootstrap import activate_plugin_overlay
+
+activate_plugin_overlay()
+
 
 def main():
     """Run administrative tasks."""

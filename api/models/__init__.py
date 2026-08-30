@@ -28,6 +28,26 @@ from .orchestration import (
     TransitionStatus,
 )
 from .orchestration_schema_state import OrchestrationSchemaState
+from .audio_level import EndpointAudioLevel, MasterAudioLevel
+from .system_control import (
+    SystemControlAction,
+    SystemControlOperation,
+    SystemControlStatus,
+)
+from .plugin_platform import (
+    PluginAggregateHealth,
+    PluginCapabilityState,
+    PluginDesiredState,
+    PluginDiagnosticRecord,
+    PluginDocument,
+    PluginInstallation,
+    PluginInstance,
+    PluginObservedState,
+    PluginOperation,
+    PluginOperationKind,
+    PluginOperationStatus,
+    PluginSecretReference,
+)
 
 __all__ = [
     "AppliedPlanState",
@@ -58,4 +78,21 @@ __all__ = [
     "TransitionJournal",
     "TransitionPhase",
     "TransitionStatus",
+    "SystemControlAction",
+    "SystemControlOperation",
+    "SystemControlStatus",
+    "EndpointAudioLevel",
+    "MasterAudioLevel",
+    "PluginAggregateHealth",
+    "PluginCapabilityState",
+    "PluginDesiredState",
+    "PluginDiagnosticRecord",
+    "PluginDocument",
+    "PluginInstallation",
+    "PluginInstance",
+    "PluginObservedState",
+    "PluginOperation",
+    "PluginOperationKind",
+    "PluginOperationStatus",
+    "PluginSecretReference",
 ]

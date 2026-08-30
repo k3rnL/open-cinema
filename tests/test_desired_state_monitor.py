@@ -1,5 +1,6 @@
 import pytest
 
+from api.models import EndpointAudioLevel, LogicalEndpoint, MasterAudioLevel
 from core.orchestration.desired_state_monitor import (
     DesiredStateCoordinator,
     DesiredStateMonitor,
@@ -183,3 +184,43 @@ def test_default_monitor_keeps_disabled_activation_as_versioned_desired_state() 
     assert document["enabled"] is False
     assert document["revisionId"] is None
     assert document["desiredStateVersion"] == 8
+
+
+@pytest.mark.django_db
+def test_default_monitor_schedules_active_graphs_when_audio_level_intent_changes() -> None:
+    activation = GraphActivationFactory(desired_state_version=4)
+    endpoint = LogicalEndpoint.objects.create(
+        owner=activation.definition.owner,
+        name="Main speakers",
+        direction="output",
+        selector={
+            "version": 1,
+            "match": "all",
+            "predicates": [{"path": "node.name", "operator": "exact", "value": "main-output"}],
+        },
+    )
+    master = MasterAudioLevel.objects.create(level=0.8)
+    EndpointAudioLevel.objects.create(endpoint=endpoint, level=0.5)
+    monitor = DesiredStateMonitor()
+    initial = monitor.poll()
+    master.level = 0.7
+    master.update_version += 1
+    master.save()
+
+    changed = monitor.poll()
+
+    activation_id = str(activation.pk)
+    assert initial.snapshot.activations[activation_id]["audioLevels"]["master"]["level"] == 0.8
+    assert changed.changed_activation_ids == (activation_id,)
+    assert changed.reasons == ("audio_level_intent_changed",)
+    assert [
+        item.to_dict()
+        for item in changed.snapshot.activations[activation_id]["audioLevels"]["endpoints"]
+    ] == [
+        {
+            "endpointId": str(endpoint.pk),
+            "level": 0.5,
+            "muted": False,
+            "updateVersion": 1,
+        }
+    ]

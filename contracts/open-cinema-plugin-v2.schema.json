@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-cinema.local/schemas/open-cinema-plugin-v2.schema.json",
+  "title": "Open Cinema plugin distribution manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema-version",
+    "plugin",
+    "compatibility",
+    "capabilities",
+    "permissions",
+    "lifecycle"
+  ],
+  "properties": {
+    "schema-version": {"const": 2},
+    "plugin": {"$ref": "#/$defs/plugin"},
+    "compatibility": {"$ref": "#/$defs/compatibility"},
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/capability"}
+    },
+    "permissions": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/permission"}
+    },
+    "dependencies": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/dependency"},
+      "default": []
+    },
+    "external-requirements": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/externalRequirement"},
+      "default": []
+    },
+    "configuration": {"$ref": "#/$defs/configuration"},
+    "lifecycle": {"$ref": "#/$defs/lifecycle"},
+    "contribution-digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[0-9]+(?:\\.[0-9]+){1,3}(?:[-+][0-9A-Za-z.-]+)?$"
+    },
+    "plugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "distribution",
+        "display-name",
+        "description",
+        "vendor",
+        "version",
+        "license",
+        "source-url",
+        "documentation-url"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "distribution": {"$ref": "#/$defs/identifier"},
+        "display-name": {"type": "string", "minLength": 1, "maxLength": 120},
+        "description": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "vendor": {"type": "string", "minLength": 1, "maxLength": 120},
+        "version": {"$ref": "#/$defs/version"},
+        "license": {"type": "string", "minLength": 1, "maxLength": 80},
+        "source-url": {"type": "string", "format": "uri", "maxLength": 2048},
+        "documentation-url": {"type": "string", "format": "uri", "maxLength": 2048},
+        "release-url": {"type": "string", "format": "uri", "maxLength": 2048}
+      }
+    },
+    "integerRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum", "maximum"],
+      "properties": {
+        "minimum": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "maximum": {"type": "integer", "minimum": 1, "maximum": 65535}
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plugin-contract",
+        "open-cinema",
+        "python",
+        "operating-systems",
+        "architectures"
+      ],
+      "properties": {
+        "plugin-contract": {"$ref": "#/$defs/integerRange"},
+        "open-cinema": {"type": "string", "minLength": 1, "maxLength": 120},
+        "python": {"type": "string", "minLength": 1, "maxLength": 120},
+        "operating-systems": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 64}
+        },
+        "architectures": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 64}
+        },
+        "capability-versions": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {"$ref": "#/$defs/identifier"},
+          "additionalProperties": {"$ref": "#/$defs/integerRange"},
+          "default": {}
+        }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "version"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "kind": {
+          "enum": [
+            "api",
+            "automation",
+            "processing",
+            "managed-resource",
+            "managed-audio-source",
+            "admin-ui"
+          ]
+        },
+        "version": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "required": {"type": "boolean", "default": true},
+        "schema": {"type": "string", "minLength": 1, "maxLength": 512},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "permission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "reason"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 512},
+        "required": {"type": "boolean", "default": true}
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "version"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "kind": {"enum": ["python", "plugin", "asset", "host-installer"]},
+        "version": {"type": "string", "minLength": 1, "maxLength": 120},
+        "required": {"type": "boolean", "default": true}
+      }
+    },
+    "externalRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "description": {"type": "string", "minLength": 1, "maxLength": 512},
+        "probe": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "schema"],
+      "properties": {
+        "version": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "schema": {"type": "string", "minLength": 1, "maxLength": 512},
+        "migrations": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "to"],
+            "properties": {
+              "from": {"type": "integer", "minimum": 1, "maximum": 65535},
+              "to": {"type": "integer", "minimum": 2, "maximum": 65535}
+            }
+          },
+          "default": []
+        }
+      }
+    },
+    "impact": {"enum": ["hot", "application-restart", "host-reboot"]},
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["install", "enable", "disable", "update", "uninstall"],
+      "properties": {
+        "install": {"$ref": "#/$defs/impact"},
+        "enable": {"$ref": "#/$defs/impact"},
+        "disable": {"$ref": "#/$defs/impact"},
+        "update": {"$ref": "#/$defs/impact"},
+        "uninstall": {"$ref": "#/$defs/impact"}
+      }
+    }
+  }
+}

@@ -1,0 +1,58 @@
+#!/bin/sh
+set -eu
+
+SYSTEMD_RUN=/usr/bin/systemd-run
+SYSTEMCTL=/usr/bin/systemctl
+
+usage() {
+    echo "usage: open-cinema-system-control [--check] {restart-open-cinema|restart-orchestrator|reboot-appliance}" >&2
+    exit 64
+}
+
+if [ "$(/usr/bin/id -u)" -ne 0 ]; then
+    echo "open-cinema-system-control must run as root" >&2
+    exit 77
+fi
+
+check_only=false
+if [ "${1:-}" = "--check" ]; then
+    check_only=true
+    shift
+fi
+
+[ "$#" -eq 1 ] || usage
+action=$1
+case "$action" in
+    restart-open-cinema|restart-orchestrator|reboot-appliance) ;;
+    *) usage ;;
+esac
+
+if [ ! -x "$SYSTEMD_RUN" ] || [ ! -x "$SYSTEMCTL" ]; then
+    echo "required systemd executables are unavailable" >&2
+    exit 69
+fi
+
+if [ "$check_only" = true ]; then
+    exit 0
+fi
+
+# A transient timer lets the HTTP response leave Gunicorn before a self-restart
+# or reboot. All executable paths, units and arguments below are fixed here;
+# nothing from the request is forwarded to systemd.
+case "$action" in
+    restart-open-cinema)
+        # Plugin generations are imported by all application processes. Stop
+        # graph mutation first, refresh API/workers, then resume reconciliation.
+        exec "$SYSTEMD_RUN" --quiet --collect --on-active=2s \
+            /bin/sh -c \
+            '/usr/bin/systemctl stop open-cinema-orchestrator.service; /usr/bin/systemctl restart open-cinema.service celery.service celery-beat.service; /usr/bin/systemctl start open-cinema-orchestrator.service'
+        ;;
+    restart-orchestrator)
+        exec "$SYSTEMD_RUN" --quiet --collect --on-active=2s \
+            "$SYSTEMCTL" restart open-cinema-orchestrator.service
+        ;;
+    reboot-appliance)
+        exec "$SYSTEMD_RUN" --quiet --collect --on-active=2s \
+            "$SYSTEMCTL" reboot
+        ;;
+esac

@@ -6,7 +6,6 @@ from core.orchestration.node_catalogue import (
     core_node_type_registry,
 )
 
-
 EXPECTED_CORE_TYPES = {
     "core.endpoint-reference",
     "core.ordered-selector",
@@ -39,6 +38,18 @@ def test_catalogue_exposes_typed_ports_and_display_metadata() -> None:
     subgraph = next(item for item in catalogue if item["id"] == "core.subgraph-instance")
     assert subgraph["requiresSubgraphReference"] is True
     assert subgraph["allowsDynamicPorts"] is True
+
+
+def test_endpoint_selector_ports_match_the_live_routing_contract() -> None:
+    catalogue = core_node_type_registry().to_document()
+
+    for type_id in {
+        "core.ordered-selector",
+        "core.fallback-selector",
+        "core.exclusive-choice",
+    }:
+        definition = next(item for item in catalogue if item["id"] == type_id)
+        assert [port["name"] for port in definition["ports"]] == ["input", "audio"]
 
 
 def test_builtin_configuration_schemas_accept_canonical_examples() -> None:

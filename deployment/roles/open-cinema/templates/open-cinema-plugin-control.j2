@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+
+# The executable, overlay root and retention policy are deployment-owned.
+# Callers may provide only an allowlisted action and validated generation ID.
+exec {{ open_cinema.venv_path }}/bin/python -m core.plugin_system.control_cli \
+    --root {{ open_cinema.plugins.root | quote }} \
+    --retention {{ open_cinema.plugins.generation_retention | int }} \
+    "$@"

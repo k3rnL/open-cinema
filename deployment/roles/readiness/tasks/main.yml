@@ -321,6 +321,45 @@
       become_user: "{{ open_cinema.user }}"
       changed_when: false
 
+    - name: Require a coherent plugin overlay and persistent operation state
+      ansible.builtin.command:
+        argv:
+          - "{{ open_cinema.venv_path }}/bin/python"
+          - manage.py
+          - shell
+          - --no-imports
+          - -c
+          - >-
+            import json;
+            from django.conf import settings;
+            from api.models import PluginInstallation, PluginOperation;
+            from core.plugin_system.operations import ACTIVE_OPERATION_STATUSES, plugin_overlay_manager;
+            manager = plugin_overlay_manager(); manager.ensure_layout();
+            current = manager.pointer('current'); good = manager.pointer('last-known-good');
+            integrity = manager.validate(current) if current else None;
+            used = sum(p.stat().st_size for p in manager.root.rglob('*') if p.is_file() and not p.is_symlink());
+            pending = PluginOperation.objects.filter(status__in=ACTIVE_OPERATION_STATUSES).count();
+            incompatible = list(PluginInstallation.objects.filter(aggregate_health__in=['incompatible','rejected']).values_list('plugin_id', flat=True)[:32]);
+            assert used <= settings.OPEN_CINEMA_PLUGIN_GENERATION_MAX_BYTES * (settings.OPEN_CINEMA_PLUGIN_GENERATION_RETENTION + 2), {'usedBytes': used};
+            print(json.dumps({'currentGeneration': current, 'lastKnownGoodGeneration': good,
+            'overlayIntegrity': 'valid' if integrity else 'empty', 'pendingOperations': pending,
+            'incompatiblePlugins': incompatible, 'usedBytes': used,
+            'perGenerationLimitBytes': settings.OPEN_CINEMA_PLUGIN_GENERATION_MAX_BYTES}, sort_keys=True))
+      args:
+        chdir: "{{ open_cinema.app_path }}"
+      become_user: "{{ open_cinema.user }}"
+      register: open_cinema_readiness_plugins
+      changed_when: false
+
+    - name: Require the deployed fixed plugin-control boundary
+      ansible.builtin.command:
+        argv:
+          - "{{ open_cinema.plugins.helper_path }}"
+          - --check
+          - cleanup
+      become_user: "{{ open_cinema.user }}"
+      changed_when: false
+
     - name: Require core Open Cinema services
       ansible.builtin.command:
         argv:
@@ -1051,6 +1090,7 @@
         managementInterfaces: passed
         boundedControlPlaneState: passed
         ownershipAndPermissions: passed
+        pluginPlatform: passed
         selectedHardware: passed
       failedChecks: []
       serviceLogs: null
@@ -1080,6 +1120,8 @@
           {{ open_cinema_readiness_diagnostics_api.json.administrative | bool }}
         sseGapRecovery: >-
           {{ open_cinema_readiness_sse.open_cinema_event_gap | bool }}
+        pluginPlatform: >-
+          {{ open_cinema_readiness_plugins.stdout_lines | last | from_json }}
 
 - name: Publish the aggregate end-of-play readiness result
   ansible.builtin.copy:

@@ -26,6 +26,62 @@ def _object(required, properties, *, additional=False):
 def api_json_schemas() -> dict[str, dict[str, object]]:
     identifier = {"type": "string", "format": "uuid"}
     version = {"type": "integer", "minimum": 0}
+    explanation_presentation = _object(
+        [
+            "schemaVersion",
+            "headline",
+            "route",
+            "selection",
+            "alternatives",
+            "signals",
+            "processors",
+            "overrides",
+            "transition",
+            "errors",
+            "technicalReferences",
+        ],
+        {
+            "schemaVersion": {"const": 1},
+            "headline": _object(
+                ["status", "title", "summary"],
+                {
+                    "status": {"enum": ["active", "inactive", "waiting", "degraded", "failed"]},
+                    "title": {"type": "string", "minLength": 1},
+                    "summary": {"type": "string", "minLength": 1},
+                },
+            ),
+            "route": {
+                "type": "array",
+                "items": _object(
+                    ["kind", "name", "role", "detail", "referenceId", "nodeId"],
+                    {
+                        "kind": {"enum": ["endpoint", "processor"]},
+                        "name": {"type": "string", "minLength": 1},
+                        "role": {"enum": ["source", "decode", "process", "output"]},
+                        "detail": {"type": ["string", "null"]},
+                        "referenceId": {"type": ["string", "null"]},
+                        "nodeId": {"type": "string", "minLength": 1},
+                    },
+                ),
+            },
+            "selection": {"type": "object"},
+            "alternatives": {"type": "array", "items": {"type": "object"}},
+            "signals": {"type": "object"},
+            "processors": {"type": "array", "items": {"type": "object"}},
+            "overrides": {"type": "array", "items": {"type": "object"}},
+            "transition": _object(
+                ["status", "durationMs", "observedAt", "message"],
+                {
+                    "status": {"type": "string", "minLength": 1},
+                    "durationMs": {"type": ["integer", "null"], "minimum": 0},
+                    "observedAt": {"type": ["string", "null"], "format": "date-time"},
+                    "message": {"type": ["string", "null"]},
+                },
+            ),
+            "errors": {"type": "array", "items": {"type": "object"}},
+            "technicalReferences": {"type": "object"},
+        },
+    )
     schemas = {
         "Problem": _object(
             ["type", "title", "status", "detail", "code", "instance", "apiVersion"],
@@ -112,6 +168,101 @@ def api_json_schemas() -> dict[str, dict[str, object]]:
                 "updatedAt": {"type": ["string", "null"], "format": "date-time"},
             },
         ),
+        "MasterAudioLevel": _object(
+            [
+                "schemaVersion",
+                "scope",
+                "desired",
+                "effective",
+                "observed",
+                "writable",
+                "applying",
+                "degraded",
+                "runtimeVersion",
+                "updateVersion",
+                "updatedAt",
+            ],
+            {
+                "schemaVersion": {"const": 1},
+                "scope": {"const": "master-output"},
+                "desired": {"$ref": "#/$defs/AudioLevelValue"},
+                "effective": {"type": "object"},
+                "observed": {"type": "object"},
+                "writable": {"type": "boolean"},
+                "applying": {"type": "boolean"},
+                "degraded": {"type": "array", "items": {"type": "object"}},
+                "runtimeVersion": {"type": ["string", "null"]},
+                "updateVersion": {"type": "integer", "minimum": 1},
+                "updatedAt": {"type": ["string", "null"], "format": "date-time"},
+            },
+        ),
+        "EndpointAudioLevel": _object(
+            [
+                "schemaVersion",
+                "scope",
+                "endpointId",
+                "direction",
+                "availability",
+                "desired",
+                "master",
+                "effective",
+                "observed",
+                "capabilities",
+                "applying",
+                "degraded",
+                "runtimeVersion",
+                "updateVersion",
+                "updatedAt",
+            ],
+            {
+                "schemaVersion": {"const": 1},
+                "scope": {"enum": ["device-level", "input-level"]},
+                "endpointId": identifier,
+                "direction": {"enum": ["input", "output"]},
+                "availability": {"enum": ["available", "unavailable", "ambiguous", "invalid"]},
+                "desired": {"$ref": "#/$defs/AudioLevelValue"},
+                "master": {"type": ["object", "null"]},
+                "effective": {"$ref": "#/$defs/AudioLevelValue"},
+                "observed": {"type": "object"},
+                "capabilities": {"type": "object"},
+                "applying": {"type": "boolean"},
+                "degraded": {"type": "array", "items": {"type": "object"}},
+                "runtimeVersion": {"type": ["string", "null"]},
+                "updateVersion": {"type": "integer", "minimum": 1},
+                "updatedAt": {"type": ["string", "null"], "format": "date-time"},
+            },
+        ),
+        "ManagedResourcePresentation": _object(
+            [
+                "schemaVersion",
+                "id",
+                "resourceType",
+                "name",
+                "kind",
+                "version",
+                "versionStatus",
+                "desired",
+                "observed",
+                "freshness",
+                "actions",
+                "correlations",
+            ],
+            {
+                "schemaVersion": {"const": 1},
+                "id": {"type": "string"},
+                "resourceType": {"enum": ["adapter", "processor"]},
+                "name": {"type": "string", "minLength": 1},
+                "kind": {"type": "string", "minLength": 1},
+                "version": {"type": ["string", "null"]},
+                "versionStatus": {"enum": ["known", "unknown"]},
+                "desired": {"type": "object"},
+                "observed": {"type": "object"},
+                "freshness": {"type": "object"},
+                "actions": {"type": "array", "items": {"type": "object"}},
+                "correlations": {"type": "array", "items": {"type": "object"}},
+            },
+        ),
+        "RuntimeExplanationPresentation": deepcopy(explanation_presentation),
         "ManagedAudioAdapter": _object(
             ["id", "ownerId", "schemaVersion", "desired", "observed"],
             {
@@ -175,7 +326,11 @@ def api_json_schemas() -> dict[str, dict[str, object]]:
                 "resolutionMode": {"enum": ["live", "shadow"]},
                 "status": {"enum": ["resolved", "waiting", "degraded", "conflicted", "invalid"]},
                 "document": {"type": "object"},
-                "explanation": {"type": "object"},
+                "explanation": _object(
+                    ["presentation"],
+                    {"presentation": deepcopy(explanation_presentation)},
+                    additional=True,
+                ),
                 "planDigest": {"type": "string"},
                 "correlationId": identifier,
                 "applied": {"type": "object"},
@@ -344,6 +499,15 @@ def api_json_schemas() -> dict[str, dict[str, object]]:
     )
     for schema in schemas.values():
         Draft202012Validator.check_schema(schema)
+    audio_level_value = _object(
+        ["level", "muted"],
+        {
+            "level": {"type": "number", "minimum": 0, "maximum": 1},
+            "muted": {"type": "boolean"},
+        },
+    )
+    for schema in schemas.values():
+        schema.setdefault("$defs", {})["AudioLevelValue"] = audio_level_value
     return schemas
 
 
@@ -372,9 +536,11 @@ _PATHS = (
     "/camilladsp/profiles",
     "/camilladsp/profiles/{revisionId}",
     "/endpoints",
+    "/levels/master",
     "/endpoints/{endpointId}",
     "/endpoints/{endpointId}/candidates",
     "/endpoints/{endpointId}/binding",
+    "/endpoints/{endpointId}/level",
     "/endpoints/selector-preview",
     "/endpoint-candidates",
     "/plans/current",
@@ -409,6 +575,8 @@ def openapi_document() -> dict[str, object]:
         "/revisions/{revisionId}/dry-run": {"post"},
         "/endpoints": {"post"},
         "/endpoints/{endpointId}": {"patch"},
+        "/levels/master": {"patch"},
+        "/endpoints/{endpointId}/level": {"patch"},
         "/endpoints/{endpointId}/binding": {"post"},
         "/endpoints/selector-preview": {"post"},
         "/plans/dry-run": {"post"},
@@ -439,8 +607,10 @@ def openapi_document() -> dict[str, object]:
         "/camilladsp/profiles/{revisionId}",
         "/endpoints",
         "/endpoints/{endpointId}",
+        "/levels/master",
         "/endpoints/{endpointId}/candidates",
         "/endpoint-candidates",
+        "/endpoints/{endpointId}/level",
         "/plans/current",
         "/plans/history",
         "/plans/{planId}",
@@ -470,6 +640,9 @@ def openapi_document() -> dict[str, object]:
         "/camilladsp/profiles/{revisionId}": "CamillaDSPProfile",
         "/endpoints": "LogicalEndpoint",
         "/endpoints/{endpointId}": "LogicalEndpoint",
+        "/levels/master": "MasterAudioLevel",
+        "/endpoints/{endpointId}/level": "EndpointAudioLevel",
+        "/runtime/resources": "ManagedResourcePresentation",
         "/plans/history": "ResolvedPlan",
         "/plans/{planId}": "ResolvedPlan",
         "/overrides": "ManualOverride",
@@ -487,6 +660,7 @@ def openapi_document() -> dict[str, object]:
         "/endpoints",
         "/plans/history",
         "/overrides",
+        "/runtime/resources",
     }
     created_operations = {
         ("/graphs", "post"),
@@ -505,6 +679,8 @@ def openapi_document() -> dict[str, object]:
         ("/revisions/{revisionId}/activate", "post"),
         ("/graphs/{definitionId}/activation", "delete"),
         ("/endpoints/{endpointId}", "patch"),
+        ("/levels/master", "patch"),
+        ("/endpoints/{endpointId}/level", "patch"),
         ("/endpoints/{endpointId}/binding", "post"),
         ("/adapters/{adapterId}", "patch"),
         ("/adapters/{adapterId}", "delete"),
@@ -659,5 +835,6 @@ def schema_metadata() -> dict[str, object]:
             "camilladspProfiles": "/api/audio/v1/camilladsp/profiles",
             "adapterTypes": "/api/audio/v1/adapter-types",
             "adapters": "/api/audio/v1/adapters",
+            "masterAudioLevel": "/api/audio/v1/levels/master",
         },
     }

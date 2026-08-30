@@ -1,89 +1,65 @@
-# Application and processing plugins
+# Plugin platform version 2
 
-Open Cinema has two explicit extension contracts. Neither is an audio backend.
-WirePlumber observation, endpoint volume/mute, defaults, stream targets,
-profiles/routes, and session-link ownership remain core orchestration
-responsibilities.
+Open Cinema loads one distribution entry point from `open_cinema.plugins` and
+reads one static `open-cinema-plugin.toml` before importing its Python code. A
+distribution may contribute API, automation, processing, managed-resource,
+managed-audio-source, and declarative administration-UI capabilities. The
+static and runtime plugin IDs, distribution, version, capability IDs, kinds,
+and versions must agree.
 
-## Application plugins
+The contract is deliberately not an audio-backend abstraction. PipeWire graph
+observation, WirePlumber policy, device ownership, desired-graph resolution,
+and reconciliation remain core responsibilities. A managed audio source, such
+as librespot, exposes its instances and correlation facts; core decides where
+that source is routed.
 
-An `ApplicationPlugin` extends the web application with namespaced routes,
-Django model packages, and named automation hooks. Its
-`ApplicationPluginManifest` declares a stable lowercase plugin ID, display
-metadata, package version, supported Open Cinema plugin-contract range, route
-namespace, model packages, and automation IDs.
+## Installation and runtime model
 
-Application plugins are loaded from the
-`open_cinema.application_plugins` Python package entry-point group. The
-registry checks compatibility and duplicate IDs before lifecycle start, then
-records `available`, `started`, `stopped`, `failed`, or `incompatible` state and
-health. One import or lifecycle failure is retained as a diagnostic and does
-not prevent unrelated plugins or runtime observation from starting.
+The Plugins page exposes a maintained first-party catalogue and a separate
+Installed inventory. Advanced users may inspect and install a credential-free
+HTTPS Git source after explicitly acknowledging that plugin Python executes
+with the Open Cinema service account's privileges.
 
-The bundled counter example now uses this contract. Its model remains a normal
-installed Django application, while routes and the `counter.current-value`
-automation are registered through the application manifest. It has no
-dependency on processing plugins or audio runtime control.
+Every candidate is acquired into bounded staging, built as a wheel, checked
+against the static manifest, dependency constraints, permissions, and current
+contract, then resolved with every already installed plugin into a new
+immutable overlay generation. Only a complete generation is activated.
+`current` and `last-known-good` pointers are atomic and rollback never mutates
+the base virtual environment.
 
-## Processing plugins
+Install, enable, disable, update, uninstall, cleanup, retry, and rollback are
+persistent serialized operations. Their effective lifecycle is `hot`,
+`application-restart`, or `host-reboot`; Open Cinema raises the impact when a
+capability cannot disappear safely in the current process. Plugin data is
+retained by default on uninstall, while explicit delete removes documents,
+instances, and secrets but leaves desired graph nodes intact and unavailable.
 
-A `ProcessingPlugin` contributes one or more
-`ProcessingNodeTypeManifest` values. Each node type declares:
+## Storage, secrets, and UI
 
-- a namespaced ID and structural version;
-- a configuration version and Draft 2020-12 JSON schema;
-- display name, category, and description;
-- UI-editable JSON pointer fields;
-- typed ports whose signal contracts include encoded/PCM content, formats,
-  rates, layouts, latency, codecs, and capabilities;
-- explicit one-version-at-a-time configuration migrations.
+Plugins use namespaced core repositories with JSON Schema validation, optimistic
+concurrency, bounded documents, repeatable instances, and pure version-by-version
+configuration migrations. Secrets are write-only references stored outside the
+database. They are never returned by API, diagnostics, operation records, or
+logs.
 
-Configuration migration preserves fields the migration does not intentionally
-change and validates the final object against the current schema. A missing
-migration step, newer unsupported configuration version, invalid schema, or
-invalid migrated result makes that node unavailable without discarding its
-opaque stored configuration.
+Administration UI contributions are data, not executable browser bundles.
+Open Cinema UI validates the descriptor and renders product-owned Ant Design
+settings, resource, overview, detail, and guided-flow templates at the stable
+`/plugins/:pluginId/:pageId` route. Unknown schemas fail closed within that
+plugin's page. Core navigation and the dashboard do not wait for plugin data
+endpoints. Disabled, failed, and incompatible plugins remain visible only in
+Plugins diagnostics.
 
-Processing plugins are loaded from the
-`open_cinema.processing_plugins` entry-point group. Their node IDs use the
-`plugin.<plugin-id>.*` namespace so catalogue ownership and missing-plugin
-diagnostics are unambiguous.
+## Processing and managed resources
 
-## Pure planning and typed drivers
+Processing contributions retain the typed node, immutable planning context,
+configuration migration, and bounded driver contracts. Processors manage only
+their declared program instances and facts. Managed-resource providers expose
+fresh observations and explicit supported actions. Managed-audio-source
+providers add repeatable source instances with declared PCM/encoded signal
+shape and PipeWire correlation keys; they do not create an alternative session
+manager.
 
-Processing `validate` and `plan` hooks receive immutable detached context and
-must be side-effect-free. The failure-isolating runner accepts only typed
-validation issues and processing plans. Exceptions become plugin diagnostics;
-they do not stop other plugins or the WirePlumber observer.
-
-Runtime work uses a separate typed driver with exactly these hooks:
-`prepare`, `observe`, `activate`, `reconfigure`, `deactivate`, and `cleanup`.
-Every request contains the node instance, immutable configuration and plan, and
-a reconciliation idempotency key. Bounded retries reuse that exact key. A
-timeout is reported as an uncertain isolated failure and is not retried inside
-the executor, because Python cannot safely cancel a hook already running in a
-thread; reconciliation must observe before deciding whether a later retry is
-safe.
-
-## Prohibited audio ownership
-
-Plugin discovery rejects application or processing classes that attempt to
-declare audio-backend selection, device discovery, session observation, or
-backend registration methods such as `get_audio_backend`. The diagnostic code
-is `prohibited-audio-capability` and lists the offending capabilities. There is
-no audio-backend plugin contract or compatibility shim.
-
-Audio processors remain extensible, but their drivers manage only the processor
-resources and facts declared by their node types. They request typed
-reconciliation actions and cannot become an alternative owner of endpoints or
-the PipeWire session.
-
-## Catalogue and explanations
-
-The plugin catalogue exposes contract and entry-point versions, manifest
-metadata, lifecycle state, health, diagnostics, node-type schemas,
-configuration versions, editable fields, ports, and migration boundaries.
-Plan availability explanations correlate every required node type to its
-plugin, health, configuration version, and incompatibility detail. A missing
-plugin is an explicit unavailable node, not a reason to drop its configuration
-from the desired graph.
+See [Plugin authoring](../plugins/AUTHORING.md),
+[plugin administration](../plugins/ADMINISTRATION.md), and the
+[external counter walkthrough](../plugins/COUNTER_EXAMPLE.md).

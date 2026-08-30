@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Planned
+- Periodic device discovery task (Celery/Django-Q)
+- Filter management UI
+- Pipeline templates
+- Audio device statistics/monitoring
+- User authentication
+- Production deployment configuration
+
+## [0.3.3] - Unreleased
+
+### Added
+- Versioned installable-plugin contract, SDK, catalogue, lifecycle operations, and declarative administration UI support.
+- Managed multi-instance audio-source integration for external plugins, including durable endpoint and desired-graph contributions.
+- Appliance observability, system controls, managed-resource actions, and endpoint volume/mute controls.
+
+### Changed
+- Runtime explanations and administration workflows now expose user-facing route, health, and recovery information.
+- Audio-level reconciliation can clear controls on configured fallback sources even while another source is selected.
+
 ## [0.0.1] - 2025-12-20
 
 ### Added
@@ -33,13 +54,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CamillaDSP built from source with PulseAudio support
 - Django 6.0 application framework
 - SQLite database
-
-## [Unreleased]
-
-### Planned
-- Periodic device discovery task (Celery/Django-Q)
-- Filter management UI
-- Pipeline templates
-- Audio device statistics/monitoring
-- User authentication
-- Production deployment configuration

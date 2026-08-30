@@ -18,6 +18,7 @@ from .logical_endpoint_selection import (
     parse_logical_endpoint_selector,
     select_logical_endpoints,
 )
+from .managed_source_nodes import managed_source_endpoint_for_node
 from .manual_override_resolution import (
     ManualOverrideResolution,
     resolve_manual_overrides,
@@ -150,7 +151,11 @@ def _logical_endpoint_matches(inputs: ResolverInputs):
     return tuple(bindings), matches, projections
 
 
-def _graph_logical_endpoint_ids(document, inputs: ResolverInputs) -> set[str]:
+def _graph_logical_endpoint_ids(
+    document,
+    inputs: ResolverInputs,
+    registry: NodeTypeRegistry,
+) -> set[str]:
     """Return endpoint identities that contribute to this graph's route intent.
 
     The resolver keeps every owned endpoint available as a condition fact and as
@@ -179,6 +184,9 @@ def _graph_logical_endpoint_ids(document, inputs: ResolverInputs) -> set[str]:
         configuration = node.get("configuration")
         if not isinstance(configuration, Mapping):
             continue
+        managed_source_id = managed_source_endpoint_for_node(node, registry)
+        if managed_source_id is not None:
+            referenced.add(managed_source_id)
         logical_endpoint_id = configuration.get("logicalEndpointId")
         if isinstance(logical_endpoint_id, str):
             referenced.add(logical_endpoint_id)
@@ -523,7 +531,7 @@ def _condition_use_status(condition_use, *, facts, named, path, results, issues)
     return status
 
 
-def _complete_path_edges(document, candidate_edge_ids, eligible_nodes):
+def _complete_path_edges(document, candidate_edge_ids, eligible_nodes, registry):
     edges = [
         edge
         for edge in document.get("edges", [])
@@ -535,6 +543,9 @@ def _complete_path_edges(document, candidate_edge_ids, eligible_nodes):
         if not isinstance(node, Mapping):
             continue
         configuration = node.get("configuration")
+        if managed_source_endpoint_for_node(node, registry) is not None:
+            declared_source_ids.add(node["id"])
+            continue
         if node.get("type") != "core.endpoint-reference" or not isinstance(configuration, Mapping):
             continue
         if configuration.get("direction") == "input":
@@ -657,7 +668,7 @@ def run_resolution_pipeline(
         base_parameter_values=base_parameters,
         base_modes=inputs.activation.scene_bindings.to_dict(),
     )
-    graph_endpoint_ids = _graph_logical_endpoint_ids(expanded_document, inputs)
+    graph_endpoint_ids = _graph_logical_endpoint_ids(expanded_document, inputs, registry)
     graph_endpoint_ids.update(
         endpoint_id
         for endpoint_id in override_resolution.endpoint_selections.values()
@@ -706,12 +717,15 @@ def run_resolution_pipeline(
         )
         endpoint_available = True
         configuration = node.get("configuration")
+        endpoint_id = managed_source_endpoint_for_node(node, registry)
         if (
             node.get("type") == "core.endpoint-reference"
             and isinstance(configuration, Mapping)
             and isinstance(configuration.get("logicalEndpointId"), str)
         ):
-            match = matches.get(configuration["logicalEndpointId"])
+            endpoint_id = configuration["logicalEndpointId"]
+        if endpoint_id is not None:
+            match = matches.get(endpoint_id)
             endpoint_available = bool(
                 match is not None and match.status is EndpointMatchStatus.MATCHED
             )
@@ -743,6 +757,7 @@ def run_resolution_pipeline(
         expanded_document,
         candidate_edges,
         eligible_nodes,
+        registry,
     )
 
     propagation = propagate_graph_signal_contracts(

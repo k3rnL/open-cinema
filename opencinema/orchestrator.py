@@ -77,8 +77,11 @@ def main(
         return 0
 
     if service_factory is None:
+        from api.apps import initialize_plugin_runtime
         from core.orchestration.orchestrator_service import OrchestratorService
 
+        if not initialize_plugin_runtime():
+            raise RuntimeError("plugin runtime requires the migrated plugin platform schema")
         service_factory = OrchestratorService
     service = service_factory()
     run = getattr(service, "run", None)

@@ -181,7 +181,7 @@
       - >-
         import importlib.metadata as metadata, json;
         from api.audio_v1 import API_VERSION;
-        from core.plugin_system import PLUGIN_CONTRACT_VERSION, PROCESSING_PLUGIN_ENTRY_POINT, PluginKind, PluginLifecycleState, PluginRegistry;
+        from core.plugin_system import PLUGIN_CONTRACT_VERSION, PLUGIN_ENTRY_POINT, CapabilityKind, PluginLifecycleState, PluginRegistry;
         from core.orchestration.decoder_driver import DECODER_PROTOCOL_VERSION;
         from core.orchestration.graph_schema import DESIRED_GRAPH_SCHEMA_VERSION;
         from core.orchestration.schema_version import CURRENT_ORCHESTRATION_SCHEMA_VERSION;
@@ -197,14 +197,15 @@
         assert RUNTIME_VALUE_SCHEMA_VERSION == {{ open_cinema_preflight_manifest.contracts.wyreplumber_runtime_value_schema }};
         assert WIREPLUMBER_BUILD_API_FAMILY == '{{ open_cinema_preflight_manifest.contracts.wireplumber_api_family }}';
         assert DECODER_PROTOCOL_VERSION == {{ open_cinema_preflight_manifest.contracts.decoder_status_protocol }};
-        assert PLUGIN_CONTRACT_VERSION == {{ open_cinema_preflight_manifest.contracts.processing_plugin }};
+        assert PLUGIN_CONTRACT_VERSION == {{ open_cinema_preflight_manifest.contracts.plugin_platform | default(open_cinema_preflight_manifest.contracts.processing_plugin) }};
+        driver_contract_version = {{ open_cinema_preflight_manifest.contracts.processing_driver }};
         registry = PluginRegistry();
         registry.discover();
-        processing = [record for record in registry.records if record.manifest.kind is PluginKind.PROCESSING];
-        processing_discovery_failures = [item.to_document() for item in registry.diagnostics if item.details.get('group') == PROCESSING_PLUGIN_ENTRY_POINT];
+        processing = [(record, capability) for record in registry.records for capability in record.capabilities if capability.declaration.kind is CapabilityKind.PROCESSING];
+        processing_discovery_failures = [item.to_document() for item in registry.diagnostics if item.details.get('group') == PLUGIN_ENTRY_POINT];
         assert not processing_discovery_failures, processing_discovery_failures;
-        assert all(record.state is PluginLifecycleState.AVAILABLE for record in processing), [record.to_document() for record in processing];
-        assert all(record.manifest.driver_contract_version == {{ open_cinema_preflight_manifest.contracts.processing_driver }} for record in processing), [record.to_document() for record in processing];
+        assert all(record.state is PluginLifecycleState.AVAILABLE for record, capability in processing), [record.to_document() for record, capability in processing];
+        assert all(capability.declaration.version == driver_contract_version for record, capability in processing), [record.to_document() for record, capability in processing];
         print(json.dumps({name: metadata.version(package) for name, package in {
           'django': 'django', 'gunicorn': 'gunicorn', 'celery': 'celery',
           'pycamilladsp': 'camilladsp', 'wyreplumber': 'wyreplumber'

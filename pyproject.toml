@@ -33,14 +33,15 @@ dependencies = [
     "celery[redis]>=5.6.2",
     "gunicorn==23.0.0",
     "jsonschema>=4.25",
+    "packaging>=24.0",
     "wyreplumber==0.2.0",
 ]
 
 [project.scripts]
 open-cinema-orchestrator = "opencinema.orchestrator:main"
 
-[project.entry-points."open_cinema.application_plugins"]
-counter = "plugin.counter.api.plugin:CounterApplicationPlugin"
+[project.entry-points."open_cinema.plugins"]
+counter = "plugin.counter.api.plugin:CounterPlugin"
 
 [tool.uv.sources]
 camilladsp = { git = "https://github.com/HEnquist/pycamilladsp.git", rev = "fdc0d163e02dd73206a493402b43c83502ad83d7" }
@@ -63,16 +64,22 @@ Documentation = "https://github.com/k3rnL/open-cinema#readme"
 Repository = "https://github.com/k3rnL/open-cinema"
 Issues = "https://github.com/k3rnL/open-cinema/issues"
 
+[tool.setuptools]
+py-modules = ["opencinema_plugin_bootstrap"]
+
 [tool.setuptools.dynamic]
 version = {attr = "opencinema.version.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["opencinema*", "api*", "core*", "plugin*", "contracts*"]
+include = ["opencinema*", "api*", "core*", "plugin*", "contracts*", "open_cinema_plugin_sdk*"]
 exclude = ["tests*", ".venv*", "deployment*"]
 
 [tool.setuptools.package-data]
 contracts = ["*.json", "*.yml"]
+open_cinema_plugin_sdk = ["py.typed"]
+"plugin.counter" = ["open-cinema-plugin.toml"]
+"core.plugin_system" = ["first_party_plugins.json"]
 
 [tool.black]
 line-length = 100

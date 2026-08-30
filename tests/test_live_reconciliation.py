@@ -8,21 +8,25 @@ from django.test import override_settings
 
 import pytest
 from wyreplumber.runtime import (
+    AudioPropertiesValue,
     FrozenDict,
     LinkValue,
     NodeState,
     NodeValue,
     PortDirection,
     PortValue,
+    ParameterValue,
 )
 
 from api.models import (
     AppliedPlanState,
     AppliedPlanStatus,
+    EndpointAudioLevel,
     GraphDefinition,
     GraphRevision,
     GraphRevisionState,
     LogicalEndpoint,
+    MasterAudioLevel,
     OrchestrationEvent,
     TransitionJournal,
     TransitionStatus,
@@ -150,9 +154,15 @@ class MemoryAdapter:
         self.refresh_count = 0
         self.hidden_from_refresh = set()
         self.extra_links = ()
+        self.endpoint_controls = {}
 
     def perform(self, action):
-        if action.command.operation == "remove-managed-link":
+        if action.command.operation in {"set-endpoint-volume", "set-endpoint-mute"}:
+            field = action.command.operation.removeprefix("set-endpoint-")
+            self.endpoint_controls[(action.identity.resource_id, field)] = action.command.arguments[
+                field
+            ]
+        elif action.command.operation == "remove-managed-link":
             self.present.discard(action.identity.resource_id)
             self.arguments.pop(action.identity.resource_id, None)
         else:
@@ -200,6 +210,21 @@ class MemoryAdapter:
 
 class MemoryLiveGraphReconciler(LiveGraphReconciler):
     def _observe(self, action):
+        if action.command.operation in {"set-endpoint-volume", "set-endpoint-mute"}:
+            logical_id = action.identity.resource_id
+            return {
+                f"endpoint.{logical_id}.runtimeKey": action.command.arguments["runtimeKey"],
+                f"endpoint.{logical_id}.volume": self.adapter.endpoint_controls.get(
+                    (logical_id, "volume"), 0.6
+                ),
+                f"endpoint.{logical_id}.mute": self.adapter.endpoint_controls.get(
+                    (logical_id, "mute"), False
+                ),
+                f"endpoint.{logical_id}.volumeSupported": True,
+                f"endpoint.{logical_id}.muteSupported": True,
+                "runtime.generation": action.command.arguments["runtimeGeneration"],
+                "runtime.sequence": 9,
+            }
         desired_id = action.identity.resource_id
         arguments = action.command.arguments
         prefix = f"managedLink.open-cinema.orchestrator.{desired_id}"
@@ -474,6 +499,176 @@ def test_live_route_replaces_obsolete_identity_before_recreating_same_topology()
     state = AppliedPlanState.objects.get(graph_definition=graph)
     assert state.status == AppliedPlanStatus.CONVERGED
     assert state.current_plan == renamed.plan
+
+
+@override_settings(AUDIO_ORCHESTRATION_FEATURES=FEATURES)
+def test_active_output_level_is_configured_before_route_convergence() -> None:
+    owner = get_user_model().objects.create_user(username="live-level-owner")
+    source = LogicalEndpoint.objects.create(
+        name="Programme source",
+        owner=owner,
+        direction="input",
+        selector=_selector("bluez_input.phone"),
+    )
+    sink = LogicalEndpoint.objects.create(
+        name="Main output",
+        owner=owner,
+        direction="output",
+        selector=_selector("alsa_output.usb-room"),
+    )
+    MasterAudioLevel.objects.create(level=0.8)
+    EndpointAudioLevel.objects.create(endpoint=sink, level=0.5, muted=True)
+    graph = GraphDefinition.objects.create(name="Levelled route", owner=owner)
+    revision = GraphRevision.objects.create(
+        definition=graph,
+        revision_number=1,
+        state=GraphRevisionState.PUBLISHED,
+        author=owner,
+        content={
+            "schemaVersion": 1,
+            "id": "graph:levelled-route",
+            "kind": "graph",
+            "metadata": {"name": "Levelled route", "labels": {}},
+            "parameters": [],
+            "publicPorts": [],
+            "conditions": [],
+            "nodes": [
+                {
+                    "id": "source",
+                    "type": "core.endpoint-reference",
+                    "version": 1,
+                    "configuration": {
+                        "logicalEndpointId": str(source.pk),
+                        "direction": "input",
+                    },
+                },
+                {
+                    "id": "sink",
+                    "type": "core.endpoint-reference",
+                    "version": 1,
+                    "configuration": {
+                        "logicalEndpointId": str(sink.pk),
+                        "direction": "output",
+                    },
+                },
+            ],
+            "edges": [
+                {
+                    "id": "programme-to-main",
+                    "from": {"node": "source", "port": "output"},
+                    "to": {"node": "sink", "port": "input"},
+                }
+            ],
+            "layout": {"viewport": {"x": 0, "y": 0, "zoom": 1}},
+        },
+    )
+    activate_graph(definition=graph, revision=revision, expected_version=0)
+    runtime = _snapshot()
+    runtime = replace(
+        runtime,
+        parameters=(
+            ParameterValue(
+                "node",
+                10,
+                "Props",
+                "rw",
+                (AudioPropertiesValue(volume=0.6, mute=False),),
+            ),
+        ),
+    )
+    world = InMemoryWorldStore().install_runtime_snapshot(runtime)
+    adapter = MemoryAdapter()
+    reconciler = MemoryLiveGraphReconciler(
+        lambda: None,
+        adapter=adapter,
+        journal_store=TransitionJournalStore(),
+    )
+
+    result = reconciler.reconcile(str(graph.pk), world)
+
+    assert result.applied is True, result.reason
+    assert result.action_count == 3
+    assert [item.command.operation for item in adapter.performed] == [
+        "set-endpoint-volume",
+        "set-endpoint-mute",
+        "create-managed-link",
+    ]
+    assert adapter.performed[0].command.arguments["volume"] == pytest.approx(0.4)
+    assert adapter.performed[1].command.arguments["mute"] is True
+    assert [entry["phase"] for entry in TransitionJournal.objects.get().entries] == [
+        "configure",
+        "configure",
+        "route",
+    ]
+
+
+@override_settings(AUDIO_ORCHESTRATION_FEATURES=FEATURES)
+def test_differing_read_only_active_level_degrades_before_route_mutation() -> None:
+    owner = get_user_model().objects.create_user(username="read-only-level-owner")
+    source = LogicalEndpoint.objects.create(
+        name="Source",
+        owner=owner,
+        direction="input",
+        selector=_selector("bluez_input.phone"),
+    )
+    sink = LogicalEndpoint.objects.create(
+        name="Sink",
+        owner=owner,
+        direction="output",
+        selector=_selector("alsa_output.usb-room"),
+    )
+    EndpointAudioLevel.objects.create(endpoint=sink, level=0.2)
+    graph = GraphDefinition.objects.create(name="Read-only level", owner=owner)
+    revision = GraphRevision.objects.create(
+        definition=graph,
+        revision_number=1,
+        state=GraphRevisionState.PUBLISHED,
+        author=owner,
+        content={
+            "schemaVersion": 1,
+            "id": "graph:read-only-level",
+            "kind": "graph",
+            "metadata": {"name": "Read-only level", "labels": {}},
+            "parameters": [],
+            "publicPorts": [],
+            "conditions": [],
+            "nodes": [
+                {
+                    "id": "source",
+                    "type": "core.endpoint-reference",
+                    "version": 1,
+                    "configuration": {"logicalEndpointId": str(source.pk), "direction": "input"},
+                },
+                {
+                    "id": "sink",
+                    "type": "core.endpoint-reference",
+                    "version": 1,
+                    "configuration": {"logicalEndpointId": str(sink.pk), "direction": "output"},
+                },
+            ],
+            "edges": [
+                {
+                    "id": "route",
+                    "from": {"node": "source", "port": "output"},
+                    "to": {"node": "sink", "port": "input"},
+                }
+            ],
+            "layout": {"viewport": {"x": 0, "y": 0, "zoom": 1}},
+        },
+    )
+    activate_graph(definition=graph, revision=revision, expected_version=0)
+    adapter = MemoryAdapter()
+    result = MemoryLiveGraphReconciler(lambda: None, adapter=adapter).reconcile(
+        str(graph.pk), InMemoryWorldStore().install_runtime_snapshot(_snapshot())
+    )
+
+    assert result.applied is False
+    assert result.action_count == 0
+    assert "read-only" in result.reason
+    assert adapter.performed == []
+    state = AppliedPlanState.objects.get(graph_definition=graph)
+    assert state.status == AppliedPlanStatus.DEGRADED
+    assert state.last_error["code"] == "audio-level-volume-read-only"
 
 
 @override_settings(AUDIO_ORCHESTRATION_FEATURES=FEATURES)

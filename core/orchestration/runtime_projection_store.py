@@ -7,8 +7,16 @@ from threading import RLock
 
 from django.db import transaction
 
-from api.models import ManagedAudioAdapterRuntimeState, RuntimeProjection
+from api.models import (
+    EndpointAudioLevel,
+    LogicalEndpoint,
+    ManagedAudioAdapterRuntimeState,
+    MasterAudioLevel,
+    RuntimeProjection,
+)
 
+from .endpoint_matching import EndpointMatchStatus, match_endpoint_candidates
+from .endpoint_selectors import parse_endpoint_selector
 from .runtime_world import OrchestratorWorldSnapshot
 from .processor_runtime import _AVAILABLE_NODE_STATES, discover_managed_processor_nodes
 
@@ -34,6 +42,7 @@ class DatabaseRuntimeProjectionStore:
         "managed-resource",
         "processor-health",
         "orchestration-health",
+        "audio-level",
     )
     HEALTH_SUBJECT = "orchestrator"
 
@@ -79,6 +88,7 @@ class DatabaseRuntimeProjectionStore:
                         }
                     )
                 documents[("endpoint-candidate", candidate.runtime_key)] = _json_document(payload)
+            documents.update(_audio_level_documents(world))
             processor_nodes = discover_managed_processor_nodes(world.runtime)
             processor_groups: dict[tuple[str, str], list[object]] = {}
             for candidate in processor_nodes:
@@ -201,3 +211,154 @@ def _json_document(value: dict[str, object]) -> dict[str, object]:
     """Normalize tuples and other JSON-compatible containers before comparison."""
 
     return json.loads(json.dumps(value))
+
+
+def _audio_level_documents(
+    world: OrchestratorWorldSnapshot,
+) -> dict[tuple[str, str], dict[str, object]]:
+    master = MasterAudioLevel.objects.filter(pk=1).first()
+    master_level = master.level if master is not None else 1.0
+    master_muted = master.muted if master is not None else False
+    values = {
+        item.endpoint_id: item
+        for item in EndpointAudioLevel.objects.select_related("endpoint").all()
+    }
+    if master is None and not values:
+        return {}
+    documents: dict[tuple[str, str], dict[str, object]] = {}
+    active_outputs = []
+    master_degraded = []
+    master_applying = False
+    for endpoint in LogicalEndpoint.objects.all():
+        value = values.get(endpoint.pk)
+        endpoint_level = value.level if value is not None else 1.0
+        endpoint_muted = value.muted if value is not None else False
+        output = endpoint.direction == "output"
+        effective_level = endpoint_level * master_level if output else endpoint_level
+        effective_muted = endpoint_muted or (master_muted if output else False)
+        validation = parse_endpoint_selector(endpoint.explicit_binding or endpoint.selector)
+        candidate = None
+        availability = "invalid"
+        if validation.valid:
+            matches = match_endpoint_candidates(
+                validation.selector,
+                [
+                    item
+                    for item in world.endpoints.candidates
+                    if item.direction.value == endpoint.direction
+                ],
+            )
+            if matches.status is EndpointMatchStatus.MATCHED:
+                availability = "available"
+                candidate = matches.selected
+            elif matches.status is EndpointMatchStatus.AMBIGUOUS:
+                availability = "ambiguous"
+            else:
+                availability = "unavailable"
+        observed_level = candidate.volume if candidate is not None else None
+        observed_muted = candidate.mute if candidate is not None else None
+        volume_writable = bool(candidate is not None and candidate.volume_writable)
+        mute_writable = bool(candidate is not None and candidate.mute_writable)
+        level_differs = bool(
+            candidate is not None
+            and observed_level is not None
+            and abs(float(observed_level) - float(effective_level)) > 0.0001
+        )
+        mute_differs = bool(
+            candidate is not None
+            and observed_muted is not None
+            and observed_muted is not effective_muted
+        )
+        applying = (level_differs and volume_writable) or (mute_differs and mute_writable)
+        degraded = []
+        if availability != "available":
+            degraded.append(
+                {
+                    "code": f"endpoint-{availability}",
+                    "detail": "The saved audio preference will apply when one unique runtime device is available.",
+                }
+            )
+        if level_differs and not volume_writable:
+            degraded.append(
+                {
+                    "code": "endpoint-volume-read-only",
+                    "detail": "Observed volume differs from desired state and is read-only.",
+                }
+            )
+        if mute_differs and not mute_writable:
+            degraded.append(
+                {
+                    "code": "endpoint-mute-read-only",
+                    "detail": "Observed mute differs from desired state and is read-only.",
+                }
+            )
+        payload = {
+            "schemaVersion": 1,
+            "scope": "device-level" if output else "input-level",
+            "endpointId": str(endpoint.pk),
+            "direction": endpoint.direction,
+            "availability": availability,
+            "desired": {"level": endpoint_level, "muted": endpoint_muted},
+            "master": (
+                {
+                    "level": master_level,
+                    "muted": master_muted,
+                    "updateVersion": master.update_version if master is not None else 1,
+                }
+                if output
+                else None
+            ),
+            "effective": {"level": effective_level, "muted": effective_muted},
+            "observed": {
+                "level": observed_level,
+                "muted": observed_muted,
+                "known": candidate is not None
+                and observed_level is not None
+                and observed_muted is not None,
+            },
+            "capabilities": {
+                "volume": {
+                    "readable": observed_level is not None,
+                    "writable": volume_writable,
+                },
+                "mute": {
+                    "readable": observed_muted is not None,
+                    "writable": mute_writable,
+                },
+            },
+            "active": bool(candidate is not None and candidate.is_linked),
+            "applying": applying,
+            "degraded": degraded,
+            "runtimeVersion": world.version,
+            "updateVersion": value.update_version if value is not None else 1,
+        }
+        documents[("audio-level", f"endpoint:{endpoint.pk}")] = _json_document(payload)
+        if output and payload["active"]:
+            observed = payload["observed"]
+            active_outputs.append(
+                {
+                    "endpointId": str(endpoint.pk),
+                    "level": observed["level"],
+                    "muted": observed["muted"],
+                    "known": observed["known"],
+                }
+            )
+            master_applying = master_applying or applying
+            master_degraded.extend({**item, "endpointId": str(endpoint.pk)} for item in degraded)
+    documents[("audio-level", "master")] = _json_document(
+        {
+            "schemaVersion": 1,
+            "scope": "master-output",
+            "desired": {"level": master_level, "muted": master_muted},
+            "effective": {"level": master_level, "muted": master_muted},
+            "observed": {
+                "outputs": active_outputs,
+                "known": bool(active_outputs) and all(item["known"] for item in active_outputs),
+            },
+            "applying": master_applying,
+            "degraded": master_degraded,
+            "runtimeVersion": world.version,
+            "updateVersion": master.update_version if master is not None else 1,
+        }
+    )
+    return documents

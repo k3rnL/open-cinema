@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 
 
 def timestamp(value) -> str | None:
@@ -188,6 +189,44 @@ def applied_state_document(state) -> dict[str, object]:
 
 def plan_document(plan, *, applied_state=None) -> dict[str, object]:
     runtime = plan.document.get("world", {}) if isinstance(plan.document, Mapping) else {}
+    explanation = deepcopy(plan.explanation)
+    presentation = explanation.get("presentation") if isinstance(explanation, Mapping) else None
+    if isinstance(presentation, dict):
+        transition = presentation.get("transition")
+        if not isinstance(transition, dict):
+            transition = {}
+            presentation["transition"] = transition
+        applied = applied_state_document(applied_state)
+        transition["status"] = applied["status"]
+        transition["observedAt"] = applied["updatedAt"] or transition.get("observedAt")
+        transition["message"] = (
+            applied["lastError"].get("message")
+            if isinstance(applied["lastError"], Mapping)
+            else applied["lastError"]
+        )
+        if applied["status"] == "failed":
+            message = transition["message"] or "The route could not be applied."
+            headline = presentation.get("headline")
+            if isinstance(headline, dict):
+                headline.update(
+                    {
+                        "status": "failed",
+                        "title": "The audio route failed to apply",
+                        "summary": message,
+                    }
+                )
+            errors = presentation.get("errors")
+            if isinstance(errors, list):
+                errors.append(
+                    {
+                        "stage": "reconciliation",
+                        "path": "$runtime",
+                        "code": "reconciliation_failed",
+                        "message": message,
+                        "severity": "error",
+                        "nextStep": "Check the affected device or processor, then retry the graph.",
+                    }
+                )
     return {
         "id": str(plan.pk),
         "schemaVersion": plan.schema_version,
@@ -200,7 +239,7 @@ def plan_document(plan, *, applied_state=None) -> dict[str, object]:
         "resolutionMode": plan.resolution_mode,
         "status": plan.status,
         "document": plan.document,
-        "explanation": plan.explanation,
+        "explanation": explanation,
         "planDigest": plan.plan_digest,
         "correlationId": str(plan.correlation_id),
         "applied": applied_state_document(applied_state),

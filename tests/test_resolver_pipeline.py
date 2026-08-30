@@ -3,6 +3,7 @@ from dataclasses import replace
 
 from core.orchestration.endpoint_inventory import map_runtime_endpoints
 from core.orchestration.graph_documents import graph_content_digest
+from core.plugin_system.managed_source_identity import managed_source_endpoint_id
 from core.orchestration.node_catalogue import (
     NodePortDefinition,
     NodeTypeDefinition,
@@ -332,6 +333,69 @@ def test_unrelated_unavailable_endpoint_does_not_degrade_graph() -> None:
         "endpoint:speakers",
     }
     assert result.facts["endpoint.endpoint:unused-headset.availability"] == "unavailable"
+
+
+def test_managed_plugin_source_node_resolves_and_selects_its_stable_endpoint() -> None:
+    plugin_id = "example.spotify"
+    capability_id = "example.spotify.sources"
+    instance_id = "instance:living-room"
+    endpoint_id = managed_source_endpoint_id(plugin_id, capability_id, instance_id)
+    registry = _registry()
+    registry.register(
+        NodeTypeDefinition(
+            type_id="example.spotify.source",
+            version=1,
+            display_name="Spotify source",
+            category="routing",
+            description="Test managed plugin audio source.",
+            ports=(_port("audio", PortDirection.OUTPUT, AudioContent.PCM),),
+            configuration_schema={
+                "type": "object",
+                "required": ["instanceId"],
+                "x-open-cinema-managed-audio-source": {
+                    "pluginId": plugin_id,
+                    "capabilityId": capability_id,
+                    "instanceProperty": "instanceId",
+                },
+                "properties": {"instanceId": {"type": "string"}},
+            },
+        )
+    )
+    inputs = _resolver_inputs()
+    document = inputs.graph.document.to_dict()
+    document["nodes"][0] = {
+        "id": "source",
+        "type": "example.spotify.source",
+        "version": 1,
+        "configuration": {"instanceId": instance_id},
+    }
+    document["edges"][0]["from"]["port"] = "audio"
+    graph = replace(
+        inputs.graph,
+        content_digest=graph_content_digest(document),
+        document=document,
+    )
+    source_endpoint = replace(
+        inputs.logical_endpoints[0],
+        endpoint_id=endpoint_id,
+        name="Spotify living room",
+    )
+
+    result = run_resolution_pipeline(
+        replace(
+            inputs,
+            graph=graph,
+            logical_endpoints=(source_endpoint, inputs.logical_endpoints[1]),
+        ),
+        registry=registry,
+    )
+
+    assert result.valid
+    assert result.selected_edge_ids == ("edge:in", "edge:out")
+    assert {binding.logical_endpoint_id for binding in result.endpoint_bindings} == {
+        endpoint_id,
+        "endpoint:speakers",
+    }
 
 
 def test_false_condition_prunes_incomplete_path_and_unused_resource() -> None:

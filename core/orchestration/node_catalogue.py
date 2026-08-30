@@ -273,20 +273,13 @@ def core_node_type_definitions() -> tuple[NodeTypeDefinition, ...]:
             "input",
             PortDirection.INPUT,
             optional=True,
-            description="Optional programme input for output selection.",
-        ),
-        _port(
-            "candidates",
-            PortDirection.INPUT,
-            optional=True,
-            cardinality=PortCardinality.VARIADIC,
-            description="Ordered candidate inputs.",
+            description="Programme audio sent to the selected output endpoint.",
         ),
         _port(
             "audio",
             PortDirection.OUTPUT,
             optional=True,
-            description="Selected audio output.",
+            description="Audio received from the selected input endpoint.",
         ),
     )
     return (

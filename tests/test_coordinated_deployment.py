@@ -166,6 +166,8 @@ def test_release_installers_consume_only_selected_manifest_artifacts() -> None:
     assert 'environ.Env.read_env(Path(__file__).resolve().with_name(".env"))' in app
     assert "Create the persistent managed audio-adapter media directory" in app
     assert "open_cinema.audio_adapter_media_root" in app
+    assert "Read the installed release-manifest digest for independently tagged runs" in app
+    assert "open_cinema_application_release_manifest_stat.stat.checksum" in app
     assert "OPEN_CINEMA_AUDIO_ADAPTER_MEDIA_ROOT=" in environment
     assert "install_from_local is defined and install_from_local" not in app
     assert "Remove stale mutable distribution metadata in appliance mode" in app
@@ -504,7 +506,10 @@ def test_gunicorn_can_run_bounded_speaker_diagnostics_in_owned_audio_session() -
     assert "RuntimeDirectoryPreserve=yes" in unit
     assert "ProtectHome=false" in unit
     assert "InaccessiblePaths=/home /root" in unit
-    assert "ReadWritePaths={{ open_cinema.app_path }} /run/open-cinema /var/log/open-cinema" in unit
+    assert "ReadWritePaths={{ open_cinema.app_path }}" in unit
+    assert "{{ open_cinema.plugins.root }}" in unit
+    assert "{{ open_cinema.plugins.secret_dir }}" in unit
+    assert "/run/open-cinema /var/log/open-cinema /var/lib/open-cinema" in unit
 
 
 def test_audio_session_units_are_verified_before_restart() -> None:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 
 from wyreplumber.runtime import FrozenDict
@@ -15,9 +15,9 @@ from .contracts import (
     ProcessingDriverResult,
     ProcessingHookContext,
     ProcessingPlan,
-    ProcessingPlugin,
     ProcessingValidationIssue,
 )
+from .v2_contracts import ProcessingCapability
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,11 +45,16 @@ class ProcessingHookRunner:
 
     @staticmethod
     def validate(
-        plugin: ProcessingPlugin,
+        plugin_id: str,
+        capability: ProcessingCapability,
         context: ProcessingHookContext,
     ) -> ProcessingValidationOutcome:
         try:
-            issues = tuple(plugin.validate(context))
+            issues = (
+                tuple(capability.validate_hook(context))
+                if capability.validate_hook is not None
+                else ()
+            )
             if any(not isinstance(item, ProcessingValidationIssue) for item in issues):
                 raise TypeError("validate must return ProcessingValidationIssue values")
             return ProcessingValidationOutcome(issues)
@@ -57,7 +62,7 @@ class ProcessingHookRunner:
             return ProcessingValidationOutcome(
                 (),
                 PluginDiagnostic(
-                    plugin.manifest.plugin_id,
+                    plugin_id,
                     "validation",
                     "processing-plugin-validation-failed",
                     str(error),
@@ -67,11 +72,14 @@ class ProcessingHookRunner:
 
     @staticmethod
     def plan(
-        plugin: ProcessingPlugin,
+        plugin_id: str,
+        capability: ProcessingCapability,
         context: ProcessingHookContext,
     ) -> ProcessingPlanningOutcome:
         try:
-            plan = plugin.plan(context)
+            if capability.plan_hook is None:
+                raise TypeError("processing capability does not provide a planning hook")
+            plan = capability.plan_hook(context)
             if not isinstance(plan, ProcessingPlan):
                 raise TypeError("plan must return ProcessingPlan")
             if plan.node_instance_id != context.node_instance_id:
@@ -81,7 +89,7 @@ class ProcessingHookRunner:
             return ProcessingPlanningOutcome(
                 None,
                 PluginDiagnostic(
-                    plugin.manifest.plugin_id,
+                    plugin_id,
                     "planning",
                     "processing-plugin-planning-failed",
                     str(error),

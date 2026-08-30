@@ -1,0 +1,57 @@
+schema-version = 2
+permissions = []
+
+[plugin]
+id = "counter"
+distribution = "open-cinema"
+display-name = "Counter example"
+description = "Minimal version-2 example with API, automation, core storage, and declarative UI capabilities."
+vendor = "Open Cinema"
+version = "0.3.2"
+license = "MIT"
+source-url = "https://github.com/k3rnL/open-cinema"
+documentation-url = "https://github.com/k3rnL/open-cinema/blob/main/docs/audio-orchestration/PLUGINS.md"
+
+[compatibility]
+open-cinema = ">=0.3.2,<0.4"
+python = ">=3.12,<3.14"
+operating-systems = ["linux", "darwin"]
+architectures = ["x86_64", "aarch64", "arm64"]
+
+[compatibility.plugin-contract]
+minimum = 2
+maximum = 2
+
+[compatibility.capability-versions.api]
+minimum = 1
+maximum = 1
+
+[compatibility.capability-versions.automation]
+minimum = 1
+maximum = 1
+
+[compatibility.capability-versions.admin-ui]
+minimum = 1
+maximum = 1
+
+[[capabilities]]
+id = "counter.api"
+kind = "api"
+version = 1
+
+[[capabilities]]
+id = "counter.automation"
+kind = "automation"
+version = 1
+
+[[capabilities]]
+id = "counter.admin"
+kind = "admin-ui"
+version = 1
+
+[lifecycle]
+install = "application-restart"
+enable = "hot"
+disable = "hot"
+update = "application-restart"
+uninstall = "application-restart"

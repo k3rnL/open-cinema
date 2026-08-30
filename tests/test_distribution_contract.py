@@ -16,6 +16,10 @@ def test_runtime_contracts_are_package_resources() -> None:
         "audio-orchestration-v1.yml",
         "audio-signal-descriptor-v1.schema.json",
         "desired-audio-graph-v1.schema.json",
+        "open-cinema-plugin-v2.schema.json",
+        "plugin-admin-ui-v1.schema.json",
+        "plugin-catalogue-v1.schema.json",
+        "plugin-runtime-result-v1.schema.json",
     }
     observed = {path.name for path in contract_root.iterdir() if path.is_file()}
     observed.discard("__init__.py")

@@ -34,7 +34,7 @@
   },
   "format": "open-cinema.resolver-replay/v1",
   "outputPlan": {
-    "digest": "977df447086a80cd5e0a86af2d10a59adf7e994bc6ea7b13f4c4d5c2ca886bba",
+    "digest": "fd192c196768371dd109a24b5e31ffb822c7710229edf4bd76132a50d56f1e69",
     "document": {
       "actionIntent": [],
       "currentPlanPolicy": {
@@ -117,6 +117,44 @@
         "provenance": {},
         "rejected": [],
         "winners": []
+      },
+      "presentation": {
+        "alternatives": [],
+        "errors": [],
+        "headline": {
+          "status": "inactive",
+          "summary": "Activate the graph or satisfy its route conditions to start audio.",
+          "title": "No audio path is active"
+        },
+        "overrides": [],
+        "processors": [],
+        "route": [],
+        "schemaVersion": 1,
+        "selection": {
+          "reason": "No eligible output has been selected yet.",
+          "reasonCode": "no-selection",
+          "selectorNodeId": null,
+          "trigger": "Graph conditions and device availability",
+          "winner": null,
+          "winnerReferenceId": null
+        },
+        "signals": {
+          "input": {},
+          "path": []
+        },
+        "technicalReferences": {
+          "issuePaths": [],
+          "resourceNodeIds": [],
+          "selectedEdgeIds": [],
+          "selectorNodeIds": [],
+          "worldVersion": "1:0:1:1:1:1:1"
+        },
+        "transition": {
+          "durationMs": null,
+          "message": null,
+          "observedAt": "2026-08-22T16:00:00+00:00",
+          "status": "inactive"
+        }
       },
       "selectionDecisions": {},
       "stages": [

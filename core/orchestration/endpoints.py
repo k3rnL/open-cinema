@@ -54,7 +54,15 @@ def update_logical_endpoint(
     with transaction.atomic():
         current = LogicalEndpoint.objects.select_for_update().get(pk=endpoint_id)
         if not current.can_change(actor):
-            raise PermissionDenied("Logical endpoints are editable only by their owner or staff.")
+            raise PermissionDenied(
+                "Logical endpoints are editable only by their owner or staff."
+            )
+        managed_source = current.policy_metadata.get("managedSource") is True
+        protected = {"direction", "selector", "explicit_binding", "policy_metadata"}
+        if managed_source and protected.intersection(changes):
+            raise PermissionDenied(
+                "Managed-source identity and binding are controlled by the owning plugin."
+            )
         if current.update_version != expected_version:
             raise LogicalEndpointUpdateConflict(
                 expected_version=expected_version,

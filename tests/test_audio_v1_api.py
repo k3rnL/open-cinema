@@ -601,6 +601,30 @@ def test_sse_resumption_reports_gap_and_full_snapshot(client, api_user):
     assert '"device.serial":"[redacted]"' in item
 
 
+def test_fresh_sse_subscription_starts_with_current_snapshot_not_event_history(client, api_user):
+    _candidate_projection()
+    graph = GraphDefinition.objects.create(name="Fresh event graph", owner=api_user)
+    event = OrchestrationEvent.objects.create(
+        correlation_id=uuid.uuid4(),
+        graph_definition=graph,
+        event_type="transition.completed",
+        payload={"historical": True},
+    )
+
+    response = client.get("/api/audio/v1/events?follow=false")
+    stream = iter(response.streaming_content)
+    retry = next(stream).decode()
+    snapshot = next(stream).decode()
+    remaining = b"".join(stream).decode()
+    response.close()
+
+    assert retry == "retry: 2000\n\n"
+    assert "event: snapshot" in snapshot
+    assert '"reason":"initial-sync"' in snapshot
+    assert f"id: {event.sequence}" in snapshot
+    assert "event: transition" not in remaining
+
+
 def test_owner_scoping_returns_not_found_for_other_users(client):
     other = get_user_model().objects.create_user(username="audio-v1-other")
     graph = GraphDefinition.objects.create(name="Other graph", owner=other)

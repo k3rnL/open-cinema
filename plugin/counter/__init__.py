@@ -1,8 +1,1 @@
-"""
-Example Counter Plugin
-
-This is a simple example plugin that demonstrates:
-- Custom Django model (CounterLog)
-- API routes registration
-- CRUD operations via REST API
-"""
+"""Composite version-2 plugin example using only core-owned storage."""

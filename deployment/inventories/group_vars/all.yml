@@ -90,6 +90,14 @@ open_cinema:
   runtime_redis_key: "open-cinema:orchestration:runtime-world:v1"
   orchestrator_lock_path: "/run/open-cinema/orchestrator.lock"
   audio_adapter_media_root: "{{ project_root }}/open-cinema/media/audio-adapters"
+  plugins:
+    root: "/var/lib/open-cinema/plugins"
+    secret_dir: "/var/lib/open-cinema/plugin-secrets"
+    generation_retention: 3
+    generation_max_bytes: 1073741824
+    helper_path: "/usr/local/libexec/open-cinema-plugin-control"
+    allow_editable: false
+    editable_dirs: []
   managed_static_paths:
     - /etc/open-cinema
     - /etc/nginx/sites-available/open-cinema
@@ -109,6 +117,16 @@ open_cinema:
     - /etc/tmpfiles.d/open-cinema-decoder.conf
     - /etc/udev/rules.d/49-open-cinema-processors.rules
     - /etc/wireplumber/wireplumber.conf.d
+    - /usr/local/libexec/open-cinema-system-control
+    - /usr/local/libexec/open-cinema-plugin-control
+    - /etc/sudoers.d/open-cinema-system-control
+
+  # Root-level controls stay unavailable unless both this switch and the
+  # installed helper/sudo policy self-check succeed.
+  system_control:
+    enabled: true
+    helper_path: /usr/local/libexec/open-cinema-system-control
+    sudoers_path: /etc/sudoers.d/open-cinema-system-control
 
   sqlite:
     busy_timeout_ms: 5000

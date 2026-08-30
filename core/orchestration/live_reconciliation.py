@@ -13,7 +13,9 @@ from api.audio_v1.catalogue import api_node_type_registry
 from api.models import (
     AppliedPlanState,
     AppliedPlanStatus,
+    EndpointAudioLevel,
     GraphActivation,
+    MasterAudioLevel,
     OrchestrationEvent,
     OrchestrationEventSeverity,
     ResolvedPlan,
@@ -31,6 +33,7 @@ from .idempotent_execution import (
     IdempotentActionExecutor,
     IdempotentExecutionDisposition,
 )
+from .managed_source_nodes import managed_source_endpoint_for_node
 from .resolved_plan import ResolvedPlanOutput, effective_plan_digest, resolve_plan
 from .resolution_context import build_resolver_inputs
 from .camilladsp_resources import CamillaDSPDeploymentPolicy
@@ -52,8 +55,11 @@ from .wireplumber_driver import (
     WirePlumberControlRegistry,
     WirePlumberDriverAdapter,
     build_managed_link_action,
+    build_endpoint_mute_action,
+    build_endpoint_volume_action,
     build_remove_managed_link_action,
     observe_managed_link,
+    register_endpoint_audio_controls,
     register_managed_link_controls,
 )
 
@@ -93,6 +99,12 @@ class IncompleteProcessorTopology(UnsupportedLiveGraph):
             f"Processor node {node_id!r} has an incomplete {direction} port contract "
             f"on edge {edge_id!r}; missing runtime ports {list(missing_port_ids)}."
         )
+
+
+class AudioLevelUnavailable(UnsupportedLiveGraph):
+    def __init__(self, code: str, message: str, **evidence: object) -> None:
+        self.evidence = {"code": code, **evidence}
+        super().__init__(message)
 
 
 @dataclass(frozen=True, slots=True)
@@ -458,6 +470,7 @@ class LiveGraphReconciler:
         if adapter is None:
             controls = WirePlumberControlRegistry()
             register_managed_link_controls(controls)
+            register_endpoint_audio_controls(controls)
             adapter = WirePlumberDriverAdapter(connection_provider, registry=controls)
         self.adapter = adapter
         self.journal_store = journal_store or TransitionJournalStore()
@@ -874,6 +887,7 @@ class LiveGraphReconciler:
                 candidates,
                 selections,
                 edge_role="source",
+                registry=self.registry,
             )
             target_node_id, target_runtime_key = self._runtime_edge_node(
                 target,
@@ -884,6 +898,7 @@ class LiveGraphReconciler:
                 candidates,
                 selections,
                 edge_role="target",
+                registry=self.registry,
             )
             source_is_processor = source.get("type", "").startswith("processor.")
             target_is_processor = target.get("type", "").startswith("processor.")
@@ -1110,8 +1125,18 @@ class LiveGraphReconciler:
                 item[0].desired_id,
             )
         )
+        level_actions = self._audio_level_actions(
+            graph=graph,
+            edges=edges,
+            selected_edge_ids=selected_edge_ids,
+            selections=selections,
+            bindings=bindings,
+            candidates=candidates,
+            plan_digest=resolved.digest,
+        )
         actions = (
             *suppress_actions,
+            *level_actions,
             *(item[1] for item in route_actions),
             *(item[1] for item in ingress_actions),
             *cleanup_actions,
@@ -1143,6 +1168,136 @@ class LiveGraphReconciler:
         )
         return LiveRouteActionPlan(tuple(actions), topology)
 
+    def _audio_level_actions(
+        self,
+        *,
+        graph,
+        edges,
+        selected_edge_ids,
+        selections,
+        bindings,
+        candidates,
+        plan_digest: str,
+    ) -> tuple[PhasedDriverAction, ...]:
+        nodes = {node["id"]: node for node in graph.get("nodes", ())}
+
+        def endpoint_id(node, role: str) -> str | None:
+            managed_source_id = managed_source_endpoint_for_node(node, self.registry)
+            if managed_source_id is not None:
+                return managed_source_id if role == "source" else None
+            if node.get("type") == "core.endpoint-reference":
+                value = node.get("configuration", {}).get("logicalEndpointId")
+                return value if isinstance(value, str) and value else None
+            if node.get("type") in _ENDPOINT_SELECTOR_NODE_TYPES:
+                decision = selections.get(node.get("id"))
+                selected = decision.get("selected") if isinstance(decision, Mapping) else None
+                if not isinstance(selected, list) or len(selected) != 1:
+                    return None
+                value = selected[0].get("referenceId")
+                return value if isinstance(value, str) and value else None
+            return None
+
+        active: dict[str, str] = {}
+        for edge_id in selected_edge_ids:
+            edge = edges[edge_id]
+            for role, side, direction in (
+                ("source", "from", "input"),
+                ("target", "to", "output"),
+            ):
+                selected_id = endpoint_id(nodes[edge[side]["node"]], role)
+                candidate = candidates.get(bindings.get(selected_id))
+                if (
+                    selected_id is not None
+                    and candidate is not None
+                    and candidate.direction.value == direction
+                ):
+                    active[selected_id] = direction
+
+        master = MasterAudioLevel.objects.filter(pk=1).first()
+        endpoint_values = {
+            str(item.endpoint_id): item
+            for item in EndpointAudioLevel.objects.filter(endpoint_id__in=bindings)
+        }
+        # Explicit endpoint preferences remain actionable while an available
+        # endpoint is not selected by the current route. This is especially
+        # important for inputs: muting a source can make an activity selector
+        # fall back, but the user must still be able to unmute that source.
+        for logical_id in endpoint_values:
+            candidate = candidates.get(bindings.get(logical_id))
+            if candidate is not None:
+                active.setdefault(logical_id, candidate.direction.value)
+        if not active:
+            return ()
+        actions = []
+        for logical_id, direction in sorted(active.items()):
+            endpoint_value = endpoint_values.get(logical_id)
+            if endpoint_value is None and (master is None or direction == "input"):
+                continue
+            candidate = candidates.get(bindings.get(logical_id))
+            if candidate is None:
+                raise AudioLevelUnavailable(
+                    "audio-level-endpoint-unavailable",
+                    "An active logical endpoint disappeared before its audio level could apply.",
+                    endpointId=logical_id,
+                )
+            endpoint_level = endpoint_value.level if endpoint_value is not None else 1.0
+            endpoint_muted = endpoint_value.muted if endpoint_value is not None else False
+            desired_level = endpoint_level
+            desired_muted = endpoint_muted
+            if direction == "output" and master is not None:
+                desired_level *= master.level
+                desired_muted = desired_muted or master.muted
+            if candidate.volume is None or candidate.mute is None:
+                raise AudioLevelUnavailable(
+                    "audio-level-observation-unknown",
+                    "An active endpoint does not expose enough observed audio state for safe control.",
+                    endpointId=logical_id,
+                    runtimeKey=candidate.runtime_key,
+                )
+            if abs(float(candidate.volume) - float(desired_level)) > 0.0001:
+                if not candidate.volume_writable:
+                    raise AudioLevelUnavailable(
+                        "audio-level-volume-read-only",
+                        "The active endpoint volume differs from desired state but is read-only.",
+                        endpointId=logical_id,
+                        requested=desired_level,
+                        observed=candidate.volume,
+                    )
+                actions.append(
+                    PhasedDriverAction(
+                        ReconciliationPhase.CONFIGURE,
+                        build_endpoint_volume_action(
+                            logical_endpoint_id=logical_id,
+                            candidate=candidate,
+                            volume=desired_level,
+                            intent_scope=f"plan:{plan_digest}:audio-level",
+                            timeout_seconds=self.action_timeout_seconds,
+                        ),
+                    )
+                )
+            if candidate.mute is not desired_muted:
+                if not candidate.mute_writable:
+                    raise AudioLevelUnavailable(
+                        "audio-level-mute-read-only",
+                        "The active endpoint mute differs from desired state but is read-only.",
+                        endpointId=logical_id,
+                        requested=desired_muted,
+                        observed=candidate.mute,
+                    )
+                actions.append(
+                    PhasedDriverAction(
+                        ReconciliationPhase.CONFIGURE,
+                        build_endpoint_mute_action(
+                            logical_endpoint_id=logical_id,
+                            candidate=candidate,
+                            mute=desired_muted,
+                            intent_scope=f"plan:{plan_digest}:audio-level",
+                            timeout_seconds=self.action_timeout_seconds,
+                        ),
+                    )
+                )
+        return tuple(actions)
+
     @staticmethod
     def _runtime_edge_node(
         node,
@@ -1154,7 +1309,27 @@ class LiveGraphReconciler:
         selections,
         *,
         edge_role: str,
+        registry=None,
     ) -> tuple[int, str]:
+        managed_source_id = (
+            managed_source_endpoint_for_node(node, registry) if registry is not None else None
+        )
+        if managed_source_id is not None:
+            candidate = candidates.get(bindings.get(managed_source_id))
+            if candidate is None:
+                raise UnsupportedLiveGraph(
+                    f"Managed source node {node.get('id')!r} no longer has a runtime match."
+                )
+            if (
+                edge_role != "source"
+                or port_name != "audio"
+                or candidate.direction.value != "input"
+            ):
+                raise UnsupportedLiveGraph(
+                    f"Managed source node {node.get('id')!r} cannot translate port "
+                    f"{port_name!r} as an {edge_role} endpoint."
+                )
+            return candidate.runtime.node_id, candidate.runtime_key
         if node.get("type") == "core.endpoint-reference":
             endpoint_id = node.get("configuration", {}).get("logicalEndpointId")
             candidate = candidates.get(bindings.get(endpoint_id))
@@ -1247,6 +1422,11 @@ class LiveGraphReconciler:
         return tuple(sorted(actions, key=lambda item: item.action.identity.resource_id))
 
     def _observe(self, action) -> Mapping[str, object]:
+        if action.command.operation in {"set-endpoint-volume", "set-endpoint-mute"}:
+            return self.adapter.observe_endpoint_controls(
+                action.identity.resource_id,
+                str(action.command.arguments["runtimeKey"]),
+            )
         return observe_managed_link(self.adapter, action.identity.resource_id)
 
     def _verify_topology_fresh(

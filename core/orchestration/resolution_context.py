@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Callable
+from dataclasses import replace
 
 from django.conf import settings
 from django.utils import timezone
@@ -10,7 +13,10 @@ from api.models import (
     GraphRevisionState,
     LogicalEndpoint,
     ManualOverride,
+    PluginInstance,
 )
+
+from .endpoint_inventory import EndpointInventorySnapshot
 
 from .resolver_inputs import (
     ResolverActivationInput,
@@ -54,6 +60,69 @@ def deployed_processor_resource_policy() -> ResolverResourcePolicyInput:
     )
 
 
+def _managed_source_activity(endpoints, inventory, instances):
+    """Overlay authenticated provider activity onto its exactly correlated stream."""
+
+    by_identity = {
+        (item.plugin_id, item.capability_id, item.instance_id): item for item in instances
+    }
+    overrides: dict[str, bool] = {}
+    semantic_state: list[dict[str, object]] = []
+    for endpoint in endpoints:
+        metadata = endpoint.policy_metadata
+        identity = (
+            metadata.get("pluginId"),
+            metadata.get("capabilityId"),
+            metadata.get("instanceId"),
+        )
+        if metadata.get("managedSource") is not True or not all(
+            isinstance(value, str) for value in identity
+        ):
+            continue
+        instance = by_identity.get(identity)
+        if instance is None:
+            continue
+        facts = instance.runtime_facts
+        active = bool(
+            facts.get("routeAvailable") is True
+            and facts.get("pipewireCorrelation") == "ready"
+            and facts.get("activeSignal") is True
+        )
+        runtime_key = facts.get("correlatedRuntimeKey")
+        if isinstance(runtime_key, str):
+            overrides[runtime_key] = active
+        events = facts.get("events")
+        semantic_state.append(
+            {
+                "endpointId": endpoint.endpoint_id,
+                "instanceVersion": instance.update_version,
+                "generation": facts.get("generation"),
+                "correlation": facts.get("pipewireCorrelation"),
+                "routeAvailable": facts.get("routeAvailable"),
+                "activeSignal": active,
+                "playbackState": facts.get("playbackState"),
+                "eventSequence": events.get("lastSequence") if isinstance(events, dict) else None,
+            }
+        )
+    if not semantic_state:
+        return inventory, 0
+    encoded = json.dumps(
+        sorted(semantic_state, key=lambda item: str(item["endpointId"])),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    version = int.from_bytes(hashlib.sha256(encoded).digest()[:8], "big")
+    candidates = tuple(
+        (
+            replace(candidate, has_active_signal=overrides[candidate.runtime_key])
+            if candidate.runtime_key in overrides
+            else candidate
+        )
+        for candidate in inventory.candidates
+    )
+    return replace(inventory, candidates=candidates), version
+
+
 def build_resolver_inputs(
     activation,
     world: OrchestratorWorldSnapshot,
@@ -71,6 +140,11 @@ def build_resolver_inputs(
     endpoints = tuple(
         ResolverLogicalEndpointInput.from_model(endpoint)
         for endpoint in LogicalEndpoint.objects.filter(owner=activation.definition.owner)
+    )
+    runtime_inventory, managed_source_version = _managed_source_activity(
+        endpoints,
+        world.endpoints,
+        PluginInstance.objects.filter(owner=activation.definition.owner),
     )
     overrides = tuple(
         ResolverOverrideInput.from_model(override, at=evaluated_at)
@@ -93,7 +167,7 @@ def build_resolver_inputs(
         runtime_sequence=world.runtime.sequence,
         endpoint_version=sum(endpoint.update_version for endpoint in endpoints),
         signal_version=signal_facts.version,
-        processor_version=0,
+        processor_version=managed_source_version,
         override_version=len(overrides),
         resource_policy_version=resource_policy.version,
     )
@@ -102,7 +176,7 @@ def build_resolver_inputs(
         subgraph_revisions=subgraphs,
         activation=ResolverActivationInput.from_model(activation),
         logical_endpoints=endpoints,
-        runtime_inventory=world.endpoints,
+        runtime_inventory=runtime_inventory,
         signal_facts=signal_facts,
         processors=(),
         overrides=overrides,

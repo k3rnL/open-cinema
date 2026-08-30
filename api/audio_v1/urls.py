@@ -30,6 +30,7 @@ from .inventory_views import (
     EndpointListView,
     SelectorPreviewView,
 )
+from .level_views import EndpointAudioLevelView, MasterAudioLevelView
 from .override_views import OverrideCancelView, OverrideListView
 from .plan_views import CurrentPlanView, PlanDetailView, PlanDryRunView, PlanHistoryView
 from .profile_views import CamillaDSPProfileDetailView, CamillaDSPProfileListView
@@ -126,6 +127,7 @@ urlpatterns = [
         name="camilladsp-profile-detail",
     ),
     path("endpoints", EndpointListView.as_view(), name="endpoints"),
+    path("levels/master", MasterAudioLevelView.as_view(), name="master-audio-level"),
     path(
         "endpoints/selector-preview",
         SelectorPreviewView.as_view(),
@@ -150,6 +152,11 @@ urlpatterns = [
         "endpoints/<uuid:endpoint_id>/binding",
         EndpointBindingView.as_view(),
         name="endpoint-binding",
+    ),
+    path(
+        "endpoints/<uuid:endpoint_id>/level",
+        EndpointAudioLevelView.as_view(),
+        name="endpoint-audio-level",
     ),
     path("plans/current", CurrentPlanView.as_view(), name="plans-current"),
     path("plans/history", PlanHistoryView.as_view(), name="plans-history"),

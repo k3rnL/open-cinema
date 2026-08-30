@@ -71,6 +71,12 @@ def _format(value: object) -> EndpointFormatSummary:
     )
 
 
+def _control_capability(value: object) -> tuple[object, bool]:
+    if isinstance(value, Mapping):
+        return value.get("value"), bool(value.get("writable", False))
+    return value, False
+
+
 def runtime_candidate_from_projection(projection: RuntimeProjection) -> RuntimeEndpointCandidate:
     payload = projection.payload
     runtime_key = payload.get("runtimeKey", projection.subject_key)
@@ -123,6 +129,8 @@ def runtime_candidate_from_projection(projection: RuntimeProjection) -> RuntimeE
     latency = capabilities.get("latency", {})
     if not isinstance(latency, Mapping):
         latency = {}
+    volume, volume_writable = _control_capability(capabilities.get("volume", payload.get("volume")))
+    mute, mute_writable = _control_capability(capabilities.get("mute", payload.get("mute")))
     return RuntimeEndpointCandidate(
         runtime=RuntimeEndpointReference(generation, node_id, None),
         direction=EndpointDirection(payload["direction"]),
@@ -149,8 +157,8 @@ def runtime_candidate_from_projection(projection: RuntimeProjection) -> RuntimeE
         profiles=tuple(profiles),
         routes=tuple(routes),
         formats=tuple(_format(item) for item in capabilities.get("formats", ())),
-        volume=capabilities.get("volume", payload.get("volume")),
-        mute=capabilities.get("mute", payload.get("mute")),
+        volume=volume,
+        mute=mute,
         latency=EndpointLatencySummary(
             milliseconds=latency.get("milliseconds"),
             raw=latency.get("raw"),
@@ -159,6 +167,8 @@ def runtime_candidate_from_projection(projection: RuntimeProjection) -> RuntimeE
         is_default=bool(payload.get("default", False)),
         is_linked=bool(payload.get("linked", False)),
         has_active_signal=bool(payload.get("activeSignal", False)),
+        volume_writable=volume_writable,
+        mute_writable=mute_writable,
     )
 
 

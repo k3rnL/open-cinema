@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "plugins": [
+    {
+      "id": "open-cinema.librespot",
+      "displayName": "Spotify Connect (librespot)",
+      "summary": "Turns Open Cinema into a configurable Spotify Connect audio source resolved through the normal PipeWire graph.",
+      "publisher": "Open Cinema",
+      "verifiedPublisher": true,
+      "repository": "https://github.com/k3rnL/open-cinema-librespot.git",
+      "documentationUrl": "https://github.com/k3rnL/open-cinema-librespot#readme",
+      "icon": "spotify",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "revision": "v0.1.0",
+          "resolvedCommit": null,
+          "artifactDigest": null,
+          "mutable": false,
+          "published": false,
+          "pluginContract": {"minimum": 2, "maximum": 2},
+          "openCinema": ">=0.3.2,<0.4",
+          "capabilities": ["api", "managed-resource", "managed-audio-source", "admin-ui"]
+        }
+      ]
+    }
+  ]
+}

@@ -424,6 +424,34 @@
           - "{{ pcm_auto_decoder.runtime_dir | regex_replace('^/', '') }}"
       changed_when: true
 
+    - name: Capture immutable plugin pointer and generation metadata
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - >-
+            import json, pathlib, sys;
+            root = pathlib.Path(sys.argv[1]);
+            load = lambda path: json.loads(path.read_text()) if path.is_file() else None;
+            pointers = {name: load(root / 'pointers' / (name + '.json')) for name in ('current', 'last-known-good')};
+            identities = [value.get('generationId') for value in pointers.values() if isinstance(value, dict)];
+            manifests = {identity: load(root / 'generations' / identity / 'generation.json') for identity in identities};
+            print(json.dumps({'schemaVersion': 1, 'root': str(root), 'pointers': pointers,
+            'generationManifests': manifests}, sort_keys=True))
+          - "{{ open_cinema.plugins.root }}"
+      register: open_cinema_transition_plugin_state
+      changed_when: false
+
+    - name: Retain plugin overlay rollback metadata
+      ansible.builtin.copy:
+        content: >-
+          {{ open_cinema_transition_plugin_state.stdout_lines | last |
+             from_json | to_nice_json }}
+        dest: "{{ open_cinema_transition_bundle_path }}/plugin-state.json"
+        owner: "{{ open_cinema.user }}"
+        group: "{{ open_cinema.group }}"
+        mode: "0600"
+
     - name: Inspect every coordinated backup artifact
       ansible.builtin.stat:
         path: "{{ open_cinema_transition_bundle_path }}/{{ item }}"
@@ -435,7 +463,7 @@
            if open_cinema_transition_wyreplumber_source_available else []) +
           ['web.tar.gz', 'managed-static.tar.gz',
            'processor-binaries.tar.gz', 'processor-runtime.tar.gz',
-           'release-manifest.yml', 'dynamic-state.json']
+           'release-manifest.yml', 'dynamic-state.json', 'plugin-state.json']
         }}
       register: open_cinema_transition_artifact_stats
 

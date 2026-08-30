@@ -34,7 +34,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths={{ open_cinema.app_path }} /var/log/open-cinema
+ReadWritePaths={{ open_cinema.app_path }} {{ open_cinema.plugins.root }} {{ open_cinema.plugins.secret_dir }} /var/log/open-cinema /var/lib/open-cinema
 
 [Install]
 WantedBy=multi-user.target

@@ -36,6 +36,10 @@ DURABLE_ENDPOINT_PROPERTY_KEYS = frozenset(
         "open-cinema.adapter.id",
         "open-cinema.adapter.kind",
         "open-cinema.adapter.direction",
+        "open-cinema.provider",
+        "open-cinema.plugin.id",
+        "open-cinema.instance.id",
+        "open-cinema.generation",
     }
 )
 
@@ -47,7 +51,9 @@ PROCESSOR_KIND_PROPERTY_KEYS = (
 
 def _durable_properties(properties: FrozenDict) -> dict[str, object]:
     return {
-        key: value for key, value in properties.items() if key in DURABLE_ENDPOINT_PROPERTY_KEYS
+        key: value
+        for key, value in properties.items()
+        if key in DURABLE_ENDPOINT_PROPERTY_KEYS
     }
 
 
@@ -194,6 +200,8 @@ class RuntimeEndpointCandidate:
     is_default: bool
     is_linked: bool
     has_active_signal: bool
+    volume_writable: bool = False
+    mute_writable: bool = False
 
     @property
     def runtime_key(self) -> str:
@@ -237,7 +245,9 @@ class RuntimeEndpointCandidate:
         return {
             "runtimeKey": self.runtime_key,
             **self.selector_facts(),
-            "origin": "managed-adapter" if managed_adapter is not None else "runtime-device",
+            "origin": "managed-adapter"
+            if managed_adapter is not None
+            else "runtime-device",
             "managed": managed_adapter is not None,
             "owner": "open-cinema" if managed_adapter is not None else None,
             "managedAdapter": managed_adapter,
@@ -284,8 +294,18 @@ class RuntimeEndpointCandidate:
             ],
             "audioCapabilities": {
                 "formats": [item.to_document() for item in self.formats],
-                "volume": self.volume,
-                "mute": self.mute,
+                "volume": {
+                    "value": self.volume,
+                    "known": self.volume is not None,
+                    "readable": self.volume is not None,
+                    "writable": self.volume_writable,
+                },
+                "mute": {
+                    "value": self.mute,
+                    "known": self.mute is not None,
+                    "readable": self.mute is not None,
+                    "writable": self.mute_writable,
+                },
                 "latency": self.latency.to_document(),
             },
         }
@@ -325,7 +345,9 @@ def _is_processor_resource(properties: FrozenDict) -> bool:
 
 
 def _profile_summaries(snapshot, device_id):
-    profiles = [profile for profile in snapshot.profiles if profile.device_id == device_id]
+    profiles = [
+        profile for profile in snapshot.profiles if profile.device_id == device_id
+    ]
     return tuple(
         EndpointProfileSummary(
             runtime=RuntimeProfileReference(
@@ -346,7 +368,9 @@ def _profile_summaries(snapshot, device_id):
 
 
 def _route_summaries(snapshot, device_id, profiles):
-    profile_names = {profile.runtime.profile_index: profile.name for profile in profiles}
+    profile_names = {
+        profile.runtime.profile_index: profile.name for profile in profiles
+    }
     routes = [route for route in snapshot.routes if route.device_id == device_id]
     return tuple(
         EndpointRouteSummary(
@@ -363,7 +387,9 @@ def _route_summaries(snapshot, device_id, profiles):
             active=route.active,
             profile_names=tuple(
                 sorted(
-                    profile_names[index] for index in route.profile_ids if index in profile_names
+                    profile_names[index]
+                    for index in route.profile_ids
+                    if index in profile_names
                 )
             ),
             volume=route.volume,
@@ -381,7 +407,8 @@ def _spa_value(value, *, known_names=None):
     if isinstance(value, SpaChoiceValue):
         default = _spa_value(value.default, known_names=known_names)
         choices = tuple(
-            _spa_value(item, known_names=known_names).value for item in value.alternatives
+            _spa_value(item, known_names=known_names).value
+            for item in value.alternatives
         )
         return ObservedAudioValue(default.value, default.known, choices)
     if isinstance(value, SpaIdValue):
@@ -409,7 +436,8 @@ def _format_summary(value: AudioFormatValue):
     channels = _spa_value(value.channels)
     positions = ObservedAudioValue(
         tuple(
-            position.name or f"{position.namespace}:{position.id}" for position in value.positions
+            position.name or f"{position.namespace}:{position.id}"
+            for position in value.positions
         ),
         all(position.name is not None for position in value.positions),
     )
@@ -430,24 +458,64 @@ def _format_summary(value: AudioFormatValue):
 
 
 def _audio_capabilities(snapshot, node_id, device_id, routes):
-    parameters = [
+    node_parameters = [
         parameter
         for parameter in snapshot.parameters
-        if (parameter.owner_type.lower() == "node" and parameter.owner_id == node_id)
-        or (
-            device_id is not None
-            and parameter.owner_type.lower() == "device"
-            and parameter.owner_id == device_id
-        )
+        if parameter.owner_type.lower() == "node" and parameter.owner_id == node_id
+    ]
+    device_parameters = [
+        parameter
+        for parameter in snapshot.parameters
+        if device_id is not None
+        and parameter.owner_type.lower() == "device"
+        and parameter.owner_id == device_id
     ]
     formats = []
-    audio_properties = None
-    for parameter in parameters:
+    node_audio_properties = None
+    device_audio_properties = None
+
+    def prefer_controls(
+        current: AudioPropertiesValue | None,
+        candidate: AudioPropertiesValue,
+    ) -> AudioPropertiesValue:
+        if current is None:
+            return candidate
+        current_score = sum(
+            (
+                current.volume is not None,
+                current.mute is not None,
+                bool(current.channel_volumes),
+                bool(current.channel_positions),
+            )
+        )
+        candidate_score = sum(
+            (
+                candidate.volume is not None,
+                candidate.mute is not None,
+                bool(candidate.channel_volumes),
+                bool(candidate.channel_positions),
+            )
+        )
+        return candidate if candidate_score > current_score else current
+
+    for parameter in (*node_parameters, *device_parameters):
         for value in parameter.values:
             if isinstance(value, AudioFormatValue):
                 formats.append(_format_summary(value))
             elif isinstance(value, AudioPropertiesValue):
-                audio_properties = value
+                if parameter.owner_type.lower() == "node":
+                    node_audio_properties = prefer_controls(
+                        node_audio_properties, value
+                    )
+                else:
+                    device_audio_properties = prefer_controls(
+                        device_audio_properties, value
+                    )
+    # Node Props are the software controls mutated by the orchestrator. Device
+    # Props often follow them (sometimes as another value of the same node
+    # parameter) and describe the hardware object without volume fields; they
+    # must not erase readable node controls.
+    audio_properties = node_audio_properties or device_audio_properties
     active_route = next((route for route in routes if route.active), None)
     volume = (
         audio_properties.volume
@@ -459,7 +527,16 @@ def _audio_capabilities(snapshot, node_id, device_id, routes):
         if audio_properties is not None and audio_properties.mute is not None
         else (active_route.mute if active_route is not None else None)
     )
-    return tuple(sorted(formats, key=lambda item: repr(item.to_document()))), volume, mute
+    node_properties = snapshot.parameters_by_key.get(("node", node_id, "Props"))
+    writable = bool(
+        node_properties is not None and "w" in node_properties.permissions.lower()
+    )
+    return (
+        tuple(sorted(formats, key=lambda item: repr(item.to_document()))),
+        volume,
+        mute,
+        writable,
+    )
 
 
 def _latency(properties):
@@ -481,20 +558,37 @@ def map_runtime_endpoints(snapshot: RuntimeSnapshot) -> EndpointInventorySnapsho
         raise TypeError("snapshot must be a detached WyrePlumber RuntimeSnapshot")
     candidates = []
     linked_node_ids = {
-        node_id for link in snapshot.links for node_id in (link.output_node_id, link.input_node_id)
+        node_id
+        for link in snapshot.links
+        for node_id in (link.output_node_id, link.input_node_id)
     }
     for node in snapshot.nodes:
         if _is_processor_resource(node.properties):
             continue
         media_class = node.media_class or node.properties.get("media.class")
         direction = _direction(media_class)
+        if (
+            direction is None
+            and str(media_class).lower().startswith("stream/output/audio")
+            and isinstance(node.properties.get("open-cinema.plugin.id"), str)
+            and isinstance(node.properties.get("open-cinema.instance.id"), str)
+        ):
+            # A managed playback stream outputs audio into the Open Cinema graph,
+            # so it is presented as an input endpoint rather than a physical sink.
+            direction = EndpointDirection.INPUT
         if direction is None:
             continue
         device = snapshot.devices_by_id.get(node.device_id)
         device_id = device.id if device is not None else None
-        profiles = _profile_summaries(snapshot, device_id) if device_id is not None else ()
-        routes = _route_summaries(snapshot, device_id, profiles) if device_id is not None else ()
-        formats, volume, mute = _audio_capabilities(
+        profiles = (
+            _profile_summaries(snapshot, device_id) if device_id is not None else ()
+        )
+        routes = (
+            _route_summaries(snapshot, device_id, profiles)
+            if device_id is not None
+            else ()
+        )
+        formats, volume, mute, controls_writable = _audio_capabilities(
             snapshot,
             node.id,
             device_id,
@@ -538,7 +632,9 @@ def map_runtime_endpoints(snapshot: RuntimeSnapshot) -> EndpointInventorySnapsho
                 device_name=device.name if device is not None else None,
                 device_description=device.description if device is not None else None,
                 device_media_class=device.media_class if device is not None else None,
-                device_properties=(device.properties if device is not None else FrozenDict()),
+                device_properties=(
+                    device.properties if device is not None else FrozenDict()
+                ),
                 ports=ports,
                 profiles=profiles,
                 routes=routes,
@@ -549,6 +645,8 @@ def map_runtime_endpoints(snapshot: RuntimeSnapshot) -> EndpointInventorySnapsho
                 is_default=(target is not None and target.resolved_node_id == node.id),
                 is_linked=node.id in linked_node_ids,
                 has_active_signal=node.state == NodeState.RUNNING,
+                volume_writable=controls_writable,
+                mute_writable=controls_writable,
             )
         )
     return EndpointInventorySnapshot(
