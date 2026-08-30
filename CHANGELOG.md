@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User authentication
 - Production deployment configuration
 
+## [0.3.10] - 2026-08-30
+
+### Fixed
+- Permit the orchestrator's managed Librespot child to enumerate multicast
+  interfaces through netlink while retaining the systemd address-family sandbox.
+- Finalize a stale reconnecting system-control operation before deciding whether
+  a new restart request is a duplicate.
+
 ## [0.3.9] - 2026-08-30
 
 ### Fixed

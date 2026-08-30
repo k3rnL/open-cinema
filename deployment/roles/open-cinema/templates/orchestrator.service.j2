@@ -46,7 +46,9 @@ ProtectKernelLogs=true
 ProtectControlGroups=true
 ProtectClock=true
 ProtectHostname=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# Librespot's libmdns backend uses netlink to enumerate multicast-capable
+# interfaces before opening its IPv4/IPv6 discovery sockets.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 RestrictNamespaces=true
 LockPersonality=true
 SystemCallArchitectures=native

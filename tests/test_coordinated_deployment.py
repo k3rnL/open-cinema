@@ -488,6 +488,7 @@ def test_orchestrator_has_explicit_audio_identity_ordering_and_shutdown() -> Non
     assert "TimeoutStopSec=20s" in unit
     assert "KillSignal=SIGTERM" in unit
     assert "KillMode=control-group" in unit
+    assert "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK" in unit
     assert "Verify application unit syntax and dependency graph before restart" in tasks
     assert "systemd-analyze" in tasks
 

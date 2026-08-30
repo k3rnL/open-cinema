@@ -223,7 +223,9 @@ def request_action(*, action: str, action_token: object, user) -> SystemControlO
             .first()
         )
         if existing is not None:
-            return existing
+            existing = refresh_operation(existing)
+            if existing.status in _IN_PROGRESS:
+                return existing
         operation = SystemControlOperation(
             action=action,
             target_id=definition.target_id,

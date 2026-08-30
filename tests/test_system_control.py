@@ -181,6 +181,42 @@ def test_duplicate_action_reuses_in_progress_operation(staff_client, monkeypatch
     assert SystemControlOperation.objects.count() == 1
 
 
+def test_new_action_supersedes_an_unpolled_operation_completed_by_restart(
+    staff_client,
+    monkeypatch,
+) -> None:
+    user = get_user_model().objects.create_user(username="stale-restart-staff")
+    previous = SystemControlOperation.objects.create(
+        action=SystemControlAction.RESTART_OPEN_CINEMA,
+        target_id="open-cinema",
+        status=SystemControlStatus.RECONNECTING,
+        requested_by=user,
+        initial_boot_id="boot-a",
+        initial_service_instance="service-before-restart",
+    )
+    component = staff_client.get("/api/system/v1/components").json()["items"][0]
+    token = component["actions"][0]["actionToken"]
+    calls = []
+    monkeypatch.setattr(
+        control.subprocess,
+        "run",
+        lambda command, **kwargs: calls.append(command) or _accepted(command, **kwargs),
+    )
+    response = staff_client.post(
+        "/api/system/v1/components/open-cinema/actions/restart",
+        {"actionToken": token},
+        format="json",
+    )
+
+    previous.refresh_from_db()
+    assert previous.status == SystemControlStatus.SUCCEEDED
+    assert response.status_code == 202
+    assert response.json()["id"] != str(previous.pk)
+    assert response.json()["status"] == "reconnecting"
+    assert len(calls) == 1
+    assert SystemControlOperation.objects.count() == 2
+
+
 def test_helper_failure_and_confirmation_timeout_are_reported(staff_client, monkeypatch) -> None:
     monkeypatch.setattr(
         control.subprocess,

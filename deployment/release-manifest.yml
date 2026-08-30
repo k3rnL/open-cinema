@@ -1,17 +1,17 @@
 ---
 schema_version: 1
-release_id: open-cinema-0.3.9-candidate
+release_id: open-cinema-0.3.10-candidate
 input_mode: appliance
 status: experimental
 promotable: false
 
 # This checked-in document is the tag-build template. It deliberately cannot be
-# deployed until the v0.3.9 workflow replaces the Open Cinema placeholder,
+# deployed until the v0.3.10 workflow replaces the Open Cinema placeholder,
 # mirrors the independently verified UI/decoder/CamillaDSP bytes, and publishes
 # open-cinema-coordinated-manifest.yml with status=supported/promotable=true.
 candidate_notice: >-
   This tag-build template is not deployable; use the finalized manifest
-  published by v0.3.9.
+  published by v0.3.10.
 platform:
   compatibility_matrix: open-cinema-raspberry-audio-v1
   distribution_family: Debian
@@ -40,7 +40,7 @@ runtime_profile: full
 
 components:
   open_cinema:
-    version: 0.3.9
+    version: 0.3.10
     repository: k3rnL/open-cinema
     source_mode: tag-build-finalization-placeholder
     immutable: false
