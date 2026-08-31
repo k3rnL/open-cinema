@@ -22,7 +22,7 @@ ROOT = Path(__file__).parents[1]
 def test_checked_in_release_template_is_exact_and_not_directly_promotable() -> None:
     document = yaml.safe_load((ROOT / "deployment" / "release-manifest.yml").read_text())
 
-    assert document["release_id"] == "open-cinema-0.3.12-candidate"
+    assert document["release_id"] == "open-cinema-0.3.13-candidate"
     assert document["input_mode"] == "appliance"
     assert document["status"] == "experimental"
     assert document["promotable"] is False
@@ -31,7 +31,7 @@ def test_checked_in_release_template_is_exact_and_not_directly_promotable() -> N
 
     components = document["components"]
     assert components["open_cinema"] == {
-        "version": "0.3.12",
+        "version": "0.3.13",
         "repository": "k3rnL/open-cinema",
         "source_mode": "tag-build-finalization-placeholder",
         "immutable": False,

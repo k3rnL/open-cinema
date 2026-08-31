@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User authentication
 - Production deployment configuration
 
+## [0.3.13] - 2026-08-31
+
+### Fixed
+- Select the librespot plugin release that keeps activity-based audio routes
+  active while the next Spotify track is preloading.
+
 ## [0.3.12] - 2026-08-30
 
 ### Fixed

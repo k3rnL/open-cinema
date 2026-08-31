@@ -37,7 +37,7 @@ def _manifest_toml(
     *,
     plugin_id: str = "open-cinema.librespot",
     distribution: str = "open-cinema-librespot",
-    version: str = "0.1.10",
+    version: str = "0.1.11",
 ) -> str:
     return f"""
 schema-version = 2
@@ -94,12 +94,12 @@ def test_first_party_catalogue_publishes_verified_librespot_release() -> None:
         (
             "linux",
             "aarch64",
-            "sha256:a3cb64aad42380a0640aad420f768d3074db9779c575c6d12bfbd82605745e7d",
+            "sha256:d6612e256bb9e954bc0f5727bcce9cf81d27250f3f93cfdfb5f9b466cafe6455",
         ),
         (
             "linux",
             "x86_64",
-            "sha256:3b4afc0dc717a39e7f5e0d8cb30521239945d437da6e4005aa46805de83ad3c3",
+            "sha256:76d14aa7ebb0c2dc04f8fafa444ef1243d82d5f1f4ab151ac6acfcd32ac2c906",
         ),
     }
 
@@ -133,7 +133,7 @@ def test_catalogue_and_installed_inventory_apis_are_staff_only(client) -> None:
     PluginInstallationRepository.save_snapshot(
         plugin_id="open-cinema.librespot",
         distribution_id="open-cinema-librespot",
-        installed_version="0.1.10",
+        installed_version="0.1.11",
         manifest={"id": "open-cinema.librespot"},
         provenance={"sourceType": "git", "resolvedRevision": "a" * 40},
         lifecycle_impact={"enable": "hot"},
@@ -199,7 +199,7 @@ def test_git_candidate_records_resolved_provenance_and_cleans_staging(tmp_path) 
         catalogue,
         versions=(replace(catalogue.latest(), resolved_commit=candidate.resolved_commit),),
     )
-    verify_catalogue_candidate(candidate, catalogue, expected_version="0.1.10")
+    verify_catalogue_candidate(candidate, catalogue, expected_version="0.1.11")
 
     assert candidate.mutable_revision
     assert candidate.resolved_commit == "a" * 40
@@ -237,7 +237,7 @@ def test_catalogue_version_mismatch_is_rejected(tmp_path) -> None:
     candidate.manifest = replace(candidate.manifest, version="0.2.0")
     try:
         with pytest.raises(PluginAcquisitionError, match="version"):
-            verify_catalogue_candidate(candidate, catalogue, expected_version="0.1.10")
+            verify_catalogue_candidate(candidate, catalogue, expected_version="0.1.11")
     finally:
         candidate.cleanup()
 
@@ -302,12 +302,12 @@ def test_git_acquisition_requires_trust_and_honours_cancellation(tmp_path) -> No
 def test_built_wheel_manifest_and_digest_are_inspected_before_activation(
     tmp_path,
 ) -> None:
-    wheel = tmp_path / "open_cinema_librespot-0.1.10-py3-none-any.whl"
+    wheel = tmp_path / "open_cinema_librespot-0.1.11-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr("open_cinema_librespot/open-cinema-plugin.toml", _manifest_toml())
         archive.writestr(
-            "open_cinema_librespot-0.1.10.dist-info/METADATA",
-            "Metadata-Version: 2.3\nName: open-cinema-librespot\nVersion: 0.1.10\n",
+            "open_cinema_librespot-0.1.11.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: open-cinema-librespot\nVersion: 0.1.11\n",
         )
 
     inspected = inspect_plugin_wheel(wheel)
@@ -327,7 +327,7 @@ def test_built_wheel_manifest_and_digest_are_inspected_before_activation(
         versions=(replace(catalogue.latest(), artifacts=(artifact,)),),
     )
 
-    verify_catalogue_wheel(inspected, catalogue, expected_version="0.1.10")
+    verify_catalogue_wheel(inspected, catalogue, expected_version="0.1.11")
 
 
 def test_catalogue_wheel_download_is_bounded_verified_and_cleaned(tmp_path) -> None:
@@ -335,8 +335,8 @@ def test_catalogue_wheel_download_is_bounded_verified_and_cleaned(tmp_path) -> N
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr("open_cinema_librespot/open-cinema-plugin.toml", _manifest_toml())
         archive.writestr(
-            "open_cinema_librespot-0.1.10.dist-info/METADATA",
-            "Metadata-Version: 2.3\nName: open-cinema-librespot\nVersion: 0.1.10\n",
+            "open_cinema_librespot-0.1.11.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: open-cinema-librespot\nVersion: 0.1.11\n",
         )
     wheel_bytes = wheel.read_bytes()
     digest = "sha256:" + hashlib.sha256(wheel_bytes).hexdigest()
@@ -389,12 +389,12 @@ def test_catalogue_wheel_rejects_bad_digest_without_retaining_bytes(tmp_path) ->
 
 
 def test_catalogue_install_uses_published_wheel_without_source_build(tmp_path, monkeypatch) -> None:
-    wheel = tmp_path / "open_cinema_librespot-0.1.10-py3-none-any.whl"
+    wheel = tmp_path / "open_cinema_librespot-0.1.11-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr("open_cinema_librespot/open-cinema-plugin.toml", _manifest_toml())
         archive.writestr(
-            "open_cinema_librespot-0.1.10.dist-info/METADATA",
-            "Metadata-Version: 2.3\nName: open-cinema-librespot\nVersion: 0.1.10\n",
+            "open_cinema_librespot-0.1.11.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: open-cinema-librespot\nVersion: 0.1.11\n",
         )
     wheel_bytes = wheel.read_bytes()
     operating_system, architecture = current_platform()
@@ -453,7 +453,7 @@ def test_catalogue_install_uses_published_wheel_without_source_build(tmp_path, m
             username="published-wheel-admin",
             is_staff=True,
         ),
-        stage_data={"sourceType": "catalogue", "version": "0.1.10"},
+        stage_data={"sourceType": "catalogue", "version": "0.1.11"},
     )
 
     _install_catalogue_wheel(operation)
