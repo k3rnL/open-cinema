@@ -184,13 +184,15 @@ as an execution precondition. The adapter resolves that detached key against a
 fresh coherent snapshot immediately before calling WyrePlumber, so PipeWire
 numeric node IDs never enter desired state or survive a runtime generation.
 
-Only nodes exposing writable `Props` can be controlled. Unsupported or
-read-only controls fail permanently for the current resolved plan without
-changing the immutable desired action. A missing node or changed runtime
-generation is stale instead, causing the orchestrator to resolve a replacement
-candidate. Successful calls are accepted only after WyrePlumber reports a
-confirmed observed value; action verification then checks the same value in a
-fresh orchestration observation.
+Only nodes resolved by WirePlumber's mixer API can be controlled. The effective
+mixer value takes precedence over raw node `Props`, because hardware endpoints
+can expose writable-looking Props while their actual level lives on a device
+route. Unsupported controls fail permanently for the current resolved plan
+without changing the immutable desired action. A missing node or changed
+runtime generation is stale instead, causing the orchestrator to resolve a
+replacement candidate. Successful calls are accepted only after WyrePlumber
+reports a confirmed effective mixer value; action verification then checks the
+same value in a fresh orchestration observation.
 
 The desired factors live outside graph revisions and temporary overrides. The
 master record defaults to `1.0` and unmuted; each logical endpoint independently

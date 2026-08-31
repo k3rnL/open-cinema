@@ -239,7 +239,7 @@ class WirePlumberDriverAdapter:
             raise ValueError("logical_endpoint_id must be a non-empty string")
         snapshot = self.observe_runtime()
         candidate = _endpoint_candidate(snapshot, runtime_key)
-        writable = _node_props_writable(snapshot, candidate.runtime.node_id)
+        writable = _node_mixer_writable(snapshot, candidate.runtime.node_id)
         prefix = f"endpoint.{logical_endpoint_id}"
         return {
             f"{prefix}.runtimeKey": candidate.runtime_key,
@@ -345,8 +345,8 @@ def _endpoint_candidate(
     return candidate
 
 
-def _node_props_writable(snapshot: RuntimeSnapshot, node_id: int) -> bool:
-    parameter = snapshot.parameters_by_key.get(("node", node_id, "Props"))
+def _node_mixer_writable(snapshot: RuntimeSnapshot, node_id: int) -> bool:
+    parameter = snapshot.parameters_by_key.get(("node", node_id, "Mixer"))
     return bool(parameter is not None and "w" in parameter.permissions.lower())
 
 
@@ -487,13 +487,13 @@ def _endpoint_control_handler(control: Callable, field: str) -> WirePlumberContr
                     },
                 ),
             ) from error
-        if not _node_props_writable(snapshot, candidate.runtime.node_id):
+        if not _node_mixer_writable(snapshot, candidate.runtime.node_id):
             raise DriverActionError(
                 action,
                 ActionFailure(
                     ActionFailureClassification.PERMANENT,
                     "wireplumber:endpoint-control-read-only",
-                    f"The current node does not expose writable Props for {field}.",
+                    f"The current node does not expose a WirePlumber mixer for {field}.",
                     {
                         "logicalEndpointId": action.identity.resource_id,
                         "runtimeKey": candidate.runtime_key,

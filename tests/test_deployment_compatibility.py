@@ -82,7 +82,7 @@ def test_production_matrix_selects_one_wireplumber_api_family() -> None:
 def test_selected_processors_are_native_pipewire_contracts() -> None:
     matrix = load_matrix()
 
-    assert matrix["components"]["wyreplumber"]["minimum"] == "0.2.0"
+    assert matrix["components"]["wyreplumber"]["minimum"] == "0.2.1"
     assert matrix["components"]["camilladsp"]["backend"] == "pipewire"
     assert matrix["components"]["pcm_auto_decoder"]["backend"] == "pipewire"
     assert matrix["components"]["pcm_auto_decoder"]["minimum"] == "0.2.2"

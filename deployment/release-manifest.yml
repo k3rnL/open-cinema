@@ -1,17 +1,17 @@
 ---
 schema_version: 1
-release_id: open-cinema-0.3.13-candidate
+release_id: open-cinema-0.3.14-candidate
 input_mode: appliance
 status: experimental
 promotable: false
 
 # This checked-in document is the tag-build template. It deliberately cannot be
-# deployed until the v0.3.13 workflow replaces the Open Cinema placeholder,
+# deployed until the v0.3.14 workflow replaces the Open Cinema placeholder,
 # mirrors the independently verified UI/decoder/CamillaDSP bytes, and publishes
 # open-cinema-coordinated-manifest.yml with status=supported/promotable=true.
 candidate_notice: >-
   This tag-build template is not deployable; use the finalized manifest
-  published by v0.3.13.
+  published by v0.3.14.
 platform:
   compatibility_matrix: open-cinema-raspberry-audio-v1
   distribution_family: Debian
@@ -40,24 +40,24 @@ runtime_profile: full
 
 components:
   open_cinema:
-    version: 0.3.13
+    version: 0.3.14
     repository: k3rnL/open-cinema
     source_mode: tag-build-finalization-placeholder
     immutable: false
 
   wyreplumber:
-    version: 0.2.0
+    version: 0.2.1
     repository: k3rnL/wyreplumber
     source_mode: github-immutable-release-assets
-    tag: v0.2.0
-    commit: 9d55ab1200ee7c484743fe57339a1f56d2c9fcd1
+    tag: v0.2.1
+    commit: 36f5c2312d14314ad8f89be80a6f9b0de1f204e3
     immutable: true
     artifacts:
-      - name: wyreplumber-0.2.0-cp313-cp313-linux_aarch64.whl
+      - name: wyreplumber-0.2.1-cp313-cp313-linux_aarch64.whl
         kind: python-wheel
-        url: https://github.com/k3rnL/wyreplumber/releases/download/v0.2.0/wyreplumber-0.2.0-cp313-cp313-linux_aarch64.whl
-        sha256: cfb92cd7f407c87717f1f539ff3e04573d0cd2224ef744f8efb847a7938e05fd
-        size_bytes: 329211
+        url: https://github.com/k3rnL/wyreplumber/releases/download/v0.2.1/wyreplumber-0.2.1-cp313-cp313-linux_aarch64.whl
+        sha256: d667a581bc38051f2edb5f79df44fdf6efe6c8e5efc6a7c1d35f8281b9ef7b90
+        size_bytes: 342484
         platform:
           distribution_family: Debian
           distribution_major: 13
@@ -68,11 +68,11 @@ components:
         provenance_ref: components.wyreplumber.provenance
     provenance:
       repository: k3rnL/wyreplumber
-      commit: 9d55ab1200ee7c484743fe57339a1f56d2c9fcd1
-      tag: v0.2.0
-      workflow_run: https://github.com/k3rnL/wyreplumber/actions/runs/33015311435
-      url: https://github.com/k3rnL/wyreplumber/releases/download/v0.2.0/wyreplumber-0.2.0-cp313-cp313-linux_aarch64.whl.provenance.json
-      sha256: ade1107162e1624afa12e101dd4a542d402af372acffdb69999ad8d7a552e858
+      commit: 36f5c2312d14314ad8f89be80a6f9b0de1f204e3
+      tag: v0.2.1
+      workflow_run: https://github.com/k3rnL/wyreplumber/actions/runs/33387316585
+      url: https://github.com/k3rnL/wyreplumber/releases/download/v0.2.1/wyreplumber-0.2.1-cp313-cp313-linux_aarch64.whl.provenance.json
+      sha256: d7b4923acf04aa2327120dc81711c0531c6772b8ffe089a3d6b54a23c5be3c64
 
   management_ui:
     version: 2.1.3

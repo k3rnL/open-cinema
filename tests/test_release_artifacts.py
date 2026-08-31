@@ -22,7 +22,7 @@ ROOT = Path(__file__).parents[1]
 def test_checked_in_release_template_is_exact_and_not_directly_promotable() -> None:
     document = yaml.safe_load((ROOT / "deployment" / "release-manifest.yml").read_text())
 
-    assert document["release_id"] == "open-cinema-0.3.13-candidate"
+    assert document["release_id"] == "open-cinema-0.3.14-candidate"
     assert document["input_mode"] == "appliance"
     assert document["status"] == "experimental"
     assert document["promotable"] is False
@@ -31,15 +31,15 @@ def test_checked_in_release_template_is_exact_and_not_directly_promotable() -> N
 
     components = document["components"]
     assert components["open_cinema"] == {
-        "version": "0.3.13",
+        "version": "0.3.14",
         "repository": "k3rnL/open-cinema",
         "source_mode": "tag-build-finalization-placeholder",
         "immutable": False,
     }
     assert components["wyreplumber"]["immutable"] is True
-    assert components["wyreplumber"]["commit"] == ("9d55ab1200ee7c484743fe57339a1f56d2c9fcd1")
+    assert components["wyreplumber"]["commit"] == ("36f5c2312d14314ad8f89be80a6f9b0de1f204e3")
     assert components["wyreplumber"]["artifacts"][0]["sha256"] == (
-        "cfb92cd7f407c87717f1f539ff3e04573d0cd2224ef744f8efb847a7938e05fd"
+        "d667a581bc38051f2edb5f79df44fdf6efe6c8e5efc6a7c1d35f8281b9ef7b90"
     )
     assert components["management_ui"]["source_mode"] == "coordinated-release-mirror"
     assert components["pcm_auto_decoder"]["source_mode"] == "coordinated-release-mirror"

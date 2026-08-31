@@ -17,7 +17,7 @@ file rather than duplicating version constants in tasks.
 | Architecture | `aarch64` |
 | PipeWire | `>=1.4.0,<2.0.0` |
 | WirePlumber | `>=0.5.8,<0.6.0`, API family 0.5 |
-| WyrePlumber | `>=0.2.0,<0.3.0`, orchestration contract 1 |
+| WyrePlumber | `>=0.2.1,<0.3.0`, orchestration contract 1 |
 | CamillaDSP / control client | `>=4.1.3,<5.0.0`, native PipeWire / pyCamillaDSP `>=4,<5` |
 | PCM auto decoder | `>=0.2.2,<0.3.0`, native PipeWire, status protocol 2 |
 | Python | `>=3.13,<3.14` |

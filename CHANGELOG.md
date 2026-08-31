@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User authentication
 - Production deployment configuration
 
+## [0.3.14] - 2026-08-31
+
+### Fixed
+- Observe and mutate effective endpoint volume and mute state through
+  WirePlumber's mixer API, including device-route controls whose raw node Props
+  do not represent the actual hardware level.
+- Preserve desired endpoint levels during appliance restart reconciliation
+  instead of timing out and rolling back an otherwise valid audio graph.
+
 ## [0.3.13] - 2026-08-31
 
 ### Fixed

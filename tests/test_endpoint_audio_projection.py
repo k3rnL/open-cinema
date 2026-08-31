@@ -12,7 +12,7 @@ from core.orchestration.endpoint_inventory import map_runtime_endpoints
 from tests.test_endpoint_inventory_mapping import _snapshot
 
 
-def _sink_with(parameters, *, latency="256/48000"):
+def _sink_with(parameters, *, latency="256/48000", mixer=None):
     snapshot = _snapshot()
     nodes = tuple(
         (
@@ -25,7 +25,13 @@ def _sink_with(parameters, *, latency="256/48000"):
         )
         for node in snapshot.nodes
     )
-    snapshot = replace(snapshot, nodes=nodes, parameters=tuple(parameters))
+    effective_parameters = tuple(parameters)
+    if mixer is not None:
+        effective_parameters = (
+            *effective_parameters,
+            ParameterValue("node", 10, "Mixer", "rw", (mixer,)),
+        )
+    snapshot = replace(snapshot, nodes=nodes, parameters=effective_parameters)
     return next(
         candidate
         for candidate in map_runtime_endpoints(snapshot).candidates
@@ -58,7 +64,8 @@ def test_formats_volume_mute_layout_and_latency_are_projected() -> None:
                     AudioPropertiesValue(),
                 ),
             ),
-        )
+        ),
+        mixer=AudioPropertiesValue(volume=0.42, mute=True),
     )
 
     projection = sink.projection_document()["audioCapabilities"]
@@ -151,10 +158,31 @@ def test_device_props_do_not_hide_readable_writable_node_controls() -> None:
                 "rw",
                 (AudioPropertiesValue(),),
             ),
-        )
+        ),
+        mixer=AudioPropertiesValue(volume=0.42, mute=True),
     )
 
     assert sink.volume == 0.42
+    assert sink.mute is True
+    assert sink.volume_writable is True
+    assert sink.mute_writable is True
+
+
+def test_effective_mixer_overrides_misleading_raw_node_props() -> None:
+    sink = _sink_with(
+        (
+            ParameterValue(
+                "node",
+                10,
+                "Props",
+                "rw",
+                (AudioPropertiesValue(volume=1.0, mute=False),),
+            ),
+        ),
+        mixer=AudioPropertiesValue(volume=0.19, mute=True),
+    )
+
+    assert sink.volume == 0.19
     assert sink.mute is True
     assert sink.volume_writable is True
     assert sink.mute_writable is True

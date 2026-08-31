@@ -139,6 +139,13 @@ class ContractRuntime:
                     "rw",
                     (AudioPropertiesValue(volume=0.7, mute=False),),
                 ),
+                ParameterValue(
+                    "node",
+                    main_id,
+                    "Mixer",
+                    "rw",
+                    (AudioPropertiesValue(volume=0.7, mute=False),),
+                ),
             ),
             defaults=DefaultsValue(
                 metadata_id=50,
@@ -204,6 +211,13 @@ class ContractRuntime:
                     "node",
                     11,
                     "Props",
+                    "rw",
+                    (AudioPropertiesValue(volume=0.5, mute=False),),
+                ),
+                ParameterValue(
+                    "node",
+                    11,
+                    "Mixer",
                     "rw",
                     (AudioPropertiesValue(volume=0.5, mute=False),),
                 ),
@@ -311,7 +325,7 @@ class ContractRuntime:
     def _set_audio_property(self, field, kwargs):
         self.calls.append((f"set-{field}", kwargs))
         node_id = kwargs["node_id"]
-        parameter = self.snapshot.parameters_by_key[("node", node_id, "Props")]
+        parameter = self.snapshot.parameters_by_key[("node", node_id, "Mixer")]
         current = parameter.values[0]
         updated = replace(current, **{field: kwargs[field]})
         parameters = tuple(
@@ -319,7 +333,7 @@ class ContractRuntime:
             for item in self.snapshot.parameters
         )
         self._advance(parameters=parameters)
-        return self._outcome(kwargs["request_id"], MutationOperation.SET_PARAMETER)
+        return self._outcome(kwargs["request_id"], MutationOperation.SET_NODE_MIXER)
 
 
 def _adapter(runtime):

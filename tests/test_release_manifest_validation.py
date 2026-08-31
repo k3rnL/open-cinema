@@ -27,7 +27,7 @@ TARGET = VALIDATOR.Target(
 )
 
 COMPONENT_VERSIONS = {
-    "wyreplumber": "0.2.0",
+    "wyreplumber": "0.2.1",
     "pcm_auto_decoder": "0.2.2",
     "camilladsp": "4.1.3",
     "pycamilladsp": "4.0.0",
@@ -222,7 +222,7 @@ def test_appliance_manifest_resolves_per_artifact_ui_provenance() -> None:
 def test_appliance_manifest_rejects_an_artifact_from_another_release_tag() -> None:
     manifest = appliance_manifest()
     wheel = manifest["components"]["wyreplumber"]["artifacts"][0]
-    wheel["url"] = wheel["url"].replace("/v0.2.0/", "/v9.9.9/")
+    wheel["url"] = wheel["url"].replace("/v0.2.1/", "/v9.9.9/")
 
     with pytest.raises(VALIDATOR.ManifestError, match="must use declared release"):
         VALIDATOR.validate_manifest(manifest, mode="appliance", target=TARGET)

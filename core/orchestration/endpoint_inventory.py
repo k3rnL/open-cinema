@@ -458,6 +458,15 @@ def _format_summary(value: AudioFormatValue):
 
 
 def _audio_capabilities(snapshot, node_id, device_id, routes):
+    mixer_parameter = snapshot.parameters_by_key.get(("node", node_id, "Mixer"))
+    mixer = next(
+        (
+            value
+            for value in (mixer_parameter.values if mixer_parameter is not None else ())
+            if isinstance(value, AudioPropertiesValue)
+        ),
+        None,
+    )
     node_parameters = [
         parameter
         for parameter in snapshot.parameters
@@ -517,19 +526,23 @@ def _audio_capabilities(snapshot, node_id, device_id, routes):
     # must not erase readable node controls.
     audio_properties = node_audio_properties or device_audio_properties
     active_route = next((route for route in routes if route.active), None)
-    volume = (
+    volume = mixer.volume if mixer is not None else (
         audio_properties.volume
         if audio_properties is not None and audio_properties.volume is not None
         else (active_route.volume if active_route is not None else None)
     )
-    mute = (
+    mute = mixer.mute if mixer is not None else (
         audio_properties.mute
         if audio_properties is not None and audio_properties.mute is not None
         else (active_route.mute if active_route is not None else None)
     )
-    node_properties = snapshot.parameters_by_key.get(("node", node_id, "Props"))
+    # Effective volume and mute are owned by WirePlumber's mixer API. Raw node
+    # Props can claim write access even when the device route ignores direct
+    # mutations, so only advertise controls when the mixer API resolved them.
     writable = bool(
-        node_properties is not None and "w" in node_properties.permissions.lower()
+        mixer is not None
+        and mixer_parameter is not None
+        and "w" in mixer_parameter.permissions.lower()
     )
     return (
         tuple(sorted(formats, key=lambda item: repr(item.to_document()))),

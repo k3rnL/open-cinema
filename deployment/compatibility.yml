@@ -41,7 +41,7 @@ components:
     development_package: libwireplumber-0.5-dev
     pkg_config: wireplumber-0.5
   wyreplumber:
-    minimum: "0.2.0"
+    minimum: "0.2.1"
     maximum_exclusive: "0.3.0"
     python_package: wyreplumber
     required_api_contract: "1"

@@ -570,7 +570,7 @@ def test_active_output_level_is_configured_before_route_convergence() -> None:
             ParameterValue(
                 "node",
                 10,
-                "Props",
+                "Mixer",
                 "rw",
                 (AudioPropertiesValue(volume=0.6, mute=False),),
             ),

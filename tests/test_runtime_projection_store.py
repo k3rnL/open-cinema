@@ -74,7 +74,7 @@ def test_publish_exposes_effective_observed_and_applying_audio_level_state() -> 
             ParameterValue(
                 "node",
                 10,
-                "Props",
+                "Mixer",
                 "rw",
                 (AudioPropertiesValue(volume=0.6, mute=False),),
             ),

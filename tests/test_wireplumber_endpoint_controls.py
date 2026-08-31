@@ -21,17 +21,28 @@ from tests.test_wireplumber_driver import _confirmed_outcome
 
 def _runtime(*, permissions="rw", generation=3, sink_id=10):
     snapshot = _snapshot(generation=generation, sink_id=sink_id)
-    return replace(
-        snapshot,
-        parameters=(
+    parameters = [
+        ParameterValue(
+            "node",
+            sink_id,
+            "Props",
+            permissions,
+            (AudioPropertiesValue(volume=0.6, mute=False),),
+        ),
+    ]
+    if permissions == "rw":
+        parameters.append(
             ParameterValue(
                 "node",
                 sink_id,
-                "Props",
-                permissions,
+                "Mixer",
+                "rw",
                 (AudioPropertiesValue(volume=0.6, mute=False),),
-            ),
-        ),
+            )
+        )
+    return replace(
+        snapshot,
+        parameters=tuple(parameters),
     )
 
 
