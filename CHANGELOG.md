@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User authentication
 - Production deployment configuration
 
+## [0.3.16] - 2026-08-31
+
+### Fixed
+- Combine managed-source playback events with the correlated PipeWire stream
+  state so a missed Librespot event can still activate the real source and a
+  stale event cannot keep a silent receiver selected indefinitely.
+
 ## [0.3.15] - 2026-08-31
 
 ### Fixed

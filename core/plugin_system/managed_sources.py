@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import monotonic
@@ -170,6 +171,35 @@ def _correlation(world, *, plugin_id: str, instance_id: str, generation: object)
     return "missing", None, ()
 
 
+def _provider_activity_is_recent(
+    facts: Mapping[str, object],
+    configuration: Mapping[str, object],
+) -> bool:
+    """Bound event-only activity while PipeWire is not yet producing audio."""
+
+    if facts.get("activeSignal") is not True:
+        return False
+    raw_hold_ms = configuration.get("activityHoldMs", 1500)
+    if isinstance(raw_hold_ms, bool):
+        hold_ms = 1500
+    else:
+        try:
+            hold_ms = max(0, min(int(raw_hold_ms), 30_000))
+        except (TypeError, ValueError):
+            hold_ms = 1500
+    events = facts.get("events")
+    if not isinstance(events, Mapping):
+        return False
+    event = events.get("lastPlaybackEvent") or events.get("lastEvent")
+    if not isinstance(event, Mapping):
+        return False
+    observed_at = event.get("observedAtUnixMs")
+    if isinstance(observed_at, bool) or not isinstance(observed_at, (int, float)):
+        return False
+    age_ms = int(datetime.now(UTC).timestamp() * 1000) - int(observed_at)
+    return -5_000 <= age_ms <= hold_ms
+
+
 def _enrich_result(
     result: PluginRuntimeResult,
     world,
@@ -185,6 +215,15 @@ def _enrich_result(
         generation=generation,
     )
     process_ready = result.status in {RuntimeStatus.READY, RuntimeStatus.DEGRADED}
+    pipewire_active = bool(candidate is not None and candidate.has_active_signal)
+    provider_active = facts.get("activeSignal") is True
+    provider_activity_recent = _provider_activity_is_recent(facts, instance.configuration)
+    active = pipewire_active or (provider_active and provider_activity_recent)
+    playback_state = facts.get("playbackState")
+    if pipewire_active:
+        playback_state = "playing"
+    elif provider_active and not provider_activity_recent and playback_state == "playing":
+        playback_state = "idle"
     facts.update(
         {
             "logicalEndpointId": endpoint_id,
@@ -192,9 +231,13 @@ def _enrich_result(
             "routeAvailable": process_ready and correlation == "ready",
             "correlatedRuntimeKey": candidate.runtime_key if candidate is not None else None,
             "correlationConflicts": [item.runtime_key for item in conflicts],
-            "pipewireActiveSignal": (
-                candidate.has_active_signal if candidate is not None else False
+            "pipewireActiveSignal": pipewire_active,
+            "activeSignal": active,
+            "activityHeld": bool(
+                facts.get("activityHeld") is True
+                or (provider_active and provider_activity_recent and not pipewire_active)
             ),
+            "playbackState": playback_state,
             "endpointControls": {
                 "volume": bool(candidate is not None and candidate.volume_writable),
                 "mute": bool(candidate is not None and candidate.mute_writable),

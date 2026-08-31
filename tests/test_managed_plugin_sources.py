@@ -1,4 +1,5 @@
 from dataclasses import replace
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -7,7 +8,7 @@ from wyreplumber.runtime import FrozenDict
 
 from api.models import LogicalEndpoint, PluginInstance
 from core.plugin_system.managed_source_identity import managed_source_endpoint_id
-from core.plugin_system.managed_sources import ManagedPluginSourceReconciler
+from core.plugin_system.managed_sources import ManagedPluginSourceReconciler, _enrich_result
 from core.orchestration.endpoint_inventory import EndpointInventorySnapshot
 from core.orchestration.resolution_context import _managed_source_activity
 from core.orchestration.resolver_inputs import ResolverLogicalEndpointInput
@@ -80,7 +81,7 @@ class FakeSourceProvider:
         return self._result()
 
 
-def _world(generation="generation-1"):
+def _world(generation="generation-1", *, active=False):
     candidate = SimpleNamespace(
         node_properties=FrozenDict(
             {
@@ -91,7 +92,7 @@ def _world(generation="generation-1"):
         ),
         direction=SimpleNamespace(value="input"),
         runtime_key="runtime:7:node:42",
-        has_active_signal=False,
+        has_active_signal=active,
         volume_writable=True,
         mute_writable=True,
     )
@@ -99,6 +100,97 @@ def _world(generation="generation-1"):
         endpoints=SimpleNamespace(candidates=(candidate,)),
         runtime=SimpleNamespace(generation=7, sequence=11),
     )
+
+
+@pytest.mark.django_db
+def test_pipewire_activity_promotes_a_source_when_its_playback_event_is_missing():
+    user = get_user_model().objects.create_user(username="managed-source-pipewire-active")
+    instance = PluginInstance.objects.create(
+        plugin_id="test.spotify",
+        capability_id="test.spotify.sources",
+        instance_id="living-room",
+        display_name="Living room Spotify",
+        owner=user,
+        configuration={"activityHoldMs": 500},
+        desired_state="enabled",
+    )
+    result = PluginRuntimeResult(
+        RuntimeStatus.READY,
+        facts={
+            "generation": "generation-1",
+            "activeSignal": False,
+            "playbackState": "idle",
+            "events": {"lastSequence": 0},
+        },
+    )
+
+    enriched = _enrich_result(result, _world(active=True), instance)
+
+    assert enriched.facts["pipewireActiveSignal"] is True
+    assert enriched.facts["activeSignal"] is True
+    assert enriched.facts["playbackState"] == "playing"
+
+
+@pytest.mark.django_db
+def test_stale_playing_event_cannot_keep_an_idle_pipewire_source_active():
+    user = get_user_model().objects.create_user(username="managed-source-stale-event")
+    instance = PluginInstance.objects.create(
+        plugin_id="test.spotify",
+        capability_id="test.spotify.sources",
+        instance_id="living-room",
+        display_name="Living room Spotify",
+        owner=user,
+        configuration={"activityHoldMs": 500},
+        desired_state="enabled",
+    )
+    event = {"event": "playing", "observedAtUnixMs": int(time.time() * 1000) - 5_000}
+    result = PluginRuntimeResult(
+        RuntimeStatus.READY,
+        facts={
+            "generation": "generation-1",
+            "activeSignal": True,
+            "playbackState": "playing",
+            "events": {"lastSequence": 2, "lastPlaybackEvent": event},
+        },
+    )
+
+    enriched = _enrich_result(result, _world(active=False), instance)
+
+    assert enriched.facts["pipewireActiveSignal"] is False
+    assert enriched.facts["activeSignal"] is False
+    assert enriched.facts["activityHeld"] is False
+    assert enriched.facts["playbackState"] == "idle"
+
+
+@pytest.mark.django_db
+def test_recent_playing_event_bridges_pipewire_startup_for_the_configured_hold():
+    user = get_user_model().objects.create_user(username="managed-source-recent-event")
+    instance = PluginInstance.objects.create(
+        plugin_id="test.spotify",
+        capability_id="test.spotify.sources",
+        instance_id="living-room",
+        display_name="Living room Spotify",
+        owner=user,
+        configuration={"activityHoldMs": 500},
+        desired_state="enabled",
+    )
+    event = {"event": "playing", "observedAtUnixMs": int(time.time() * 1000)}
+    result = PluginRuntimeResult(
+        RuntimeStatus.READY,
+        facts={
+            "generation": "generation-1",
+            "activeSignal": True,
+            "playbackState": "playing",
+            "events": {"lastSequence": 2, "lastPlaybackEvent": event},
+        },
+    )
+
+    enriched = _enrich_result(result, _world(active=False), instance)
+
+    assert enriched.facts["pipewireActiveSignal"] is False
+    assert enriched.facts["activeSignal"] is True
+    assert enriched.facts["activityHeld"] is True
+    assert enriched.facts["playbackState"] == "playing"
 
 
 @pytest.mark.django_db
