@@ -104,13 +104,16 @@
     owner: root
     group: root
     mode: "0644"
+  when: open_cinema_common_install_release_manifest | default(true) | bool
 
 - name: Compute the installed release-manifest digest
   ansible.builtin.stat:
     path: "{{ release_manifest.install_path }}"
     checksum_algorithm: sha256
   register: open_cinema_release_manifest_stat
+  when: open_cinema_common_install_release_manifest | default(true) | bool
 
 - name: Publish the installed release-manifest digest
   ansible.builtin.set_fact:
     open_cinema_release_manifest_digest: "{{ open_cinema_release_manifest_stat.stat.checksum }}"
+  when: open_cinema_common_install_release_manifest | default(true) | bool

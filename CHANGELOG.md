@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User authentication
 - Production deployment configuration
 
+## [0.3.15] - 2026-08-31
+
+### Fixed
+- Preserve the previously accepted release manifest until its complete
+  rollback generation has been captured, so an appliance upgrade can validate
+  and archive the exact installed WyrePlumber contract before committing the
+  candidate identity.
+- Restore all previous services without leaving a candidate manifest paired
+  with the previous runtime when transition backup stops an upgrade safely.
+
 ## [0.3.14] - 2026-08-31
 
 ### Fixed

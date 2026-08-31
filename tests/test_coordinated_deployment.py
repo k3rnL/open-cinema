@@ -89,11 +89,19 @@ def test_release_mode_defaults_to_the_retained_finalized_manifest() -> None:
 
 
 def test_release_manifest_is_installed_and_correlated_with_recovery_records() -> None:
+    site = read(DEPLOYMENT / "playbooks/site.yml")
     common = read(DEPLOYMENT / "roles/common/tasks/main.yml")
     readiness = read(DEPLOYMENT / "roles/readiness/tasks/main.yml")
     rollback = read(DEPLOYMENT / "roles/open-cinema/templates/rollback-manifest.yml.j2")
 
     assert "Install the coordinated release manifest" in common
+    assert "open_cinema_common_install_release_manifest" in common
+    backup_at = site.index("role: transition-backup")
+    candidate_manifest_at = site.index(
+        "Commit the candidate release identity after the rollback generation is safe"
+    )
+    assert backup_at < candidate_manifest_at < site.index("name: deployment-safety")
+    assert "Install the coordinated release manifest" in site[candidate_manifest_at:]
     assert "checksum_algorithm: sha256" in common
     assert "release_manifest_sha256" in readiness
     assert "installed_identity_path" in readiness

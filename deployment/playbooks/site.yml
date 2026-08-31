@@ -175,6 +175,11 @@
   roles:
     - role: common
       tags: [common]
+      vars:
+        # Keep the accepted manifest installed until its complete rollback
+        # generation has been captured. The candidate identity is committed
+        # immediately after transition-backup succeeds.
+        open_cinema_common_install_release_manifest: false
 
     - role: pipewire-wireplumber
       tags: [pipewire, wireplumber, audio]
@@ -188,6 +193,28 @@
       tags: [transition-backup, app, audio]
 
   tasks:
+    - name: Commit the candidate release identity after the rollback generation is safe
+      block:
+        - name: Install the coordinated release manifest
+          ansible.builtin.copy:
+            src: "{{ release_manifest.source_path }}"
+            dest: "{{ release_manifest.install_path }}"
+            owner: root
+            group: root
+            mode: "0644"
+
+        - name: Compute the installed release-manifest digest
+          ansible.builtin.stat:
+            path: "{{ release_manifest.install_path }}"
+            checksum_algorithm: sha256
+          register: open_cinema_release_manifest_stat
+
+        - name: Publish the installed release-manifest digest
+          ansible.builtin.set_fact:
+            open_cinema_release_manifest_digest: >-
+              {{ open_cinema_release_manifest_stat.stat.checksum }}
+      tags: [common, transition-backup, app]
+
     - name: Install, gate, and verify one coordinated candidate generation
       block:
         - name: Enter candidate deployment safety
